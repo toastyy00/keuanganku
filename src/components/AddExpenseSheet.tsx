@@ -45,7 +45,13 @@ const AddExpenseSheet: React.FC = () => {
 
   // ── Form state ─────────────────────────────────────────────
   const [name, setName] = useState('');
-  const amountInput = useCurrencyInput(entryCurrency);
+  const {
+    displayValue,
+    rawValue,
+    handleChange,
+    setFromNumber,
+    reset,
+  } = useCurrencyInput(entryCurrency);
   const [date, setDate] = useState(todayISO());
   const [category, setCategory] = useState('');
   const [type, setType] = useState<ExpenseType>('NEED');
@@ -60,13 +66,13 @@ const AddExpenseSheet: React.FC = () => {
     if (prevCurrencyRef.current === entryCurrency) return;
     prevCurrencyRef.current = entryCurrency;
     if (pendingConversionRef.current !== null) {
-      amountInput.setFromNumber(pendingConversionRef.current);
+      setFromNumber(pendingConversionRef.current);
       pendingConversionRef.current = null;
       setFlashAmount(true);
       const t = setTimeout(() => setFlashAmount(false), 200);
       return () => clearTimeout(t);
     }
-  }, [entryCurrency, amountInput]);
+  }, [entryCurrency, setFromNumber]);
 
   // ── Reset on open ──────────────────────────────────────────
   useEffect(() => {
@@ -74,14 +80,14 @@ const AddExpenseSheet: React.FC = () => {
     setErrors({});
     setAiError('');
 
-    const initialCurrency = editingExpense?.currency ?? prefillData ? defaultCurrency : defaultCurrency;
+    const initialCurrency = editingExpense?.currency ?? defaultCurrency;
     setEntryCurrency(initialCurrency);
     prevCurrencyRef.current = initialCurrency;
     pendingConversionRef.current = null;
 
     if (editingExpense) {
       setName(editingExpense.name);
-      amountInput.setFromNumber(editingExpense.amount);
+      setFromNumber(editingExpense.amount);
       setDate(editingExpense.date);
       setCategory(editingExpense.category);
       setType(editingExpense.type);
@@ -90,7 +96,7 @@ const AddExpenseSheet: React.FC = () => {
       setEntryCurrency(editingExpense.currency);
     } else if (prefillData) {
       setName(prefillData.name ?? '');
-      amountInput.setFromNumber(prefillData.amount ?? 0);
+      setFromNumber(prefillData.amount ?? 0);
       setDate(todayISO());
       setCategory(prefillData.category ?? categories[0]?.slug ?? '');
       setType(prefillData.type ?? 'NEED');
@@ -98,14 +104,14 @@ const AddExpenseSheet: React.FC = () => {
       setNote('');
     } else {
       setName('');
-      amountInput.reset();
+      reset();
       setDate(todayISO());
       setCategory(categories[0]?.slug ?? '');
       setType('NEED');
       setDestination('');
       setNote('');
     }
-  }, [isAddSheetOpen, editingExpense, prefillData, defaultCurrency, amountInput, categories]);
+  }, [isAddSheetOpen, editingExpense, prefillData, defaultCurrency, setFromNumber, reset, categories]);
 
   // ── Type change with haptic ────────────────────────────────
   const handleTypeChange = useCallback((val: ExpenseType) => {
@@ -116,18 +122,18 @@ const AddExpenseSheet: React.FC = () => {
   // ── Currency pill switch with live conversion ──────────────
   const handleCurrencySwitch = useCallback(async () => {
     const newCurrency: Currency = entryCurrency === 'IDR' ? 'USD' : 'IDR';
-    if (amountInput.rawValue > 0) {
+    if (rawValue > 0) {
       const { rate } = await getExchangeRate();
       let converted: number;
       if (entryCurrency === 'IDR' && newCurrency === 'USD') {
-        converted = Math.round((amountInput.rawValue / rate) * 100) / 100;
+        converted = Math.round((rawValue / rate) * 100) / 100;
       } else {
-        converted = Math.round((amountInput.rawValue * rate) / 100) * 100;
+        converted = Math.round((rawValue * rate) / 100) * 100;
       }
       pendingConversionRef.current = converted;
     }
     setEntryCurrency(newCurrency);
-  }, [entryCurrency, amountInput.rawValue]);
+  }, [entryCurrency, rawValue]);
 
   // ── AI category suggest ────────────────────────────────────
   const handleAiSuggest = async () => {
@@ -158,7 +164,7 @@ const AddExpenseSheet: React.FC = () => {
   const validate = (): boolean => {
     const next: Record<string, string> = {};
     if (!name.trim()) next.name = 'Nama wajib diisi';
-    if (!amountInput.rawValue || amountInput.rawValue <= 0) {
+    if (!rawValue || rawValue <= 0) {
       next.amount = 'Harga harus lebih dari 0';
     }
     if (type === 'TRANSFER' && !destination.trim()) {
@@ -174,7 +180,7 @@ const AddExpenseSheet: React.FC = () => {
 
     const payload = {
       name: name.trim(),
-      amount: amountInput.rawValue,
+      amount: rawValue,
       currency: entryCurrency,
       category: type === 'TRANSFER' ? '' : category,
       type,
@@ -281,8 +287,8 @@ const AddExpenseSheet: React.FC = () => {
                 type="text"
                 inputMode="decimal"
                 placeholder={entryCurrency === 'IDR' ? '0' : '0.00'}
-                value={amountInput.displayValue}
-                onChange={(e) => amountInput.handleChange(e.target.value)}
+                value={displayValue}
+                onChange={(e) => handleChange(e.target.value)}
                 className="flex-1 bg-transparent px-2 py-2.5 font-bold text-brutal-black focus:outline-none transition-colors duration-200"
                 style={{ fontSize: '16px' }}
                 aria-label="Harga"
