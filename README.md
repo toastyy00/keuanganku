@@ -30,9 +30,13 @@ git clone https://github.com/toastyy00/keuanganku.git
 cd keuanganku
 ```
 
-### 3. Create `.env`
+### 3. Copy `.env.example` to `.env`
 
-Create a `.env` file beside `docker-compose.yml`:
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` beside `docker-compose.yml`:
 
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
@@ -85,7 +89,13 @@ cd keuanganku
 npm install
 ```
 
-### 4. Create `.env`
+### 4. Copy `.env.example` to `.env`
+
+```bash
+cp .env.example .env
+```
+
+Then update the values:
 
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
