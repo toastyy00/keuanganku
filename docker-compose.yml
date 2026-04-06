@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   keuanganku:
-    image: ${IMAGE_NAME:-your-dockerhub-username/keuanganku:latest}
+    image: ${IMAGE_NAME:-toastty/keuanganku:latest}
     pull_policy: always
     container_name: keuanganku
     restart: unless-stopped

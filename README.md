@@ -50,7 +50,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 If you want `docker compose up -d` to pull your published image without editing the compose file, set:
 
 ```env
-IMAGE_NAME=your-dockerhub-username/keuanganku:latest
+IMAGE_NAME=toastty/keuanganku:latest
 ```
 
 Apply the schema from `supabase/migrations/001_init.sql`, then start the app:
