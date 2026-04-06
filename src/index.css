@@ -1,0 +1,301 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   KEUANGANKU — NEO-BRUTALISM GLOBAL STYLES
+   ============================================ */
+
+@layer base {
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+    color-scheme: dark;
+    /* We are light-ONLY in terms of auto-inversion, but actual theme IS dark */
+    forced-color-adjust: none;
+  }
+
+  body {
+    @apply font-sans;
+    background-color: #1A1A1A;
+    color: #F5F0E8;
+    min-height: 100dvh;
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-display font-bold uppercase tracking-tight;
+    line-height: 1.1;
+  }
+
+  h1 {
+    @apply text-3xl;
+  }
+
+  h2 {
+    @apply text-2xl;
+  }
+
+  h3 {
+    @apply text-xl;
+  }
+
+  h4 {
+    @apply text-lg;
+  }
+
+  p {
+    line-height: 1.6;
+  }
+
+  label {
+    @apply font-bold text-sm uppercase tracking-wider;
+  }
+
+  button {
+    @apply cursor-pointer;
+  }
+
+  /* Remove default button focus outline, handle via tailwind ring */
+  button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px #B8F55A;
+  }
+
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px #B8F55A;
+  }
+
+  /* Scrollbar styling — dark concrete */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #1A1A1A;
+    border-left: 1px solid #3A3A3A;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #F5F0E8;
+    border-radius: 0;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #B8F55A;
+    /* Berubah jadi kuning aksen saat disentuh */
+  }
+}
+
+@layer components {
+
+  /* Page wrapper for consistent mobile layout */
+  .page-wrapper {
+    @apply min-h-dvh pb-20 md:pb-0 md:pl-64;
+  }
+
+  /* Section padding */
+  .section-pad {
+    @apply px-4 py-5 md:px-8 md:py-6;
+  }
+
+  /* FAB button */
+  .fab {
+    @apply neo-btn neo-btn-primary;
+    position: fixed;
+    bottom: 5.5rem;
+    right: 1.25rem;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    padding: 0;
+    z-index: 50;
+    font-size: 1.75rem;
+    line-height: 1;
+  }
+
+  @media (min-width: 768px) {
+    .fab {
+      bottom: 2rem;
+      right: 2rem;
+    }
+  }
+
+  /* Bottom nav item */
+  .nav-item {
+    @apply flex flex-col items-center justify-center gap-0.5 px-3 py-2;
+    @apply font-bold text-xs uppercase tracking-wider;
+    @apply transition-all duration-150;
+    min-width: 60px;
+  }
+
+  .nav-item.active {
+    background-color: #F5F0E8;
+    color: #1A1A1A;
+  }
+
+  .nav-item:not(.active) {
+    color: #F5F0E8;
+  }
+
+  .nav-item:not(.active):hover {
+    background-color: rgba(245, 240, 232, 0.1);
+  }
+
+  /* Sidebar nav item (desktop) */
+  .sidebar-item {
+    @apply flex items-center gap-3 px-4 py-3;
+    @apply font-bold text-sm uppercase tracking-wider;
+    @apply border-b-4 border-brutal-black;
+    @apply transition-all duration-150;
+    @apply cursor-pointer;
+  }
+
+  .sidebar-item.active {
+    background-color: #F5F0E8;
+    color: #1A1A1A;
+  }
+
+  .sidebar-item:not(.active) {
+    color: #F5F0E8;
+  }
+
+  .sidebar-item:not(.active):hover {
+    background-color: rgba(245, 240, 232, 0.1);
+  }
+
+  /* Amount display */
+  .amount-display {
+    @apply font-bold text-4xl;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Divider */
+  .brutal-divider {
+    @apply border-t-4 border-brutal-black;
+  }
+
+  /* Pill / tag  */
+  .neo-tag {
+    @apply inline-flex items-center gap-1 px-2 py-0.5;
+    @apply text-xs font-bold uppercase tracking-wider;
+    @apply border-2 border-brutal-black;
+  }
+
+  /* Bottom sheet overlay */
+  .bottom-sheet-overlay {
+    @apply fixed inset-0 bg-black/50 z-40;
+    @apply transition-all duration-150;
+  }
+
+  /* Bottom sheet panel — dark concrete */
+  .bottom-sheet-panel {
+    @apply fixed bottom-0 left-0 right-0 z-50;
+    background-color: #242424;
+    border-top: 4px solid #F5F0E8;
+    @apply max-h-[90dvh] overflow-y-auto;
+    will-change: transform;
+    @apply transition-all duration-150;
+  }
+
+  @media (min-width: 640px) {
+    .bottom-sheet-panel {
+      @apply left-1/2 right-auto w-full max-w-md;
+      transform: translateX(-50%);
+    }
+  }
+}
+
+@layer utilities {
+
+  /* Utility: ensure full-height on modern mobile (with dvh fallback) */
+  .min-h-dvh {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  .h-dvh {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  /* Animated sink on active */
+  .sink-on-active:active {
+    transform: translate(6px, 6px);
+    box-shadow: 0px 0px 0px 0px #F5F0E8 !important;
+  }
+
+  /* Page transition — triggered by key={pathname} re-mount */
+  .page-fade-in {
+    animation: pageFadeIn 150ms ease forwards;
+  }
+
+  @keyframes pageFadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* slide-in-from-bottom utility (for banners) */
+  .animate-in {
+    animation-duration: 200ms;
+    animation-fill-mode: both;
+  }
+
+  .slide-in-from-bottom-2 {
+    animation-name: slideInBottom2;
+  }
+
+  .slide-in-from-bottom-4 {
+    animation-name: slideInBottom4;
+  }
+
+  @keyframes slideInBottom2 {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideInBottom4 {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
