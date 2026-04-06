@@ -64,7 +64,7 @@ docker compose up -d
 - Local machine: `http://localhost:7432`
 - Another device on the same network: `http://YOUR_SERVER_IP:7432`
 
-More deployment examples are in `DEPLOYMENT.md`.
+More deployment examples are in [DEPLOYMENT.md](https://github.com/toastyy00/keuanganku/blob/main/DEPLOYMENT.md).
 
 ## Local Development
 
@@ -121,14 +121,28 @@ npm run dev
 
 ## For Maintainers
 
-This repository includes a GitHub Actions workflow that builds and pushes a multi-arch Docker image to Docker Hub on every push to `main`.
+This repository includes a GitHub Actions workflow that automatically publishes the Docker image when you push to `main`.
 
-### Required GitHub Actions secrets
+### What the workflow does
+
+- Builds a multi-arch image for `linux/amd64` and `linux/arm64`
+- Pushes the image to Docker Hub
+- Publishes:
+  - `toastty/keuanganku:latest`
+  - a commit-based tag from the workflow
+
+### Required GitHub secrets
+
+You must add these two repository secrets in GitHub:
 
 - `DOCKERHUB_USERNAME`
 - `DOCKERHUB_TOKEN`
 
-### How to add them
+`DOCKERHUB_USERNAME` should be your Docker Hub username.
+
+`DOCKERHUB_TOKEN` should be a Docker Hub access token, not your Docker Hub password.
+
+### How to add the secrets
 
 1. Open the GitHub repository.
 2. Go to `Settings`.
@@ -137,7 +151,4 @@ This repository includes a GitHub Actions workflow that builds and pushes a mult
 5. Add `DOCKERHUB_USERNAME` with your Docker Hub username.
 6. Add `DOCKERHUB_TOKEN` with a Docker Hub access token.
 
-After that, pushes to `main` will publish:
-
-- `toastty/keuanganku:latest`
-- a commit-based image tag from the workflow
+After the secrets are added, every push to `main` will trigger the publish workflow automatically.
