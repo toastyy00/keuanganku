@@ -1,17 +1,102 @@
 # Keuanganku
 
-Keuanganku is a self-hostable personal expense tracker for logging daily spending, recurring expenses, transfers, and monthly trends.
+Keuanganku is a self-hostable personal expense tracker with support for daily expenses, recurring expenses, transfers, monthly summaries, and Supabase authentication.
 
 > Screenshot placeholder: add a current application screenshot here before publishing.
 
-## What The App Is
+## Features
 
-- Track expenses by category and type: `NEED`, `WANT`, and `TRANSFER`
-- Review monthly totals, trend comparisons, and needs-vs-wants spending
-- Manage recurring expense templates
-- Filter expense history by month, category, type, and keyword
-- Use Supabase auth with a manual admin approval step
-- Fall back to local storage when a cloud session is unavailable
+- Expense tracking with `NEED`, `WANT`, and `TRANSFER`
+- Recurring expense templates
+- Monthly dashboard and spending trends
+- Filterable transaction history
+- Supabase auth with admin approval
+- Docker-ready deployment
+
+## Quick Start With Docker
+
+This project is set up so users do not need to build the image locally.
+
+### 1. Requirements
+
+- Docker
+- Docker Compose
+- A Supabase project
+
+### 2. Clone the repository
+
+```bash
+git clone https://github.com/toastyy00/keuanganku.git
+cd keuanganku
+```
+
+### 3. Create `.env`
+
+Create a `.env` file beside `docker-compose.yml`:
+
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+IMAGE_NAME=toastty/keuanganku:latest
+```
+
+Notes:
+
+- `IMAGE_NAME` is optional because the compose file already defaults to `toastty/keuanganku:latest`
+- `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are still required
+
+### 4. Apply Supabase schema
+
+Run the SQL from `supabase/migrations/001_init.sql` in your Supabase SQL editor.
+
+### 5. Start the app
+
+```bash
+docker compose up -d
+```
+
+### 6. Open the app
+
+- Local machine: `http://localhost:7432`
+- Another device on the same network: `http://YOUR_SERVER_IP:7432`
+
+More deployment examples are in `DEPLOYMENT.md`.
+
+## Local Development
+
+Use this if you want to run the app directly with Node instead of Docker.
+
+### 1. Requirements
+
+- Node.js 18+
+- npm
+- A Supabase project
+
+### 2. Clone the repository
+
+```bash
+git clone https://github.com/toastyy00/keuanganku.git
+cd keuanganku
+```
+
+### 3. Install dependencies
+
+```bash
+npm install
+```
+
+### 4. Create `.env`
+
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+```
+
+### 5. Run the dev server
+
+```bash
+npm run dev
+```
 
 ## Tech Stack
 
@@ -24,62 +109,25 @@ Keuanganku is a self-hostable personal expense tracker for logging daily spendin
 - Supabase
 - `vite-plugin-pwa`
 
-## Self-Host Instructions
+## For Maintainers
 
-### Requirements
+This repository includes a GitHub Actions workflow that builds and pushes a multi-arch Docker image to Docker Hub on every push to `main`.
 
-- Node.js 18+
-- npm
-- A Supabase project
-- Docker and Docker Compose for container deployment
+### Required GitHub Actions secrets
 
-### Setup
+- `DOCKERHUB_USERNAME`
+- `DOCKERHUB_TOKEN`
 
-```bash
-npm install
-cp .env.example .env
-```
+### How to add them
 
-Add your own Supabase values to `.env`:
+1. Open the GitHub repository.
+2. Go to `Settings`.
+3. Open `Secrets and variables` > `Actions`.
+4. Click `New repository secret`.
+5. Add `DOCKERHUB_USERNAME` with your Docker Hub username.
+6. Add `DOCKERHUB_TOKEN` with a Docker Hub access token.
 
-```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
-```
+After that, pushes to `main` will publish:
 
-If you want `docker compose up -d` to pull your published image without editing the compose file, set:
-
-```env
-IMAGE_NAME=toastty/keuanganku:latest
-```
-
-Apply the schema from `supabase/migrations/001_init.sql`, then start the app:
-
-```bash
-npm run dev
-```
-
-For Docker deployment:
-
-```bash
-docker compose up -d
-```
-
-Additional setup notes are in `README-selfhost.md`.
-
-## GitHub Actions Secrets
-
-Add these repository secrets in GitHub before pushing to `main`:
-
-- `DOCKERHUB_USERNAME`: your Docker Hub username
-- `DOCKERHUB_TOKEN`: a Docker Hub access token with push permission
-
-GitHub steps:
-
-1. Open your repository on GitHub.
-2. Go to `Settings` > `Secrets and variables` > `Actions`.
-3. Click `New repository secret`.
-4. Add `DOCKERHUB_USERNAME`.
-5. Add `DOCKERHUB_TOKEN`.
-
-After that, every push to `main` will build and push a multi-arch image for `linux/amd64` and `linux/arm64`.
+- `toastty/keuanganku:latest`
+- a commit-based image tag from the workflow
