@@ -2,7 +2,25 @@
 
 Keuanganku is a self-hostable personal expense tracker with support for daily expenses, recurring expenses, transfers, monthly summaries, and Supabase authentication.
 
-> Screenshot placeholder: add a current application screenshot here before publishing.
+> <div align="center">
+  <table>
+    <tr>
+      <td valign="top" rowspan="2">
+        <img src="https://github.com/user-attachments/assets/e6adfd1b-2270-4bf9-a941-f8a09f2c2d15" width="275" />
+      </td>
+      <td valign="top">
+        <img src="https://github.com/user-attachments/assets/7aeaccae-d9d9-4566-8341-0638c2971198" width="600" />
+      </td>
+    </tr>
+    <tr>
+      <td valign="top">
+        <img src="https://github.com/user-attachments/assets/d3f1a8e4-3a95-4912-b907-24d8941eca3f" width="600" />
+      </td>
+    </tr>
+  </table>
+</div>
+
+
 
 ## Features
 
