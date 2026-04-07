@@ -134,9 +134,11 @@ const AppInner: React.FC = () => {
 
 const App: React.FC = () => {
   const Router = isDemoMode() ? HashRouter : BrowserRouter;
-  const basename = isDemoMode() && appConfig.basePath !== '/'
-    ? appConfig.basePath.replace(/\/$/, '')
-    : undefined;
+  const basename = isDemoMode()
+    ? undefined
+    : appConfig.basePath !== '/'
+      ? appConfig.basePath.replace(/\/$/, '')
+      : undefined;
 
   return (
     <Router basename={basename}>
