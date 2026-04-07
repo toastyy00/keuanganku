@@ -4,10 +4,16 @@ import path from 'path';
 import { VitePWA } from 'vite-plugin-pwa';
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const isDemo = mode === 'demo';
+  const basePath = process.env.VITE_APP_BASE_PATH || '/';
+
+  return {
+  base: isDemo ? basePath : '/',
   plugins: [
     react(),
     VitePWA({
+      disable: isDemo,
       registerType: 'autoUpdate',
       includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
@@ -90,4 +96,5 @@ export default defineConfig({
     target: 'es2020',
     sourcemap: true,
   },
+};
 });

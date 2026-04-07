@@ -10,6 +10,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { isDemoMode } from '../lib/appConfig';
 import { useUIStore } from '../store';
 
 // ============================================================
@@ -32,6 +33,7 @@ const Layout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const isDashboard = location.pathname === '/';
+  const demoMode = isDemoMode();
 
   const [isMinimized, setIsMinimized] = useState(
     () => localStorage.getItem('sidebar_min') === 'true'
@@ -98,10 +100,23 @@ const Layout: React.FC = () => {
               className="text-[11px] font-bold uppercase tracking-[0.15em] mt-1 whitespace-nowrap"
               style={{ color: '#A09890' }}
             >
-              Track your expenses
+              {demoMode ? 'Live demo mode' : 'Track your expenses'}
             </p>
           )}
         </div>
+
+        {demoMode && !isMinimized && (
+          <div className="px-4 py-3 border-b-4" style={{ borderColor: '#3A3A3A' }}>
+            <div className="border-2 border-[#F5F0E8] bg-[#202020] px-3 py-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-brutal-yellow">
+                Demo Mode
+              </p>
+              <p className="mt-1 text-[11px] leading-4 text-brutal-bone-dim">
+                Data contoh lokal. Tidak terhubung ke akun atau Supabase.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Nav links */}
         <nav className="flex flex-col flex-1 overflow-y-auto" aria-label="Main navigation">
