@@ -11,7 +11,7 @@ import { Input } from '../components/ui/Input';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { useExpenseStore } from '../store/useExpenseStore';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { testAiConnection } from '../lib/ai';
+import { testAiConnectionDetailed } from '../lib/ai';
 import { exportJSON, importJSON } from '../lib/sync';
 import { downloadCSV } from '../lib/utils';
 import { getExchangeRate, forceRefreshRate } from '../lib/exchangeRate';
@@ -95,11 +95,14 @@ const SettingsPage: React.FC = () => {
   } = useExpenseStore();
 
   const {
-    aiProvider, aiKey, openrouterModel,
-    setAiProvider, setAiKey, setOpenrouterModel,
+    aiProvider, openaiKey, openrouterKey, openrouterModel,
+    personalMonthlyBudget, familySupportMonthlyBudget,
+    setAiProvider, setOpenaiKey, setOpenrouterKey, setOpenrouterModel,
+    setPersonalMonthlyBudget, setFamilySupportMonthlyBudget,
   } = useSettingsStore();
 
   const [aiStatus, setAiStatus] = useState<'ok' | 'fail' | 'idle'>('idle');
+  const [aiStatusMessage, setAiStatusMessage] = useState('');
   const [aiTesting, setAiTesting] = useState(false);
   const [importMsg, setImportMsg] = useState('');
   const [importConfirm, setImportConfirm] = useState<string | null>(null);
@@ -128,10 +131,22 @@ const SettingsPage: React.FC = () => {
 
   const handleCurrencyChange = (c: Currency) => { haptic(); setCurrency(c); };
 
+  const handleBudgetChange = (
+    setter: (value: number) => void,
+    value: string
+  ) => {
+    const normalized = value.replace(/[^\d]/g, '');
+    setter(normalized ? Number(normalized) : 0);
+  };
+
   const handleTestAI = async () => {
-    setAiTesting(true); setAiStatus('idle');
-    const ok = await testAiConnection({ provider: aiProvider, apiKey: aiKey, openrouterModel });
-    setAiStatus(ok ? 'ok' : 'fail');
+    setAiTesting(true);
+    setAiStatus('idle');
+    setAiStatusMessage('');
+    const apiKey = aiProvider === 'openai' ? openaiKey : openrouterKey;
+    const result = await testAiConnectionDetailed({ provider: aiProvider, apiKey, openrouterModel });
+    setAiStatus(result.ok ? 'ok' : 'fail');
+    setAiStatusMessage(result.message);
     setAiTesting(false);
   };
 
@@ -268,6 +283,37 @@ const SettingsPage: React.FC = () => {
           </div>
         </Section>
 
+        <Section title="Budget Bulanan" icon={DollarSign} defaultOpen={false}>
+          <p className="text-xs font-bold text-brutal-bone-dim uppercase tracking-wider">
+            Budget ini dipakai sebagai acuan insight agar pengeluaran keluarga dan pribadi dibaca lebih adil.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input
+              label={`Budget Pribadi (${currency})`}
+              type="text"
+              inputMode="numeric"
+              placeholder={currency === 'IDR' ? '2000000' : '125'}
+              value={personalMonthlyBudget ? String(personalMonthlyBudget) : ''}
+              onChange={(e) => handleBudgetChange(setPersonalMonthlyBudget, e.target.value)}
+              hint="Contoh: kebutuhan + wants pribadimu per bulan."
+              style={{ fontSize: '16px' }}
+            />
+            <Input
+              label={`Budget Keluarga (${currency})`}
+              type="text"
+              inputMode="numeric"
+              placeholder={currency === 'IDR' ? '1500000' : '95'}
+              value={familySupportMonthlyBudget ? String(familySupportMonthlyBudget) : ''}
+              onChange={(e) => handleBudgetChange(setFamilySupportMonthlyBudget, e.target.value)}
+              hint="Contoh: bantuan rutin untuk orang tua atau keluarga."
+              style={{ fontSize: '16px' }}
+            />
+          </div>
+          <p className="text-xs font-medium text-brutal-bone-dim">
+            Kosongkan atau isi 0 kalau belum mau dipakai sebagai acuan.
+          </p>
+        </Section>
+
         {/* ── AI PROVIDER ─────────────────────────────── */}
         <Section title="AI Provider" icon={Cpu} defaultOpen={false}>
           <div className="flex border-2 border-[#555555] h-11">
@@ -281,12 +327,12 @@ const SettingsPage: React.FC = () => {
             ))}
           </div>
           <Input
-            label="API Key"
+            label={aiProvider === 'openai' ? 'OpenAI API Key' : 'OpenRouter API Key'}
             type="password"
             placeholder="sk-..."
-            value={aiKey}
-            onChange={(e) => setAiKey(e.target.value)}
-            hint="Disimpan hanya di browser kamu. Tidak dikirim ke server manapun."
+            value={aiProvider === 'openai' ? openaiKey : openrouterKey}
+            onChange={(e) => aiProvider === 'openai' ? setOpenaiKey(e.target.value) : setOpenrouterKey(e.target.value)}
+            hint="Setiap provider punya API key sendiri dan disimpan terpisah di browser kamu."
             style={{ fontSize: '16px' }}
           />
           {aiProvider === 'openrouter' && (
@@ -305,6 +351,11 @@ const SettingsPage: React.FC = () => {
             </Button>
             <StatusBadge status={aiStatus} />
           </div>
+          {aiStatusMessage && (
+            <p className={`text-xs font-bold ${aiStatus === 'ok' ? 'text-green-400' : 'text-red-300'}`}>
+              {aiStatusMessage}
+            </p>
+          )}
         </Section>
 
         {/* ── BACKUP ─────────────────────────────────── */}

@@ -219,8 +219,18 @@
 
   @media (min-width: 640px) {
     .bottom-sheet-panel {
-      @apply left-1/2 right-auto w-full max-w-md;
+      left: 50%;
+      right: auto;
+      width: min(92vw, 720px);
       transform: translateX(-50%);
+      border-top: 4px solid #F5F0E8;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .bottom-sheet-panel.history-insight-sheet {
+      width: min(92vw, 1120px);
+      max-height: min(88vh, 920px);
     }
   }
 }

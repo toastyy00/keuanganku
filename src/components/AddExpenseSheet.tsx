@@ -28,6 +28,9 @@ const AddExpenseSheet: React.FC = () => {
   const { expenses, categories, currency: defaultCurrency, addExpense, updateExpense, isLoading, updateRecurring, recurringTemplates } =
     useExpenseStore();
   const settings = useSettingsStore();
+  const activeAiKey = settings.aiProvider === 'openai'
+    ? settings.openaiKey
+    : settings.openrouterKey;
 
   const editingExpense = activeExpenseId
     ? expenses.find((e) => e.id === activeExpenseId) ?? null
@@ -138,13 +141,13 @@ const AddExpenseSheet: React.FC = () => {
   // ── AI category suggest ────────────────────────────────────
   const handleAiSuggest = async () => {
     if (!name.trim()) { setAiError('Masukkan nama item terlebih dahulu'); return; }
-    if (!settings.aiKey) { setAiError('Tambahkan API Key di Settings'); return; }
+    if (!activeAiKey) { setAiError('Tambahkan API Key provider yang aktif di Settings'); return; }
     setAiLoading(true);
     setAiError('');
     try {
       const slug = await suggestCategory(name, categories, {
         provider: settings.aiProvider,
-        apiKey: settings.aiKey,
+        apiKey: activeAiKey,
         openrouterModel: settings.openrouterModel,
       });
       if (slug && categories.some((c) => c.slug === slug)) {

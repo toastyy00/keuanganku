@@ -38,7 +38,7 @@ export const DEFAULT_CATEGORIES: Category[] = [
   },
   {
     slug: 'fashion',
-    label: 'Fashion',
+    label: 'Lifestyle',
     emoji: '👕',
     is_default: false,
   },

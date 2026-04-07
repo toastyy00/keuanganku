@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - experimental/**
     paths:
       - '.github/workflows/docker-publish.yml'
       - 'Dockerfile'
@@ -44,7 +45,9 @@ jobs:
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/keuanganku
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=stable,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=experimental,enable=${{ startsWith(github.ref, 'refs/heads/experimental/') }}
             type=sha,prefix=git-
 
       - name: Build and push multi-arch image
