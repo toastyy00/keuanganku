@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Tag,
-  DollarSign, Cpu, Download, Upload, Plus, Trash2,
+  DollarSign, Cpu, Download, Upload, Plus, Trash2, Wallet,
   CheckCircle, XCircle, RefreshCw, Loader2, ChevronDown, LogOut, User,
 } from 'lucide-react';
 import { Card, CardBody } from '../components/ui/Card';
@@ -113,7 +113,7 @@ const SettingsPage: React.FC = () => {
   const [isImporting, setIsImporting] = useState(false);
 
   const [newCatLabel, setNewCatLabel] = useState('');
-  const [newCatEmoji, setNewCatEmoji] = useState('📦');
+  const [newCatEmoji, setNewCatEmoji] = useState('🛍️');
   const [catError, setCatError] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -204,7 +204,7 @@ const SettingsPage: React.FC = () => {
     if (categories.some((c) => c.slug === slug)) { setCatError('Kategori sudah ada'); return; }
     try {
       await addCategory({ slug, label: newCatLabel.trim(), emoji: newCatEmoji, is_default: false });
-      setNewCatLabel(''); setNewCatEmoji('📦'); setCatError('');
+      setNewCatLabel(''); setNewCatEmoji('🛍️'); setCatError('');
       haptic();
     } catch (err) {
       setCatError(err instanceof Error ? err.message : 'Gagal menambah');
@@ -253,7 +253,7 @@ const SettingsPage: React.FC = () => {
           </div>
         </Section>
 
-        <Section title="Mata Uang Default" icon={DollarSign} defaultOpen={false}>
+        <Section title="Currency" icon={DollarSign} defaultOpen={false}>
           <p className="text-xs font-bold text-brutal-bone-dim uppercase tracking-wider">
             Mata uang default untuk input pengeluaran baru.
           </p>
@@ -283,7 +283,7 @@ const SettingsPage: React.FC = () => {
           </div>
         </Section>
 
-        <Section title="Budget Bulanan" icon={DollarSign} defaultOpen={false}>
+        <Section title="Budget Bulanan" icon={Wallet} defaultOpen={false}>
           <p className="text-xs font-bold text-brutal-bone-dim uppercase tracking-wider">
             Budget ini dipakai sebagai acuan insight agar pengeluaran keluarga dan pribadi dibaca lebih adil.
           </p>

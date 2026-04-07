@@ -276,7 +276,7 @@ const RecurringPage: React.FC = () => {
               ) : (
                 <CardBody>
                   <div className="flex items-start gap-3">
-                    <span className="text-3xl mt-0.5 shrink-0">{cat?.emoji ?? '📦'}</span>
+                    <span className="text-3xl mt-0.5 shrink-0">{cat?.emoji ?? '🛍️'}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-black text-base leading-tight">{t.name}</p>

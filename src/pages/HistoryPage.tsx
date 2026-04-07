@@ -155,8 +155,8 @@ const HistoryPage: React.FC = () => {
   const [assistantError, setAssistantError] = useState<string | null>(null);
   const [isQuickInsightExpanded, setIsQuickInsightExpanded] = useState(false);
 
-  useEffect(() => { 
-    loadExpenses(); 
+  useEffect(() => {
+    loadExpenses();
     getExchangeRate().then((res) => setRateInfo(res));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -332,108 +332,108 @@ const HistoryPage: React.FC = () => {
     try {
       const insight: HistoryInsightResponse = intent === 'summary'
         ? buildSummaryInsight({
+          monthLabelStr,
+          currency,
+          scopedExpenses: scopedMonthExpenses,
+          scopedTotal,
+          transferTotal,
+          previousScopedTotal,
+          topCategories,
+          split,
+          filterLabel,
+          familySupportTotal,
+          personalTotal,
+          personalNeedsTotal,
+          personalWantsTotal,
+          personalBudget: personalMonthlyBudget,
+          familySupportBudget: familySupportMonthlyBudget,
+        })
+        : intent === 'transaction_insights'
+          ? buildTransactionInsight({
             monthLabelStr,
             currency,
             scopedExpenses: scopedMonthExpenses,
             scopedTotal,
-            transferTotal,
-            previousScopedTotal,
             topCategories,
-            split,
             filterLabel,
-            familySupportTotal,
-            personalTotal,
-            personalNeedsTotal,
-            personalWantsTotal,
-            personalBudget: personalMonthlyBudget,
-            familySupportBudget: familySupportMonthlyBudget,
           })
-        : intent === 'transaction_insights'
-          ? buildTransactionInsight({
-              monthLabelStr,
-              currency,
-              scopedExpenses: scopedMonthExpenses,
-              scopedTotal,
-              topCategories,
-              filterLabel,
-            })
           : await generateExpenseInsight(
-              {
-                intent: 'deep_analysis',
-                context: {
-                  monthLabel: monthLabelStr,
-                  currency,
-                  filterLabel,
-                  totals: {
-                    spending: scopedTotal,
-                    transfers: transferTotal,
-                    transactionCount: scopedMonthExpenses.length,
-                    needs: split.needs,
-                    wants: split.wants,
-                    needsPct: split.needsPct,
-                    wantsPct: split.wantsPct,
-                  },
-                  familySupport: {
-                    total: familySupportTotal,
-                    personalTotal,
-                    personalNeedsTotal,
-                    personalWantsTotal,
-                    familySupportBudget: familySupportMonthlyBudget || undefined,
-                    personalBudget: personalMonthlyBudget || undefined,
-                  },
-                  previousMonth: {
-                    monthLabel: 'Bulan lalu',
-                    spending: previousScopedTotal,
-                    delta: scopedTotal - previousScopedTotal,
-                    deltaPct: previousScopedTotal > 0
-                      ? Math.round(((scopedTotal - previousScopedTotal) / previousScopedTotal) * 100)
-                      : null,
-                  },
-                  topCategories: topCategories.map((item) => ({
-                    slug: item.label.toLowerCase().replace(/\s+/g, '-'),
-                    label: item.label,
-                    amount: item.amount,
-                    pct: item.pct,
-                  })),
-                  recurringExpenses: monthExpenses
-                    .filter((expense) => expense.is_recurring)
-                    .map((expense) => ({
-                      name: expense.name,
-                      amount: toDisplay(expense),
-                      type: expense.type,
-                      category: expense.category,
-                    })),
-                  recentTransactions: scopedMonthExpenses.slice(0, 8).map((expense) => ({
-                    date: expense.date,
-                    name: expense.name,
-                    amount: toDisplay(expense),
-                    type: expense.type,
-                    category: expense.category,
-                    note: expense.note,
-                  })),
-                  transactions: scopedMonthExpenses.map((expense) => ({
-                    date: expense.date,
-                    name: expense.name,
-                    amount: toDisplay(expense),
-                    currency,
-                    type: expense.type,
-                    category: expense.category,
-                    destination: expense.destination,
-                    note: expense.note,
-                  })),
+            {
+              intent: 'deep_analysis',
+              context: {
+                monthLabel: monthLabelStr,
+                currency,
+                filterLabel,
+                totals: {
+                  spending: scopedTotal,
+                  transfers: transferTotal,
+                  transactionCount: scopedMonthExpenses.length,
+                  needs: split.needs,
+                  wants: split.wants,
+                  needsPct: split.needsPct,
+                  wantsPct: split.wantsPct,
                 },
+                familySupport: {
+                  total: familySupportTotal,
+                  personalTotal,
+                  personalNeedsTotal,
+                  personalWantsTotal,
+                  familySupportBudget: familySupportMonthlyBudget || undefined,
+                  personalBudget: personalMonthlyBudget || undefined,
+                },
+                previousMonth: {
+                  monthLabel: 'Bulan lalu',
+                  spending: previousScopedTotal,
+                  delta: scopedTotal - previousScopedTotal,
+                  deltaPct: previousScopedTotal > 0
+                    ? Math.round(((scopedTotal - previousScopedTotal) / previousScopedTotal) * 100)
+                    : null,
+                },
+                topCategories: topCategories.map((item) => ({
+                  slug: item.label.toLowerCase().replace(/\s+/g, '-'),
+                  label: item.label,
+                  amount: item.amount,
+                  pct: item.pct,
+                })),
+                recurringExpenses: monthExpenses
+                  .filter((expense) => expense.is_recurring)
+                  .map((expense) => ({
+                    name: expense.name,
+                    amount: toDisplay(expense),
+                    type: expense.type,
+                    category: expense.category,
+                  })),
+                recentTransactions: scopedMonthExpenses.slice(0, 8).map((expense) => ({
+                  date: expense.date,
+                  name: expense.name,
+                  amount: toDisplay(expense),
+                  type: expense.type,
+                  category: expense.category,
+                  note: expense.note,
+                })),
+                transactions: scopedMonthExpenses.map((expense) => ({
+                  date: expense.date,
+                  name: expense.name,
+                  amount: toDisplay(expense),
+                  currency,
+                  type: expense.type,
+                  category: expense.category,
+                  destination: expense.destination,
+                  note: expense.note,
+                })),
               },
-              {
-                provider: aiProvider,
-                apiKey: activeAiKey,
-                openrouterModel,
-              }
-            ).then((aiInsight) => ({
-              title: aiInsight.title,
-              summary: aiInsight.summary,
-              highlights: aiInsight.highlights,
-              actions: aiInsight.actions,
-            }));
+            },
+            {
+              provider: aiProvider,
+              apiKey: activeAiKey,
+              openrouterModel,
+            }
+          ).then((aiInsight) => ({
+            title: aiInsight.title,
+            summary: aiInsight.summary,
+            highlights: aiInsight.highlights,
+            actions: aiInsight.actions,
+          }));
 
       writeCachedInsight(monthPrefix, intent, promptLabel, insight);
 
@@ -710,7 +710,7 @@ const HistoryPage: React.FC = () => {
                               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                             >
                               <span className="text-2xl w-9 shrink-0 text-center">
-                                {e.type === 'TRANSFER' ? '💸' : (cat?.emoji ?? '📦')}
+                                {e.type === 'TRANSFER' ? '💸' : (cat?.emoji ?? '🛍️')}
                               </span>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-bold truncate leading-tight">{e.name}</p>

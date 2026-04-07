@@ -453,7 +453,7 @@ const DashboardPage: React.FC = () => {
             {topCategories.map(({ slug, amount, cat, pct }) => (
               <Card key={slug} flat className="!shadow-[4px_4px_0_0_#000] p-3">
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl w-9 shrink-0 text-center">{cat?.emoji ?? '📦'}</span>
+                  <span className="text-2xl w-9 shrink-0 text-center">{cat?.emoji ?? '🛍️'}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm font-bold truncate">{cat?.label ?? slug}</span>
@@ -502,7 +502,7 @@ const DashboardPage: React.FC = () => {
                 <Card key={e.id} flat className="!shadow-[4px_4px_0_0_#000]">
                   <div className="flex items-center gap-3 p-3">
                     <span className="text-2xl w-9 shrink-0 text-center">
-                      {e.type === 'TRANSFER' ? '💸' : (cat?.emoji ?? '📦')}
+                      {e.type === 'TRANSFER' ? '💸' : (cat?.emoji ?? '🛍️')}
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold truncate leading-tight">{e.name}</p>
