@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { isDemoMode } from '../lib/appConfig';
 
 // ============================================================
 //  AUTH STORE — Supabase session management
@@ -40,6 +41,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   // Supabase (persisted in localStorage by the Supabase SDK) and
   // subscribes to auth state changes for the lifetime of the app.
   loadSession: async () => {
+    if (isDemoMode()) {
+      set({ isInitializing: false, session: null, user: null, error: null });
+      return;
+    }
+
     if (!supabase) {
       set({ isInitializing: false });
       return;
@@ -80,6 +86,11 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   // ── login ────────────────────────────────────────────────
   login: async (email, password) => {
+    if (isDemoMode()) {
+      set({ error: 'Mode demo tidak memakai login. Kamu bisa langsung menjelajah aplikasi.' });
+      return;
+    }
+
     if (!supabase) {
       set({ error: 'Supabase belum dikonfigurasi.' });
       return;
@@ -111,6 +122,11 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   // ── register ─────────────────────────────────────────────
   register: async (email, password, displayName) => {
+    if (isDemoMode()) {
+      set({ error: 'Mode demo tidak membuka pendaftaran akun.' });
+      return false;
+    }
+
     if (!supabase) {
       set({ error: 'Supabase belum dikonfigurasi.' });
       return false;
@@ -152,6 +168,10 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   // ── logout ───────────────────────────────────────────────
   logout: async () => {
+    if (isDemoMode()) {
+      set({ user: null, session: null });
+      return;
+    }
     if (!supabase) return;
     await supabase.auth.signOut();
     set({ user: null, session: null });

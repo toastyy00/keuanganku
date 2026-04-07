@@ -1,11 +1,13 @@
 import React, { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { AddExpenseSheet } from './components/AddExpenseSheet';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { SkeletonDashboard } from './components/SkeletonCard';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { appConfig, isDemoMode } from './lib/appConfig';
+import { seedDemoData } from './lib/demoData';
 import { useExpenseStore } from './store/useExpenseStore';
 import { useAuthStore } from './store/useAuthStore';
 
@@ -55,11 +57,15 @@ const AppLoadingScreen: React.FC = () => (
 const AppInner: React.FC = () => {
   const { isInitializing, session, loadSession } = useAuthStore();
   const loadExpenses = useExpenseStore((s) => s.loadExpenses);
+  const demoMode = isDemoMode();
 
   // 1. Resolve auth session on mount (must happen before render)
   useEffect(() => {
+    if (demoMode) {
+      seedDemoData();
+    }
     loadSession();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [demoMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 2. Load data whenever auth state settles
   useEffect(() => {
@@ -116,7 +122,7 @@ const AppInner: React.FC = () => {
       </Suspense>
 
       {/* Global modals — only shown when authenticated */}
-      {session && (
+      {(session || demoMode) && (
         <>
           <AddExpenseSheet />
           <PWAInstallBanner />
@@ -126,10 +132,17 @@ const AppInner: React.FC = () => {
   );
 };
 
-const App: React.FC = () => (
-  <BrowserRouter>
-    <AppInner />
-  </BrowserRouter>
-);
+const App: React.FC = () => {
+  const Router = isDemoMode() ? HashRouter : BrowserRouter;
+  const basename = isDemoMode() && appConfig.basePath !== '/'
+    ? appConfig.basePath.replace(/\/$/, '')
+    : undefined;
+
+  return (
+    <Router basename={basename}>
+      <AppInner />
+    </Router>
+  );
+};
 
 export default App;

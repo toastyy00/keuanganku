@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
+import { isDemoMode } from '../lib/appConfig';
 
 // ============================================================
 //  PROTECTED ROUTE
@@ -17,6 +18,14 @@ interface ProtectedRouteProps {
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, authOnly = false }) => {
   const session = useAuthStore((s) => s.session);
   const location = useLocation();
+  const demoMode = isDemoMode();
+
+  if (demoMode) {
+    if (authOnly) {
+      return <Navigate to="/" replace />;
+    }
+    return <>{children}</>;
+  }
 
   if (authOnly) {
     // Auth pages: redirect authenticated users to dashboard
