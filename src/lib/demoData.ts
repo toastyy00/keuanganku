@@ -1,4 +1,4 @@
-import type { Category, Expense, RecurringTemplate } from '../types';
+﻿import type { Category, Expense, RecurringTemplate } from '../types';
 import { DEFAULT_CATEGORIES } from './categories';
 
 const DEMO_SEEDED_KEY = 'keuanganku-demo-seeded-v1';
@@ -24,20 +24,20 @@ function createDemoExpenses(): Expense[] {
     ['demo-transfer-current-1', 'Tarik USDT', 3500000, 'IDR', '', 'TRANSFER', 'PINTU', shiftDate(currentMonth, 2), 'Pencairan bulanan dari crypto'] as const,
     ['demo-family-current-1', 'Ortu', 1500000, 'IDR', 'keluarga', 'NEED', undefined, shiftDate(currentMonth, 3), 'Uang bulanan ortu'] as const,
     ['demo-bill-current-1', 'Internet rumah', 350000, 'IDR', 'tagihan', 'NEED', undefined, shiftDate(currentMonth, 4), 'Tagihan rutin'] as const,
-    ['demo-food-current-1', 'Belanja mingguan', 285000, 'IDR', 'dapur', 'NEED', undefined, shiftDate(currentMonth, 6), 'Stok dapur'] as const,
-    ['demo-lifestyle-current-1', 'Face wash', 89000, 'IDR', 'fashion', 'NEED', undefined, shiftDate(currentMonth, 7), 'Perawatan diri'] as const,
+    ['demo-food-current-1', 'Belanja mingguan', 285000, 'IDR', 'keperluan', 'NEED', undefined, shiftDate(currentMonth, 6), 'Stok rumah'] as const,
+    ['demo-lifestyle-current-1', 'Face wash', 89000, 'IDR', 'lifestyle', 'NEED', undefined, shiftDate(currentMonth, 7), 'Perawatan diri'] as const,
     ['demo-digital-current-1', 'Steam Wallet', 425000, 'IDR', 'digital', 'WANT', undefined, shiftDate(currentMonth, 10), 'Top up game'] as const,
     ['demo-food-current-2', 'Makan bakso', 42000, 'IDR', 'makan', 'NEED', undefined, shiftDate(currentMonth, 11), 'Makan siang'] as const,
     ['demo-transport-current-1', 'Gojek', 27000, 'IDR', 'transport', 'NEED', undefined, shiftDate(currentMonth, 12), 'Pergi kerja'] as const,
-    ['demo-lifestyle-current-2', 'Sabun mandi', 36000, 'IDR', 'fashion', 'NEED', undefined, shiftDate(currentMonth, 14), 'Kebutuhan mandi'] as const,
+    ['demo-lifestyle-current-2', 'Sabun mandi', 36000, 'IDR', 'lifestyle', 'NEED', undefined, shiftDate(currentMonth, 14), 'Kebutuhan mandi'] as const,
     ['demo-gift-current-1', 'Hadiah ulang tahun', 150000, 'IDR', 'hadiah', 'WANT', undefined, shiftDate(currentMonth, 18), 'Kado teman'] as const,
     ['demo-transfer-prev-1', 'Tarik USDT', 3000000, 'IDR', '', 'TRANSFER', 'PINTU', shiftDate(previousMonth, 2), 'Pencairan bulanan dari crypto'] as const,
     ['demo-family-prev-1', 'Ortu', 1500000, 'IDR', 'keluarga', 'NEED', undefined, shiftDate(previousMonth, 3), 'Uang bulanan ortu'] as const,
     ['demo-bill-prev-1', 'Internet rumah', 350000, 'IDR', 'tagihan', 'NEED', undefined, shiftDate(previousMonth, 4), 'Tagihan rutin'] as const,
     ['demo-digital-prev-1', 'Spotify', 54990, 'IDR', 'digital', 'WANT', undefined, shiftDate(previousMonth, 7), 'Langganan musik'] as const,
-    ['demo-food-prev-1', 'Belanja mingguan', 240000, 'IDR', 'dapur', 'NEED', undefined, shiftDate(previousMonth, 8), 'Stok dapur'] as const,
+    ['demo-food-prev-1', 'Belanja mingguan', 240000, 'IDR', 'keperluan', 'NEED', undefined, shiftDate(previousMonth, 8), 'Stok rumah'] as const,
     ['demo-food-prev-2', 'Makan ayam', 38000, 'IDR', 'makan', 'NEED', undefined, shiftDate(previousMonth, 10), 'Makan malam'] as const,
-    ['demo-lifestyle-prev-1', 'Kaos polos', 120000, 'IDR', 'fashion', 'WANT', undefined, shiftDate(previousMonth, 15), 'Belanja lifestyle'] as const,
+    ['demo-lifestyle-prev-1', 'Kaos polos', 120000, 'IDR', 'lifestyle', 'WANT', undefined, shiftDate(previousMonth, 15), 'Belanja lifestyle'] as const,
   ];
 
   return entries.map(([id, name, amount, currency, category, type, destination, date, note]) => ({

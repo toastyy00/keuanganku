@@ -5,6 +5,7 @@ import {
   getExpenseRepository,
   getCategoryRepository,
   getRecurringRepository,
+  runCategorySlugMigrations,
 } from '../lib/repository';
 
 // ============================================================
@@ -81,26 +82,14 @@ export const useExpenseStore = create<ExpenseStore>()(
       loadExpenses: async () => {
         set({ isLoading: true, error: null });
         try {
+          await runCategorySlugMigrations();
+
           const [expenses, categories, recurringTemplates] = await Promise.all([
             getExpenseRepository().getAll(),
             getCategoryRepository().getAll(),
             getRecurringRepository().getAll(),
           ]);
-
-          // MIGRATION: Auto-rename 'Dapur' -> 'Belanja' for existing users (safety first!)
-          const legacyDapur = categories.find((c) => c.slug === 'dapur' && c.label === 'Dapur');
-          if (legacyDapur) {
-            try {
-              await getCategoryRepository().update('dapur', { label: 'Belanja' });
-              // Refresh categories list after successful update
-              const updatedCats = await getCategoryRepository().getAll();
-              set({ expenses, categories: updatedCats, recurringTemplates });
-            } catch {
-              set({ expenses, categories, recurringTemplates });
-            }
-          } else {
-            set({ expenses, categories, recurringTemplates });
-          }
+          set({ expenses, categories, recurringTemplates });
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'Failed to load data';
           set({ error: msg });

@@ -163,7 +163,7 @@ export async function importJSON(raw: string): Promise<BackupData> {
         .map((c) => ({
           slug: typeof c.slug === 'string' ? c.slug : uuidv4(),
           label: typeof c.label === 'string' ? c.label : 'Kategori',
-          emoji: typeof c.emoji === 'string' ? c.emoji : '📦',
+          emoji: typeof c.emoji === 'string' ? c.emoji : '🛍️',
           user_id: user.id,
           is_default: false,
         }));

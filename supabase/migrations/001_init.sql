@@ -1,8 +1,8 @@
--- ============================================================
---  KEUANGANKU — Supabase Database Migration
---  001_init.sql (AUTH MODE — per-user data with RLS)
+﻿-- ============================================================
+--  KEUANGANKU - Supabase Database Migration
+--  001_init.sql (AUTH MODE - per-user data with RLS)
 --
---  Run this in the Supabase Dashboard → SQL Editor,
+--  Run this in the Supabase Dashboard -> SQL Editor,
 --  or via: supabase db reset
 -- ============================================================
 
@@ -198,16 +198,16 @@ BEGIN
   -- Seed 11 default categories for this user
   INSERT INTO public.categories (slug, label, emoji, is_default, user_id) VALUES
     ('tagihan',   'Tagihan',      '⚡',     TRUE, NEW.id),
-    ('dapur',     'Belanja',      '🛒',     TRUE, NEW.id),
+    ('keperluan', 'Keperluan',    '🛍️',     TRUE, NEW.id),
     ('makan',     'Makan',        '🍜',     TRUE, NEW.id),
     ('transport', 'Transportasi', '🚗',     TRUE, NEW.id),
     ('health',    'Kesehatan',    '💊',     TRUE, NEW.id),
-    ('fashion',   'Fashion',      '👕',     TRUE, NEW.id),
+    ('lifestyle', 'Lifestyle',    '👟',     TRUE, NEW.id),
     ('gadget',    'Gadget',       '📱',     TRUE, NEW.id),
-    ('digital',   'Digital',      '🎮',     TRUE, NEW.id),
-    ('donasi',    'Donasi',       '🤲',     TRUE, NEW.id),
+    ('digital',   'Digital',      '💻',     TRUE, NEW.id),
+    ('sedekah',   'Sedekah',      '🤲',     TRUE, NEW.id),
     ('hadiah',    'Hadiah',       '🎁',     TRUE, NEW.id),
-    ('keluarga',  'Keluarga',     '👨‍👩‍👧',   TRUE, NEW.id);
+    ('keluarga',  'Keluarga',     '👨‍👩‍👧', TRUE, NEW.id);
 
   RETURN NEW;
 END;

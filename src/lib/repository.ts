@@ -21,6 +21,35 @@ const KEYS = {
   recurring: 'recurring',
 } as const;
 
+const CATEGORY_MIGRATIONS = [
+  {
+    from: 'dapur',
+    to: { slug: 'keperluan', label: 'Keperluan', emoji: '🛍️' },
+  },
+  {
+    from: 'fashion',
+    to: { slug: 'lifestyle', label: 'Lifestyle', emoji: '👟' },
+  },
+  {
+    from: 'donasi',
+    to: { slug: 'sedekah', label: 'Sedekah', emoji: '🤲' },
+  },
+] as const;
+
+const CATEGORY_NORMALIZATIONS = [
+  { slug: 'tagihan', label: 'Tagihan', emoji: '⚡' },
+  { slug: 'keperluan', label: 'Keperluan', emoji: '🛍️' },
+  { slug: 'makan', label: 'Makan', emoji: '🍜' },
+  { slug: 'transport', label: 'Transportasi', emoji: '🚗' },
+  { slug: 'health', label: 'Kesehatan', emoji: '💊' },
+  { slug: 'lifestyle', label: 'Lifestyle', emoji: '👟' },
+  { slug: 'gadget', label: 'Gadget', emoji: '📱' },
+  { slug: 'digital', label: 'Digital', emoji: '💻' },
+  { slug: 'sedekah', label: 'Sedekah', emoji: '🤲' },
+  { slug: 'hadiah', label: 'Hadiah', emoji: '🎁' },
+  { slug: 'keluarga', label: 'Keluarga', emoji: '👨‍👩‍👧' },
+] as const;
+
 // ============================================================
 //  HELPERS
 // ============================================================
@@ -47,6 +76,86 @@ function isoDate(date: Date = new Date()): string {
   return date.toISOString().slice(0, 10);
 }
 
+function migrateLocalCategorySlugs(): void {
+  let categories = readJSON<Category>(KEYS.categories);
+  let expenses = readJSON<Expense>(KEYS.expenses);
+  let recurring = readJSON<RecurringTemplate>(KEYS.recurring);
+  let changed = false;
+
+  for (const migration of CATEGORY_MIGRATIONS) {
+    const hasOldCategory = categories.some((item) => item.slug === migration.from);
+    const hasOldExpense = expenses.some((item) => item.category === migration.from);
+    const hasOldRecurring = recurring.some((item) => item.category === migration.from);
+
+    if (!hasOldCategory && !hasOldExpense && !hasOldRecurring) continue;
+
+    expenses = expenses.map((item) =>
+      item.category === migration.from ? { ...item, category: migration.to.slug } : item
+    );
+    recurring = recurring.map((item) =>
+      item.category === migration.from ? { ...item, category: migration.to.slug } : item
+    );
+
+    const targetIndex = categories.findIndex((item) => item.slug === migration.to.slug);
+    const sourceIndex = categories.findIndex((item) => item.slug === migration.from);
+
+    if (targetIndex >= 0) {
+      categories[targetIndex] = {
+        ...categories[targetIndex],
+        label: migration.to.label,
+        emoji: migration.to.emoji,
+      };
+      if (sourceIndex >= 0) {
+        categories.splice(sourceIndex, 1);
+      }
+    } else if (sourceIndex >= 0) {
+      categories[sourceIndex] = {
+        ...categories[sourceIndex],
+        slug: migration.to.slug,
+        label: migration.to.label,
+        emoji: migration.to.emoji,
+      };
+    } else {
+      categories.push({
+        slug: migration.to.slug,
+        label: migration.to.label,
+        emoji: migration.to.emoji,
+        is_default: false,
+      });
+    }
+
+    changed = true;
+  }
+
+  if (changed) {
+    writeJSON(KEYS.categories, categories);
+    writeJSON(KEYS.expenses, expenses);
+    writeJSON(KEYS.recurring, recurring);
+  }
+}
+
+function normalizeLocalCategoryMetadata(): void {
+  const categories = readJSON<Category>(KEYS.categories);
+  let changed = false;
+
+  const normalized = categories.map((item) => {
+    const match = CATEGORY_NORMALIZATIONS.find((category) => category.slug === item.slug);
+    if (!match) return item;
+    if (item.label === match.label && item.emoji === match.emoji) return item;
+
+    changed = true;
+    return {
+      ...item,
+      label: match.label,
+      emoji: match.emoji,
+    };
+  });
+
+  if (changed) {
+    writeJSON(KEYS.categories, normalized);
+  }
+}
+
 /** Returns the authenticated user's ID, or throws if not authenticated. */
 function requireUserId(): string {
   const userId = useAuthStore.getState().user?.id;
@@ -57,6 +166,66 @@ function requireUserId(): string {
 /** True if the user currently has an active Supabase session. */
 function isAuthenticated(): boolean {
   return useAuthStore.getState().session !== null;
+}
+
+export async function runCategorySlugMigrations(): Promise<void> {
+  if (!isAuthenticated()) {
+    migrateLocalCategorySlugs();
+    normalizeLocalCategoryMetadata();
+    return;
+  }
+
+  const client = getSupabaseClient();
+  const userId = useAuthStore.getState().user?.id;
+  if (!client || !userId) return;
+
+  for (const migration of CATEGORY_MIGRATIONS) {
+    await client
+      .from('expenses')
+      .update({ category: migration.to.slug })
+      .eq('user_id', userId)
+      .eq('category', migration.from);
+
+    await client
+      .from('recurring_templates')
+      .update({ category: migration.to.slug })
+      .eq('user_id', userId)
+      .eq('category', migration.from);
+
+    await client
+      .from('categories')
+      .upsert(
+        {
+          slug: migration.to.slug,
+          label: migration.to.label,
+          emoji: migration.to.emoji,
+          is_default: true,
+          user_id: userId,
+        },
+        { onConflict: 'slug,user_id' }
+      );
+
+    await client
+      .from('categories')
+      .delete()
+      .eq('user_id', userId)
+      .eq('slug', migration.from);
+  }
+
+  for (const category of CATEGORY_NORMALIZATIONS) {
+    await client
+      .from('categories')
+      .upsert(
+        {
+          slug: category.slug,
+          label: category.label,
+          emoji: category.emoji,
+          is_default: true,
+          user_id: userId,
+        },
+        { onConflict: 'slug,user_id' }
+      );
+  }
 }
 
 // ============================================================
@@ -132,7 +301,7 @@ export class LocalStorageCategoryRepository implements CategoryRepository {
     let changed = false;
     const updated = stored.map((s) => {
       const match = DEFAULT_CATEGORIES.find((d) => d.slug === s.slug);
-      if (match && match.label !== s.label) {
+      if (match && (match.label !== s.label || match.emoji !== s.emoji)) {
         changed = true;
         return { ...s, label: match.label, emoji: match.emoji };
       }
