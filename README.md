@@ -23,16 +23,7 @@ Keuanganku is a self-hostable personal expense tracker with support for daily ex
 
 ## Live Demo
 
-Try the public demo here:
-
-- [https://toastyy00.github.io/keuanganku/](https://toastyy00.github.io/keuanganku/)
-
-Notes:
-
-- The demo runs in a safe public mode
-- No login is required
-- It uses local demo data only
-- It does not connect to your production Supabase project
+Try the demo here: [https://toastyy00.github.io/keuanganku/](https://toastyy00.github.io/keuanganku/)
 
 
 ## Features
