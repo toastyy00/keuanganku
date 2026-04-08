@@ -182,46 +182,42 @@ function AnimatedNumberFlow({ value, initialDelay = 200, id, ...props }: NumberF
   });
 
   const ref = useRef<any>(null);
+  const [isIntersecting, setIsIntersecting] = useState(false);
 
   useEffect(() => {
     if (id) globalPrevValues.set(id, value);
   }, [id, value]);
 
   useEffect(() => {
+    const el = ref.current;
+    if (!el) {
+      setIsIntersecting(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      setIsIntersecting(entry.isIntersecting);
+    }, { threshold: 0.5 });
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     if (!hasAnimatedGlobal) {
-      const el = ref.current;
-      if (!el) {
-        // Fallback in case NumberFlow doesn't forward the ref
+      if (isIntersecting) {
         const t = setTimeout(() => {
           setDisplayValue(value);
           hasAnimatedGlobal = true;
         }, initialDelay);
         return () => clearTimeout(t);
       }
-      let timer: ReturnType<typeof setTimeout>;
-      const observer = new IntersectionObserver(([entry]) => {
-        if (entry.isIntersecting) {
-          timer = setTimeout(() => {
-            setDisplayValue(value);
-            hasAnimatedGlobal = true;
-          }, initialDelay);
-          observer.disconnect();
-        }
-      }, { threshold: 0.5 });
-
-      observer.observe(el);
-      return () => {
-        observer.disconnect();
-        clearTimeout(timer);
-      };
     } else {
-      // Already animated globally. Animate to new value if changed.
-      if (displayValue !== value) {
+      if (isIntersecting && displayValue !== value) {
         const t = setTimeout(() => setDisplayValue(value), 50);
         return () => clearTimeout(t);
       }
     }
-  }, [value, initialDelay, displayValue]);
+  }, [value, initialDelay, displayValue, isIntersecting]);
 
   return <NumberFlow ref={ref} value={displayValue} {...props} />;
 }
