@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom';
 import { TrendingUp, TrendingDown, Minus, ChevronRight, CalendarClock } from 'lucide-react';
 import { Card, CardBody } from '../components/ui/Card';
-import { SlotCounter } from '../components/SlotCounter';
+import NumberFlow, { continuous } from '@number-flow/react';
 import { Badge } from '../components/ui/Badge';
 import { SkeletonDashboard } from '../components/SkeletonCard';
 import { useExpenseStore } from '../store/useExpenseStore';
@@ -53,9 +53,9 @@ function SwipeCarousel({
     // Set to true after delay to avoid React 18 Strict Mode double-mount cancellation
     const t1 = setTimeout(() => {
       markSwipeHintSeen();
-      setHintPx(-40);
-    }, 800);
-    const t2 = setTimeout(() => setHintPx(0), 1400);
+      setHintPx(-50);
+    }, 1600);
+    const t2 = setTimeout(() => setHintPx(0), 2200);
 
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [slides.length]);
@@ -124,8 +124,10 @@ function SwipeCarousel({
         style={{ transform: `translateX(calc(-${active * 100}% + ${hintPx}px))` }}
       >
         {slides.map((slide, i) => (
-          <div key={i} className="w-full flex-shrink-0">
-            {slide}
+          <div key={i} className="w-full flex-shrink-0 flex items-stretch">
+            <div className="flex-1 min-w-0">
+              {slide}
+            </div>
           </div>
         ))}
       </div>
@@ -158,6 +160,70 @@ function SwipeCarousel({
       )}
     </div>
   );
+}
+
+// ============================================================
+//  AnimatedNumberFlow — Wraps NumberFlow with IntersectionObserver
+//  so it transitions from 0 only when the element is visible
+// ============================================================
+
+import { ComponentProps } from 'react';
+
+type NumberFlowProps = ComponentProps<typeof NumberFlow>;
+
+const globalPrevValues = new Map<string, number>();
+let hasAnimatedGlobal = false;
+
+function AnimatedNumberFlow({ value, initialDelay = 200, id, ...props }: NumberFlowProps & { initialDelay?: number; id?: string }) {
+  const [displayValue, setDisplayValue] = useState(() => {
+    if (!hasAnimatedGlobal) return 0;
+    if (id && globalPrevValues.has(id)) return globalPrevValues.get(id)!;
+    return value;
+  });
+
+  const ref = useRef<any>(null);
+
+  useEffect(() => {
+    if (id) globalPrevValues.set(id, value);
+  }, [id, value]);
+
+  useEffect(() => {
+    if (!hasAnimatedGlobal) {
+      const el = ref.current;
+      if (!el) {
+        // Fallback in case NumberFlow doesn't forward the ref
+        const t = setTimeout(() => {
+          setDisplayValue(value);
+          hasAnimatedGlobal = true;
+        }, initialDelay);
+        return () => clearTimeout(t);
+      }
+      let timer: ReturnType<typeof setTimeout>;
+      const observer = new IntersectionObserver(([entry]) => {
+        if (entry.isIntersecting) {
+          timer = setTimeout(() => {
+            setDisplayValue(value);
+            hasAnimatedGlobal = true;
+          }, initialDelay);
+          observer.disconnect();
+        }
+      }, { threshold: 0.5 });
+
+      observer.observe(el);
+      return () => {
+        observer.disconnect();
+        clearTimeout(timer);
+      };
+    } else {
+      // Already animated globally. Animate to new value if changed.
+      if (displayValue !== value) {
+        const t = setTimeout(() => setDisplayValue(value), 50);
+        return () => clearTimeout(t);
+      }
+    }
+  }, [value, initialDelay, displayValue]);
+
+  return <NumberFlow ref={ref} value={displayValue} {...props} />;
 }
 
 // ============================================================
@@ -276,6 +342,8 @@ const DashboardPage: React.FC = () => {
   // ── Recent 5 transactions (all types) ────────────────────
   const recentExpenses = useMemo(() => expenses.slice(0, 5), [expenses]);
 
+
+
   if (isLoading && expenses.length === 0) return <SkeletonDashboard />;
 
   return (
@@ -298,29 +366,34 @@ const DashboardPage: React.FC = () => {
           accentColors={['#1A1A1A', '#B8F55A']}
           slides={[
             /* ── Slide 1: Total Bulan Ini — Yellow highlight background ── */
-            <div className="p-5 pt-4 pb-5 bg-brutal-yellow text-[#1A1A1A] flex flex-col justify-between" style={{ minHeight: 148 }}>
+            <div className="h-full p-5 pt-4 pb-5 bg-brutal-yellow text-[#1A1A1A] flex flex-col justify-between" style={{ minHeight: 148 }}>
               <div>
                 <p className="text-xs font-black uppercase tracking-widest text-[#1A1A1A]/60">
                   Total Bulan Ini
                 </p>
               </div>
               <div>
-                <SlotCounter
-                  key={`slot-${fmt(monthTotal)}`}
-                  value={fmt(monthTotal)}
-                  animateId="slide1-total"
-                  duration={1100}
+                <AnimatedNumberFlow
+                  id="dash-total-1"
+                  value={monthTotal}
                   initialDelay={200}
-                  className="block text-[40px] font-black leading-none tracking-tight"
+                  locales="id-ID"
+                  format={dashCurrency === 'IDR'
+                    ? { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }
+                    : { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }
+                  }
+                  plugins={[continuous]}
+                  spinTiming={{ duration: 1100, easing: 'ease-out' }}
+                  className="block text-[40px] font-black leading-none tracking-tight translate-y-1"
                   style={{ fontVariantNumeric: 'tabular-nums' }}
                 />
-                <div className="flex items-center justify-between mt-2">
+                <div className="flex items-center justify-between mt-0.5">
                   <p className="text-xs font-black uppercase text-[#1A1A1A]/60">
                     {spendingExpenses.length} transaksi
                   </p>
                   <div className="flex items-center gap-2">
                     {dashCurrency === 'USD' && (
-                      <p className="text-[10px] font-medium text-[#1A1A1A]/45 text-right">
+                      <p className="text-[10px] font-medium text-[#1A1A1A]/45 text-right relative -top-0.5">
                         {rateInfo.isFallback
                           ? `≈ Rp ${rateInfo.rate.toLocaleString('id-ID')}`
                           : `= Rp ${rateInfo.rate.toLocaleString('id-ID')}`
@@ -340,18 +413,23 @@ const DashboardPage: React.FC = () => {
             </div>,
 
             /* ── Slide 2: Bulan Ini vs Bulan Lalu — Dark card background ── */
-            <div className="p-5 flex flex-col justify-between" style={{ backgroundColor: '#2A2A2A', minHeight: 148 }}>
+            <div className="h-full p-5 flex flex-col justify-between" style={{ backgroundColor: '#2A2A2A', minHeight: 148 }}>
               <div className="flex items-center justify-between gap-1.5 sm:gap-4 flex-1">
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] sm:text-xs font-bold uppercase text-brutal-black/50 mb-1 truncate">
                     {monthLabel(year, month)}
                   </p>
-                  <SlotCounter
-                    key={`slot-s21-${fmt(monthTotal)}`}
-                    value={fmt(monthTotal)}
-                    animateId="slide2-monthTotal"
-                    duration={1000}
+                  <AnimatedNumberFlow
+                    id="dash-total-2"
+                    value={monthTotal}
                     initialDelay={200}
+                    locales="id-ID"
+                    format={dashCurrency === 'IDR'
+                      ? { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }
+                      : { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }
+                    }
+                    plugins={[continuous]}
+                    spinTiming={{ duration: 1000, easing: 'ease-out' }}
                     className="block text-[22px] sm:text-[28px] font-black leading-none tracking-tighter truncate text-white"
                     style={{ fontVariantNumeric: 'tabular-nums' }}
                   />
@@ -368,12 +446,17 @@ const DashboardPage: React.FC = () => {
                   {lastMonthSpending === 0 ? (
                     <p className="text-sm font-bold text-brutal-black/40 italic">Belum ada data</p>
                   ) : (
-                    <SlotCounter
-                      key={`slot-s22-${fmt(lastMonthSpending)}`}
-                      value={fmt(lastMonthSpending)}
-                      animateId="slide2-lastMonth"
-                      duration={1000}
+                    <AnimatedNumberFlow
+                      id="dash-last-month"
+                      value={lastMonthSpending}
                       initialDelay={400}
+                      locales="id-ID"
+                      format={dashCurrency === 'IDR'
+                        ? { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }
+                        : { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }
+                      }
+                      plugins={[continuous]}
+                      spinTiming={{ duration: 1000, easing: 'ease-out' }}
                       className="block text-[22px] sm:text-[28px] font-black leading-none tracking-tighter truncate text-white"
                       style={{ fontVariantNumeric: 'tabular-nums' }}
                     />
@@ -392,21 +475,26 @@ const DashboardPage: React.FC = () => {
                     }
                     <span className={`text-[11px] sm:text-sm font-black whitespace-nowrap ${delta > 0 ? 'text-red-500' : 'text-green-600'}`}>
                       {delta > 0 ? '+' : ''}
-                      <SlotCounter
-                        key={`slot-pct-${delta}`}
-                        value={String(deltaPct)}
-                        animateId="slide2-delta-pct"
-                        duration={800}
+                      <AnimatedNumberFlow
+                        id="dash-delta-pct"
+                        value={deltaPct ?? 0}
                         initialDelay={600}
+                        plugins={[continuous]}
+                        spinTiming={{ duration: 800, easing: 'ease-out' }}
                         className="inline-block leading-none"
                       />
                       % ({delta > 0 ? '+' : ''}
-                      <SlotCounter
-                        key={`slot-val-${delta}`}
-                        value={fmt(Math.abs(delta))}
-                        animateId="slide2-delta-val"
-                        duration={1000}
+                      <AnimatedNumberFlow
+                        id="dash-delta-abs"
+                        value={Math.abs(delta)}
                         initialDelay={600}
+                        locales="id-ID"
+                        format={dashCurrency === 'IDR'
+                          ? { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }
+                          : { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }
+                        }
+                        plugins={[continuous]}
+                        spinTiming={{ duration: 1000, easing: 'ease-out' }}
                         className="inline-block leading-none"
                       />
                       )
