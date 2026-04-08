@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ComponentProps } from 'react';
 import { Link } from 'react-router-dom';
 import { TrendingUp, TrendingDown, Minus, ChevronRight, CalendarClock } from 'lucide-react';
 import { Card, CardBody } from '../components/ui/Card';
@@ -167,15 +168,14 @@ function SwipeCarousel({
 //  so it transitions from 0 only when the element is visible
 // ============================================================
 
-import { ComponentProps } from 'react';
-
 type NumberFlowProps = ComponentProps<typeof NumberFlow>;
+type NumberFlowValue = NumberFlowProps['value'];
 
-const globalPrevValues = new Map<string, number>();
+const globalPrevValues = new Map<string, NumberFlowValue>();
 let hasAnimatedGlobal = false;
 
 function AnimatedNumberFlow({ value, initialDelay = 200, id, ...props }: NumberFlowProps & { initialDelay?: number; id?: string }) {
-  const [displayValue, setDisplayValue] = useState(() => {
+  const [displayValue, setDisplayValue] = useState<NumberFlowValue>(() => {
     if (!hasAnimatedGlobal) return 0;
     if (id && globalPrevValues.has(id)) return globalPrevValues.get(id)!;
     return value;
