@@ -308,9 +308,10 @@ const DashboardPage: React.FC = () => {
                 <SlotCounter
                   key={`slot-${fmt(monthTotal)}`}
                   value={fmt(monthTotal)}
+                  animateId="slide1-total"
                   duration={1100}
                   initialDelay={200}
-                  className="text-[40px] font-black leading-none tracking-tight"
+                  className="block text-[40px] font-black leading-none tracking-tight"
                   style={{ fontVariantNumeric: 'tabular-nums' }}
                 />
                 <div className="flex items-center justify-between mt-2">
@@ -345,7 +346,15 @@ const DashboardPage: React.FC = () => {
                   <p className="text-[11px] sm:text-xs font-bold uppercase text-brutal-black/50 mb-1 truncate">
                     {monthLabel(year, month)}
                   </p>
-                  <p className="text-[22px] sm:text-[28px] font-black leading-none tracking-tighter truncate">{fmt(monthTotal)}</p>
+                  <SlotCounter
+                    key={`slot-s21-${fmt(monthTotal)}`}
+                    value={fmt(monthTotal)}
+                    animateId="slide2-monthTotal"
+                    duration={1000}
+                    initialDelay={200}
+                    className="block text-[22px] sm:text-[28px] font-black leading-none tracking-tighter truncate text-white"
+                    style={{ fontVariantNumeric: 'tabular-nums' }}
+                  />
                 </div>
                 <div className="flex items-center justify-center shrink-0 px-1 sm:px-2 mt-1 sm:mt-2">
                   {trend === 'up' && <TrendingUp size={24} strokeWidth={2.5} className="text-red-500" />}
@@ -359,7 +368,15 @@ const DashboardPage: React.FC = () => {
                   {lastMonthSpending === 0 ? (
                     <p className="text-sm font-bold text-brutal-black/40 italic">Belum ada data</p>
                   ) : (
-                    <p className="text-[22px] sm:text-[28px] font-black leading-none tracking-tighter truncate">{fmt(lastMonthSpending)}</p>
+                    <SlotCounter
+                      key={`slot-s22-${fmt(lastMonthSpending)}`}
+                      value={fmt(lastMonthSpending)}
+                      animateId="slide2-lastMonth"
+                      duration={1000}
+                      initialDelay={400}
+                      className="block text-[22px] sm:text-[28px] font-black leading-none tracking-tighter truncate text-white"
+                      style={{ fontVariantNumeric: 'tabular-nums' }}
+                    />
                   )}
                 </div>
               </div>
@@ -374,7 +391,25 @@ const DashboardPage: React.FC = () => {
                       : <TrendingDown size={16} strokeWidth={2.5} className="text-green-600" />
                     }
                     <span className={`text-[11px] sm:text-sm font-black whitespace-nowrap ${delta > 0 ? 'text-red-500' : 'text-green-600'}`}>
-                      {delta > 0 ? '+' : ''}{deltaPct}% ({delta > 0 ? '+' : ''}{fmt(Math.abs(delta))})
+                      {delta > 0 ? '+' : ''}
+                      <SlotCounter
+                        key={`slot-pct-${delta}`}
+                        value={String(deltaPct)}
+                        animateId="slide2-delta-pct"
+                        duration={800}
+                        initialDelay={600}
+                        className="inline-block leading-none"
+                      />
+                      % ({delta > 0 ? '+' : ''}
+                      <SlotCounter
+                        key={`slot-val-${delta}`}
+                        value={fmt(Math.abs(delta))}
+                        animateId="slide2-delta-val"
+                        duration={1000}
+                        initialDelay={600}
+                        className="inline-block leading-none"
+                      />
+                      )
                     </span>
                   </div>
                   <span className="text-[11px] sm:text-xs text-brutal-black/50 font-bold whitespace-nowrap">
@@ -457,7 +492,7 @@ const DashboardPage: React.FC = () => {
           </p>
           <div className="space-y-2">
             {topCategories.map(({ slug, amount, cat, pct }) => (
-              <Card key={slug} flat className="!shadow-[4px_4px_0_0_#000] p-3">
+              <Card key={slug} className="!shadow-[4px_4px_0_0_#000] p-3">
                 <div className="flex items-center gap-3">
                   <span className="text-2xl w-9 shrink-0 text-center">{cat?.emoji ?? '🛍️'}</span>
                   <div className="flex-1 min-w-0">
@@ -505,7 +540,7 @@ const DashboardPage: React.FC = () => {
               const cat = categories.find((c) => c.slug === e.category);
               const badgeVariant = e.type === 'NEED' ? 'need' : e.type === 'WANT' ? 'want' : 'transfer';
               return (
-                <Card key={e.id} flat className="!shadow-[4px_4px_0_0_#000]">
+                <Card key={e.id} className="!shadow-[4px_4px_0_0_#000]">
                   <div className="flex items-center gap-3 p-3">
                     <span className="text-2xl w-9 shrink-0 text-center">
                       {e.type === 'TRANSFER' ? '💸' : (cat?.emoji ?? '🛍️')}

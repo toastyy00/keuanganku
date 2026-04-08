@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 
 // ============================================================
 //  SLOT COUNTER — animasi mesin slot per karakter
@@ -14,6 +14,8 @@ interface SlotDigitProps {
   char: string;
   duration: number;
   delay: number;
+  play: boolean;
+  skipAnim: boolean;
 }
 
 /**
@@ -21,15 +23,18 @@ interface SlotDigitProps {
  * Menggunakan `display: inline-block` + `overflow: hidden` + CSS translateY.
  * Tidak pakai `willChange` agar teks tidak blur karena composite layer.
  */
-const SlotDigit: React.FC<SlotDigitProps> = ({ char, duration, delay }) => {
-  const [started, setStarted] = useState(false);
+const SlotDigit: React.FC<SlotDigitProps> = ({ char, duration, delay, play, skipAnim }) => {
+  const [started, setStarted] = useState(skipAnim);
 
   const targetIndex = DIGITS.indexOf(char);
 
   useEffect(() => {
-    const t = setTimeout(() => setStarted(true), delay);
-    return () => clearTimeout(t);
-  }, [delay]);
+    if (skipAnim) return;
+    if (play) {
+      const t = setTimeout(() => setStarted(true), delay);
+      return () => clearTimeout(t);
+    }
+  }, [play, delay, skipAnim]);
 
   if (targetIndex === -1) return <>{char}</>;
 
@@ -97,7 +102,14 @@ interface SlotCounterProps {
   className?: string;
   /** Style diteruskan ke wrapper span utama */
   style?: React.CSSProperties;
+  /** Animasi hanya berjalan jika nilainya baru (dalam satu sesi). Default: true */
+  animateOnlyOnce?: boolean;
+  /** Identifier unik memori animasi. Wajib jika ada banyak SlotCounter di satu halaman. Default: 'default' */
+  animateId?: string;
 }
+
+// Untuk melacak nilai terakhir yang sudah dianimasikan berdasarkan ID dalam satu sesi browser
+const sessionMemories = new Map<string, string>();
 
 /**
  * SlotCounter: merender string `value` dengan animasi slot machine
@@ -111,7 +123,37 @@ export const SlotCounter: React.FC<SlotCounterProps> = ({
   initialDelay = 150,
   className,
   style,
+  animateOnlyOnce = true,
+  animateId = 'default',
 }) => {
+  const containerRef = useRef<HTMLSpanElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.5 } // Setengah terlihat baru diputar, menghindari ke-trigger saat animasi peek
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const [willAnimate] = useState(() => {
+    if (!animateOnlyOnce) return true;
+    if (sessionMemories.get(animateId) === value) return false;
+    sessionMemories.set(animateId, value);
+    return true;
+  });
+
   const chars = value.split('');
 
   // Hitung urutan digit untuk stagger delay
@@ -129,7 +171,7 @@ export const SlotCounter: React.FC<SlotCounterProps> = ({
   return (
     // Wrapper: plain <span> tanpa display flex/inline-flex
     // agar identik dengan rendering teks asli dari parent container
-    <span className={className} style={style}>
+    <span className={className} style={style} ref={containerRef}>
       {chars.map((char, i) => {
         const dIdx = digitIndices[i];
 
@@ -144,8 +186,8 @@ export const SlotCounter: React.FC<SlotCounterProps> = ({
 
         // Digit → animasi slot dengan stagger kiri→kanan
         const staggerFraction = totalDigits > 1 ? dIdx / (totalDigits - 1) : 0;
-        const charDuration = duration + staggerFraction * 200;
-        const charDelay = initialDelay + staggerFraction * 300;
+        const charDuration = willAnimate ? duration + staggerFraction * 200 : 0;
+        const charDelay = willAnimate ? initialDelay + staggerFraction * 300 : 0;
 
         return (
           <SlotDigit
@@ -153,6 +195,8 @@ export const SlotCounter: React.FC<SlotCounterProps> = ({
             char={char}
             duration={charDuration}
             delay={charDelay}
+            play={isVisible}
+            skipAnim={!willAnimate}
           />
         );
       })}
