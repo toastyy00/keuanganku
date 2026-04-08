@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom';
 import { TrendingUp, TrendingDown, Minus, ChevronRight, CalendarClock } from 'lucide-react';
 import { Card, CardBody } from '../components/ui/Card';
+import { SlotCounter } from '../components/SlotCounter';
 import { Badge } from '../components/ui/Badge';
 import { SkeletonDashboard } from '../components/SkeletonCard';
 import { useExpenseStore } from '../store/useExpenseStore';
@@ -304,9 +305,14 @@ const DashboardPage: React.FC = () => {
                 </p>
               </div>
               <div>
-                <p className="text-[40px] font-black leading-none tracking-tight" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                  {fmt(monthTotal)}
-                </p>
+                <SlotCounter
+                  key={`slot-${fmt(monthTotal)}`}
+                  value={fmt(monthTotal)}
+                  duration={1100}
+                  initialDelay={200}
+                  className="text-[40px] font-black leading-none tracking-tight"
+                  style={{ fontVariantNumeric: 'tabular-nums' }}
+                />
                 <div className="flex items-center justify-between mt-2">
                   <p className="text-xs font-black uppercase text-[#1A1A1A]/60">
                     {spendingExpenses.length} transaksi
