@@ -105,8 +105,8 @@ function uid(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function insightCacheKey(scope: InsightScope, intent: InsightIntent): string {
-  return `expense-rule-insight:${scope.type}:${scope.label}:${intent}`;
+function insightCacheKey(scope: InsightScope, intent: InsightIntent, dataHash?: string): string {
+  return `expense-rule-insight:${scope.type}:${scope.label}:${intent}${dataHash ? ':' + dataHash : ''}`;
 }
 
 function buildScopeLabel(scope: InsightScope, activeYear: number, activeMonth: number): string {
@@ -166,10 +166,11 @@ function getScopeMonthsCount(scope: InsightScope, expenses: Expense[], viewYear:
 
 function readCachedInsight(
   scope: InsightScope,
-  intent: InsightIntent
+  intent: InsightIntent,
+  dataHash?: string
 ): CachedInsightEntry | null {
   try {
-    const raw = localStorage.getItem(insightCacheKey(scope, intent));
+    const raw = localStorage.getItem(insightCacheKey(scope, intent, dataHash));
     if (!raw) return null;
     return JSON.parse(raw) as CachedInsightEntry;
   } catch {
@@ -181,7 +182,8 @@ function writeCachedInsight(
   scope: InsightScope,
   intent: InsightIntent,
   promptLabel: string,
-  insight: HistoryInsightResponse
+  insight: HistoryInsightResponse,
+  dataHash?: string
 ): void {
   try {
     const payload: CachedInsightEntry = {
@@ -191,7 +193,7 @@ function writeCachedInsight(
       insight,
     };
     localStorage.setItem(
-      insightCacheKey(scope, intent),
+      insightCacheKey(scope, intent, dataHash),
       JSON.stringify(payload)
     );
   } catch {
@@ -415,10 +417,16 @@ const HistoryPage: React.FC = () => {
       return;
     }
 
-    // Use scope-aware cache key
+    const scopeMonths = getScopeMonthsCount(insightScope, allScopedExpenses, viewYear);
+    const scaledPersonalBudget = personalMonthlyBudget ? personalMonthlyBudget * scopeMonths : undefined;
+    const scaledFamilySupportBudget = familySupportMonthlyBudget ? familySupportMonthlyBudget * scopeMonths : undefined;
+
+    const dataHash = `${allScopedExpenses.length}-${allScopedExpenses.reduce((s, e) => s + e.amount, 0)}-${scaledPersonalBudget}-${scaledFamilySupportBudget}`;
+
+    // Use scope-aware cache key for AI calls
     const scopeForCache: InsightScope = { ...insightScope, label: resolvedScopeLabel };
-    if (intent !== 'breakdown') {
-      const cached = readCachedInsight(scopeForCache, intent);
+    if (intent === 'deep_analysis') {
+      const cached = readCachedInsight(scopeForCache, intent, dataHash);
       if (cached) {
         setAssistantMessages((prev) => [
           ...prev,
@@ -428,10 +436,6 @@ const HistoryPage: React.FC = () => {
       }
     }
 
-    const scopeMonths = getScopeMonthsCount(insightScope, allScopedExpenses, viewYear);
-    const scaledPersonalBudget = personalMonthlyBudget ? personalMonthlyBudget * scopeMonths : undefined;
-    const scaledFamilySupportBudget = familySupportMonthlyBudget ? familySupportMonthlyBudget * scopeMonths : undefined;
-
     if (intent === 'breakdown') {
       const breakdownExpenses = typeFilter === 'ALL' ? allScopedExpenses : allScopedExpenses.filter((e) => e.type === typeFilter);
 
@@ -440,7 +444,7 @@ const HistoryPage: React.FC = () => {
         const isTransfer = exp.type === 'TRANSFER';
         const categoryObj = categories.find((c) => c.slug === exp.category);
         const categoryLabel = isTransfer ? 'Transfer' : (categoryObj?.label || exp.category);
-        
+
         if (!groupsMap.has(categoryLabel)) {
           groupsMap.set(categoryLabel, { categoryLabel, totalAmount: 0, items: [] });
         }
@@ -454,15 +458,15 @@ const HistoryPage: React.FC = () => {
       }
 
       const groupsList = Array.from(groupsMap.values());
-      groupsList.sort((a,b) => b.totalAmount - a.totalAmount);
-      groupsList.forEach((g) => g.items.sort((a,b) => b.convertedAmount - a.convertedAmount));
+      groupsList.sort((a, b) => b.totalAmount - a.totalAmount);
+      groupsList.forEach((g) => g.items.sort((a, b) => b.convertedAmount - a.convertedAmount));
 
       setAssistantMessages((prev) => [
         ...prev,
         { id: uid('assistant'), role: 'assistant', variant: 'breakdown', breakdown: groupsList },
       ]);
       haptic();
-      return; 
+      return;
     }
 
     setIsGeneratingInsight(true);
@@ -598,7 +602,9 @@ const HistoryPage: React.FC = () => {
         };
       }
 
-      writeCachedInsight(scopeForCache, intent, promptLabel, insight);
+      if (intent === 'deep_analysis') {
+        writeCachedInsight(scopeForCache, intent, promptLabel, insight, dataHash);
+      }
 
       setAssistantMessages((prev) => [
         ...prev,
@@ -835,7 +841,7 @@ const HistoryPage: React.FC = () => {
                       const badgeVariant = e.type === 'NEED' ? 'need' : e.type === 'WANT' ? 'want' : 'transfer';
 
                       return (
-                        <div key={e.id} className="neo-card overflow-hidden">
+                        <div key={e.id} className="neo-card overflow-hidden !shadow-[5px_5px_0_0_#000000]">
                           {isDeleting ? (
                             <div className="flex items-center gap-3 p-3 bg-red-500">
                               <p className="flex-1 text-sm font-bold text-white uppercase">
@@ -991,19 +997,18 @@ const HistoryPage: React.FC = () => {
                                 <div className="flex justify-between items-start gap-4">
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-1.5 mb-0.5">
-                                      <span className={`inline-flex shrink-0 items-center justify-center px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest border rounded-sm bg-transparent ${
-                                        item.expense.type === 'NEED' 
-                                          ? 'text-[#3B82F6] border-[#3B82F6]'
-                                          : item.expense.type === 'WANT'
+                                      <span className={`inline-flex shrink-0 items-center justify-center px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest border rounded-sm bg-transparent ${item.expense.type === 'NEED'
+                                        ? 'text-[#3B82F6] border-[#3B82F6]'
+                                        : item.expense.type === 'WANT'
                                           ? 'text-[#EC4899] border-[#EC4899]'
                                           : 'text-[#FB923C] border-[#FB923C]'
-                                      }`}>
+                                        }`}>
                                         {item.expense.type}
                                       </span>
                                       <p className="text-sm font-bold text-brutal-white truncate">{item.expense.name}</p>
                                     </div>
                                     {item.expense.note && (
-                                       <p className="text-[10px] text-brutal-black/50 italic truncate">{item.expense.note}</p>
+                                      <p className="text-[10px] text-brutal-black/50 italic truncate">{item.expense.note}</p>
                                     )}
                                   </div>
                                   <div className="text-right shrink-0">

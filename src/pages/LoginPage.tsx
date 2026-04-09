@@ -33,7 +33,7 @@ const LoginPage: React.FC = () => {
     >
       {/* Card */}
       <div
-        className="w-full max-w-sm border-3 border-[#555555]"
+        className="w-full max-w-sm border-3 border-[#555555] !shadow-[5px_5px_0_0_#000000]"
         style={{ backgroundColor: '#242424', boxShadow: '5px 5px 0px 0px #F5F0E8' }}
       >
         {/* Header */}

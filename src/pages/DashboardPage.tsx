@@ -54,7 +54,7 @@ function SwipeCarousel({
     // Set to true after delay to avoid React 18 Strict Mode double-mount cancellation
     const t1 = setTimeout(() => {
       markSwipeHintSeen();
-      setHintPx(-50);
+      setHintPx(-30);
     }, 2000);
     const t2 = setTimeout(() => setHintPx(0), 2600);
 
@@ -584,10 +584,10 @@ const DashboardPage: React.FC = () => {
           </p>
           <div className="space-y-2">
             {topCategories.map(({ slug, amount, cat, pct }) => (
-              <Link 
-                key={slug} 
-                to="/history" 
-                state={{ categorySlug: slug }} 
+              <Link
+                key={slug}
+                to="/history"
+                state={{ categorySlug: slug }}
                 className="block group select-none"
                 aria-label={`Lihat semua pengeluaran ${cat?.label ?? slug}`}
               >
