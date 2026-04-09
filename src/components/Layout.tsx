@@ -173,13 +173,12 @@ const Layout: React.FC = () => {
           aria-label="Add new expense"
           className={cn(
             'fixed z-50',
-            'bottom-[5.5rem] right-5',
+            'bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-5',
             'md:bottom-8 md:right-8',
             'neo-btn neo-btn-primary',
             'w-16 h-16 rounded-full p-0',
             'flex items-center justify-center',
           )}
-          style={{ bottom: `calc(5.5rem + env(safe-area-inset-bottom, 0px))` }}
         >
           <Plus size={28} strokeWidth={2.5} aria-hidden="true" />
         </button>

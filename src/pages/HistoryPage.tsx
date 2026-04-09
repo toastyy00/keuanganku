@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Search,
   ChevronLeft,
@@ -8,7 +9,8 @@ import {
   ChevronDown,
   Sparkles,
   Bot,
-  ScanSearch,
+  CalendarRange,
+  Layers,
 } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { BottomSheet } from '../components/ui/BottomSheet';
@@ -24,17 +26,20 @@ import { getExchangeRate, convertAmount, type RateResult } from '../lib/exchange
 import { generateExpenseInsight } from '../lib/ai';
 import {
   buildQuickInsightLine,
-  buildSummaryInsight,
+  buildCombinedInsight,
   buildTopCategories,
-  buildTransactionInsight,
   getInsightFilterLabel,
   getPreviousScopedExpenses,
+  getExpensesForScope,
+  getPreviousExpensesForScope,
+  computeScopeTotalDays,
   getScopedExpenses,
   isFamilySupportExpense,
   sumDisplayedExpenses,
   type HistoryInsightResponse,
-  type HistoryInsightIntent,
   type HistoryInsightCategory,
+  type InsightScope,
+  type InsightScopeType,
 } from '../lib/historyInsights';
 import type { ExpenseType, Expense } from '../types';
 
@@ -43,12 +48,24 @@ import type { ExpenseType, Expense } from '../types';
 // ============================================================
 
 type TypeFilter = 'ALL' | ExpenseType;
-type InsightIntent = HistoryInsightIntent | 'deep_analysis';
+type InsightIntent = 'combined' | 'deep_analysis' | 'breakdown';
+
+export interface BreakdownItem {
+  expense: Expense;
+  convertedAmount: number;
+}
+
+export interface BreakdownGroup {
+  categoryLabel: string;
+  totalAmount: number;
+  items: BreakdownItem[];
+}
 
 type AssistantMessage =
   | { id: string; role: 'assistant'; variant: 'intro'; content: string }
   | { id: string; role: 'user'; variant: 'prompt'; content: string }
-  | { id: string; role: 'assistant'; variant: 'insight'; insight: HistoryInsightResponse };
+  | { id: string; role: 'assistant'; variant: 'insight'; insight: HistoryInsightResponse }
+  | { id: string; role: 'assistant'; variant: 'breakdown'; breakdown: BreakdownGroup[] };
 
 interface CachedInsightEntry {
   storedAt: string;
@@ -66,25 +83,93 @@ function longDate(isoDate: string): string {
 }
 
 const QUICK_PROMPTS: Array<{ intent: InsightIntent; label: string; icon: React.ReactNode }> = [
-  { intent: 'summary', label: 'Ringkas bulan ini', icon: <Sparkles size={14} strokeWidth={2.5} /> },
-  { intent: 'transaction_insights', label: 'Insight transaksi', icon: <ScanSearch size={14} strokeWidth={2.5} /> },
-  { intent: 'deep_analysis', label: 'Analisis Mendalam (AI)', icon: <Bot size={14} strokeWidth={2.5} /> },
+  { intent: 'combined', label: 'Ringkas & Analisis', icon: <Sparkles size={14} strokeWidth={2.5} /> },
+  { intent: 'breakdown', label: 'Breakdown', icon: <Layers size={14} strokeWidth={2.5} /> },
+  { intent: 'deep_analysis', label: 'Analisis AI', icon: <Bot size={14} strokeWidth={2.5} /> },
+];
+
+const SCOPE_OPTIONS: Array<{ type: InsightScopeType; label: string }> = [
+  { type: 'month', label: 'Bulan aktif' },
+  { type: 'pick_month', label: 'Pilih bulan' },
+  { type: 'range', label: 'Rentang' },
+  { type: 'year', label: 'Tahun' },
+  { type: 'all', label: 'Semua' },
+];
+
+const MONTH_NAMES = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
 ];
 
 function uid(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function insightCacheKey(monthPrefix: string, intent: InsightIntent): string {
-  return `expense-rule-insight:${monthPrefix}:${intent}`;
+function insightCacheKey(scope: InsightScope, intent: InsightIntent): string {
+  return `expense-rule-insight:${scope.type}:${scope.label}:${intent}`;
+}
+
+function buildScopeLabel(scope: InsightScope, activeYear: number, activeMonth: number): string {
+  switch (scope.type) {
+    case 'month':
+      return new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' })
+        .format(new Date(activeYear, activeMonth - 1, 1));
+    case 'pick_month': {
+      const y = scope.year ?? activeYear;
+      const m = scope.month ?? activeMonth;
+      return new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' })
+        .format(new Date(y, m - 1, 1));
+    }
+    case 'range': {
+      const fy = scope.fromYear ?? activeYear;
+      const fm = scope.fromMonth ?? 1;
+      const ty = scope.toYear ?? activeYear;
+      const tm = scope.toMonth ?? 12;
+      return `${MONTH_NAMES[fm - 1]} ${fy} – ${MONTH_NAMES[tm - 1]} ${ty}`;
+    }
+    case 'year':
+      return `Tahun ${scope.year ?? activeYear}`;
+    case 'all':
+      return 'Semua transaksi';
+    default:
+      return 'Periode';
+  }
+}
+
+function getScopeMonthsCount(scope: InsightScope, expenses: Expense[], viewYear: number, viewMonth: number): number {
+  if (scope.type === 'month' || scope.type === 'pick_month') return 1;
+  if (scope.type === 'year') return 12;
+  if (scope.type === 'range') {
+    const fy = scope.fromYear ?? viewYear;
+    const fm = scope.fromMonth ?? 1;
+    const ty = scope.toYear ?? viewYear;
+    const tm = scope.toMonth ?? 12;
+    return (ty - fy) * 12 + (tm - fm) + 1;
+  }
+  if (scope.type === 'all') {
+    if (expenses.length === 0) return 1;
+    let minDate = expenses[0].date;
+    let maxDate = expenses[0].date;
+    for (const e of expenses) {
+      if (e.date < minDate) minDate = e.date;
+      if (e.date > maxDate) maxDate = e.date;
+    }
+    const minY = parseInt(minDate.substring(0, 4), 10);
+    const minM = parseInt(minDate.substring(5, 7), 10);
+    const maxY = parseInt(maxDate.substring(0, 4), 10);
+    const maxM = parseInt(maxDate.substring(5, 7), 10);
+    const diff = (maxY - minY) * 12 + (maxM - minM) + 1;
+    return Math.max(1, diff);
+  }
+  return 1;
 }
 
 function readCachedInsight(
-  monthPrefix: string,
+  scope: InsightScope,
   intent: InsightIntent
 ): CachedInsightEntry | null {
   try {
-    const raw = localStorage.getItem(insightCacheKey(monthPrefix, intent));
+    const raw = localStorage.getItem(insightCacheKey(scope, intent));
     if (!raw) return null;
     return JSON.parse(raw) as CachedInsightEntry;
   } catch {
@@ -93,7 +178,7 @@ function readCachedInsight(
 }
 
 function writeCachedInsight(
-  monthPrefix: string,
+  scope: InsightScope,
   intent: InsightIntent,
   promptLabel: string,
   insight: HistoryInsightResponse
@@ -106,7 +191,7 @@ function writeCachedInsight(
       insight,
     };
     localStorage.setItem(
-      insightCacheKey(monthPrefix, intent),
+      insightCacheKey(scope, intent),
       JSON.stringify(payload)
     );
   } catch {
@@ -114,12 +199,12 @@ function writeCachedInsight(
   }
 }
 
-function introMessage(monthText: string): AssistantMessage {
+function introMessage(scopeText: string): AssistantMessage {
   return {
     id: uid('assistant'),
     role: 'assistant',
     variant: 'intro',
-    content: `Saya bisa bantu merangkum ${monthText} atau membaca pola transaksi yang paling menonjol di bulan ini.`,
+    content: `Saya bisa bantu merangkum ${scopeText} atau membaca pola transaksi yang paling menonjol di periode ini.`,
   };
 }
 
@@ -155,16 +240,30 @@ const HistoryPage: React.FC = () => {
   const [assistantError, setAssistantError] = useState<string | null>(null);
   const [isQuickInsightExpanded, setIsQuickInsightExpanded] = useState(false);
 
+  // ── Insight scope state ──────────────────────────────────
+  const [insightScope, setInsightScope] = useState<InsightScope>({
+    type: 'month',
+    label: '',
+  });
+
   useEffect(() => {
     loadExpenses();
     getExchangeRate().then((res) => setRateInfo(res));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const location = useLocation();
+  useEffect(() => {
+    if (location.state?.categorySlug) {
+      setCatFilter(new Set([location.state.categorySlug]));
+      // Clean up the state so it doesn't persist on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
+
   const toDisplay = useCallback(
     (exp: Expense) => convertAmount(exp.amount, exp.currency, currency, rateInfo.rate),
     [currency, rateInfo.rate]
   );
-
 
   const monthPrefix = `${viewYear}-${String(viewMonth).padStart(2, '0')}`;
   const monthLabelStr = new Intl.DateTimeFormat('id-ID', {
@@ -172,6 +271,17 @@ const HistoryPage: React.FC = () => {
   }).format(new Date(viewYear, viewMonth - 1, 1));
   const previousMonthDate = useMemo(() => new Date(viewYear, viewMonth - 2, 1), [viewYear, viewMonth]);
   const previousMonthPrefix = `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}`;
+
+  // Resolve scope label (reactive)
+  const resolvedScopeLabel = useMemo(
+    () => buildScopeLabel(insightScope, viewYear, viewMonth),
+    [insightScope, viewYear, viewMonth]
+  );
+
+  // Reset scope when active month changes
+  useEffect(() => {
+    setInsightScope({ type: 'month', label: monthLabelStr });
+  }, [viewYear, viewMonth, monthLabelStr]);
 
   // Filtered
   const filtered = useMemo(() => {
@@ -228,19 +338,8 @@ const HistoryPage: React.FC = () => {
     () => getScopedExpenses(typeFilter, monthExpenses, spendingMonthExpenses),
     [monthExpenses, spendingMonthExpenses, typeFilter]
   );
-  const transferTotal = useMemo(
-    () => monthExpenses
-      .filter((e) => e.type === 'TRANSFER')
-      .reduce((s, e) => s + toDisplay(e), 0),
-    [monthExpenses, toDisplay]
-  );
-  const split = useMemo(() => {
-    const converted = spendingMonthExpenses.map((expense) => ({
-      ...expense,
-      amount: toDisplay(expense),
-    }));
-    return calcNeedsWantsSplit(converted);
-  }, [spendingMonthExpenses, toDisplay]);
+
+
   const previousScopedExpenses = useMemo(
     () => getPreviousScopedExpenses(typeFilter, expenses, previousMonthPrefix, previousMonthExpenses),
     [expenses, previousMonthExpenses, previousMonthPrefix, typeFilter]
@@ -269,14 +368,7 @@ const HistoryPage: React.FC = () => {
     () => sumDisplayedExpenses(personalExpenses, toDisplay),
     [personalExpenses, toDisplay]
   );
-  const personalNeedsTotal = useMemo(
-    () => sumDisplayedExpenses(personalExpenses.filter((expense) => expense.type === 'NEED'), toDisplay),
-    [personalExpenses, toDisplay]
-  );
-  const personalWantsTotal = useMemo(
-    () => sumDisplayedExpenses(personalExpenses.filter((expense) => expense.type === 'WANT'), toDisplay),
-    [personalExpenses, toDisplay]
-  );
+
   const topCategories = useMemo<HistoryInsightCategory[]>(
     () => buildTopCategories(scopedMonthExpenses, categories, scopedTotal, toDisplay),
     [scopedMonthExpenses, categories, scopedTotal, toDisplay]
@@ -294,9 +386,9 @@ const HistoryPage: React.FC = () => {
     personalBudget: personalMonthlyBudget,
   }), [filterLabel, currency, scopedMonthExpenses, scopedTotal, topCategories, previousScopedTotal, familySupportTotal, personalTotal, personalMonthlyBudget]);
   useEffect(() => {
-    setAssistantMessages([introMessage(monthLabelStr)]);
+    setAssistantMessages([introMessage(resolvedScopeLabel)]);
     setAssistantError(null);
-  }, [monthLabelStr]);
+  }, [resolvedScopeLabel]);
 
   const runInsight = useCallback(async (
     intent: InsightIntent,
@@ -306,11 +398,15 @@ const HistoryPage: React.FC = () => {
     setAssistantError(null);
     setAssistantMessages((prev) => [
       ...prev,
-      { id: uid('user'), role: 'user', variant: 'prompt', content: promptLabel },
+      { id: uid('user'), role: 'user', variant: 'prompt', content: `${promptLabel} — ${resolvedScopeLabel}` },
     ]);
 
-    if (!hasMonthData) {
-      setAssistantError('Belum ada transaksi di bulan ini, jadi insight belum bisa dibuat.');
+    // Resolve scoped expenses for the selected scope
+    const allScopedExpenses = getExpensesForScope(expenses, insightScope, viewYear, viewMonth);
+    const hasScopeData = allScopedExpenses.length > 0;
+
+    if (!hasScopeData) {
+      setAssistantError('Belum ada transaksi di periode ini, jadi insight belum bisa dibuat.');
       return;
     }
 
@@ -319,123 +415,190 @@ const HistoryPage: React.FC = () => {
       return;
     }
 
-    const cached = readCachedInsight(monthPrefix, intent);
-    if (cached) {
+    // Use scope-aware cache key
+    const scopeForCache: InsightScope = { ...insightScope, label: resolvedScopeLabel };
+    if (intent !== 'breakdown') {
+      const cached = readCachedInsight(scopeForCache, intent);
+      if (cached) {
+        setAssistantMessages((prev) => [
+          ...prev,
+          { id: uid('assistant'), role: 'assistant', variant: 'insight', insight: cached.insight },
+        ]);
+        return;
+      }
+    }
+
+    const scopeMonths = getScopeMonthsCount(insightScope, allScopedExpenses, viewYear, viewMonth);
+    const scaledPersonalBudget = personalMonthlyBudget ? personalMonthlyBudget * scopeMonths : undefined;
+    const scaledFamilySupportBudget = familySupportMonthlyBudget ? familySupportMonthlyBudget * scopeMonths : undefined;
+
+    if (intent === 'breakdown') {
+      const breakdownExpenses = typeFilter === 'ALL' ? allScopedExpenses : allScopedExpenses.filter((e) => e.type === typeFilter);
+
+      const groupsMap = new Map<string, BreakdownGroup>();
+      for (const exp of breakdownExpenses) {
+        const isTransfer = exp.type === 'TRANSFER';
+        const categoryObj = categories.find((c) => c.slug === exp.category);
+        const categoryLabel = isTransfer ? 'Transfer' : (categoryObj?.label || exp.category);
+        
+        if (!groupsMap.has(categoryLabel)) {
+          groupsMap.set(categoryLabel, { categoryLabel, totalAmount: 0, items: [] });
+        }
+
+        const group = groupsMap.get(categoryLabel)!;
+        group.totalAmount += toDisplay(exp);
+        group.items.push({
+          expense: exp,
+          convertedAmount: toDisplay(exp),
+        });
+      }
+
+      const groupsList = Array.from(groupsMap.values());
+      groupsList.sort((a,b) => b.totalAmount - a.totalAmount);
+      groupsList.forEach((g) => g.items.sort((a,b) => b.convertedAmount - a.convertedAmount));
+
       setAssistantMessages((prev) => [
         ...prev,
-        { id: uid('assistant'), role: 'assistant', variant: 'insight', insight: cached.insight },
+        { id: uid('assistant'), role: 'assistant', variant: 'breakdown', breakdown: groupsList },
       ]);
-      return;
+      haptic();
+      return; 
     }
 
     setIsGeneratingInsight(true);
     try {
-      const insight: HistoryInsightResponse = intent === 'summary'
-        ? buildSummaryInsight({
-          monthLabelStr,
-          currency,
-          scopedExpenses: scopedMonthExpenses,
-          scopedTotal,
-          transferTotal,
-          previousScopedTotal,
-          topCategories,
-          split,
-          filterLabel,
-          familySupportTotal,
-          personalTotal,
-          personalNeedsTotal,
-          personalWantsTotal,
-          personalBudget: personalMonthlyBudget,
-          familySupportBudget: familySupportMonthlyBudget,
-        })
-        : intent === 'transaction_insights'
-          ? buildTransactionInsight({
-            monthLabelStr,
-            currency,
-            scopedExpenses: scopedMonthExpenses,
-            scopedTotal,
-            topCategories,
-            filterLabel,
-          })
-          : await generateExpenseInsight(
-            {
-              intent: 'deep_analysis',
-              context: {
-                monthLabel: monthLabelStr,
-                currency,
-                filterLabel,
-                totals: {
-                  spending: scopedTotal,
-                  transfers: transferTotal,
-                  transactionCount: scopedMonthExpenses.length,
-                  needs: split.needs,
-                  wants: split.wants,
-                  needsPct: split.needsPct,
-                  wantsPct: split.wantsPct,
-                },
-                familySupport: {
-                  total: familySupportTotal,
-                  personalTotal,
-                  personalNeedsTotal,
-                  personalWantsTotal,
-                  familySupportBudget: familySupportMonthlyBudget || undefined,
-                  personalBudget: personalMonthlyBudget || undefined,
-                },
-                previousMonth: {
-                  monthLabel: 'Bulan lalu',
-                  spending: previousScopedTotal,
-                  delta: scopedTotal - previousScopedTotal,
-                  deltaPct: previousScopedTotal > 0
-                    ? Math.round(((scopedTotal - previousScopedTotal) / previousScopedTotal) * 100)
-                    : null,
-                },
-                topCategories: topCategories.map((item) => ({
-                  slug: item.label.toLowerCase().replace(/\s+/g, '-'),
-                  label: item.label,
-                  amount: item.amount,
-                  pct: item.pct,
-                })),
-                recurringExpenses: monthExpenses
-                  .filter((expense) => expense.is_recurring)
-                  .map((expense) => ({
-                    name: expense.name,
-                    amount: toDisplay(expense),
-                    type: expense.type,
-                    category: expense.category,
-                  })),
-                recentTransactions: scopedMonthExpenses.slice(0, 8).map((expense) => ({
-                  date: expense.date,
-                  name: expense.name,
-                  amount: toDisplay(expense),
-                  type: expense.type,
-                  category: expense.category,
-                  note: expense.note,
-                })),
-                transactions: scopedMonthExpenses.map((expense) => ({
-                  date: expense.date,
-                  name: expense.name,
-                  amount: toDisplay(expense),
-                  currency,
-                  type: expense.type,
-                  category: expense.category,
-                  destination: expense.destination,
-                  note: expense.note,
-                })),
-              },
-            },
-            {
-              provider: aiProvider,
-              apiKey: activeAiKey,
-              openrouterModel,
-            }
-          ).then((aiInsight) => ({
-            title: aiInsight.title,
-            summary: aiInsight.summary,
-            highlights: aiInsight.highlights,
-            actions: aiInsight.actions,
-          }));
+      // Build scoped data
+      const scopeSpendingExpenses = allScopedExpenses.filter((e) => e.type !== 'TRANSFER');
+      const scopeTypeFiltered = typeFilter === 'ALL'
+        ? scopeSpendingExpenses
+        : allScopedExpenses.filter((e) => e.type === typeFilter);
+      const scopeTransferTotal = allScopedExpenses
+        .filter((e) => e.type === 'TRANSFER')
+        .reduce((s, e) => s + toDisplay(e), 0);
+      const scopeScopedTotal = scopeTypeFiltered.reduce((s, e) => s + toDisplay(e), 0);
+      const scopeTopCategories = buildTopCategories(scopeTypeFiltered, categories, scopeScopedTotal, toDisplay);
+      const scopeSplit = calcNeedsWantsSplit(
+        scopeSpendingExpenses.map((e) => ({ ...e, amount: toDisplay(e) }))
+      );
+      const scopeFamilySupport = allScopedExpenses
+        .filter((e) => e.type !== 'TRANSFER' && isFamilySupportExpense(e));
+      const scopeFamilySupportTotal = sumDisplayedExpenses(scopeFamilySupport, toDisplay);
+      const scopePersonalExpenses = scopeSpendingExpenses.filter((e) => !isFamilySupportExpense(e));
+      const scopePersonalTotal = sumDisplayedExpenses(scopePersonalExpenses, toDisplay);
+      const scopePersonalNeedsTotal = sumDisplayedExpenses(
+        scopePersonalExpenses.filter((e) => e.type === 'NEED'), toDisplay
+      );
+      const scopePersonalWantsTotal = sumDisplayedExpenses(
+        scopePersonalExpenses.filter((e) => e.type === 'WANT'), toDisplay
+      );
 
-      writeCachedInsight(monthPrefix, intent, promptLabel, insight);
+      // Previous period
+      const previousExpenses = getPreviousExpensesForScope(expenses, insightScope, viewYear, viewMonth);
+      const prevTypeFiltered = typeFilter === 'ALL'
+        ? previousExpenses.filter((e) => e.type !== 'TRANSFER')
+        : previousExpenses.filter((e) => e.type === typeFilter);
+      const scopePreviousScopedTotal = prevTypeFiltered.reduce((s, e) => s + toDisplay(e), 0);
+
+      let insight: HistoryInsightResponse;
+
+      if (intent === 'combined') {
+        insight = buildCombinedInsight({
+          scopeLabel: resolvedScopeLabel,
+          currency,
+          scopedExpenses: scopeTypeFiltered,
+          scopedTotal: scopeScopedTotal,
+          transferTotal: scopeTransferTotal,
+          previousScopedTotal: scopePreviousScopedTotal,
+          topCategories: scopeTopCategories,
+          split: scopeSplit,
+          filterLabel,
+          familySupportTotal: scopeFamilySupportTotal,
+          personalTotal: scopePersonalTotal,
+          personalNeedsTotal: scopePersonalNeedsTotal,
+          personalWantsTotal: scopePersonalWantsTotal,
+          personalBudget: scaledPersonalBudget,
+          familySupportBudget: scaledFamilySupportBudget,
+        });
+      } else {
+        // deep_analysis — AI-powered
+        const aiResult = await generateExpenseInsight(
+          {
+            intent: 'deep_analysis',
+            context: {
+              monthLabel: resolvedScopeLabel,
+              currency,
+              filterLabel,
+              scope: {
+                type: insightScope.type === 'pick_month' ? 'month' : insightScope.type as 'month' | 'range' | 'year' | 'all',
+                label: resolvedScopeLabel,
+                totalDays: computeScopeTotalDays(insightScope, viewYear, viewMonth),
+              },
+              totals: {
+                spending: scopeScopedTotal,
+                transfers: scopeTransferTotal,
+                transactionCount: scopeTypeFiltered.length,
+                needs: scopeSplit.needs,
+                wants: scopeSplit.wants,
+                needsPct: scopeSplit.needsPct,
+                wantsPct: scopeSplit.wantsPct,
+              },
+              familySupport: {
+                total: scopeFamilySupportTotal,
+                personalTotal: scopePersonalTotal,
+                personalNeedsTotal: scopePersonalNeedsTotal,
+                personalWantsTotal: scopePersonalWantsTotal,
+                familySupportBudget: scaledFamilySupportBudget,
+                personalBudget: scaledPersonalBudget,
+              },
+              previousMonth: {
+                monthLabel: 'Periode sebelumnya',
+                spending: scopePreviousScopedTotal,
+                delta: scopeScopedTotal - scopePreviousScopedTotal,
+                deltaPct: scopePreviousScopedTotal > 0
+                  ? Math.round(((scopeScopedTotal - scopePreviousScopedTotal) / scopePreviousScopedTotal) * 100)
+                  : null,
+              },
+              topCategories: scopeTopCategories.map((item) => ({
+                slug: item.label.toLowerCase().replace(/\s+/g, '-'),
+                label: item.label,
+                amount: item.amount,
+                pct: item.pct,
+              })),
+              recurringExpenses: allScopedExpenses
+                .filter((expense) => expense.is_recurring)
+                .map((expense) => ({
+                  name: expense.name,
+                  amount: toDisplay(expense),
+                  type: expense.type,
+                  category: expense.category,
+                })),
+              transactions: scopeTypeFiltered.map((expense) => ({
+                date: expense.date,
+                name: expense.name,
+                amount: toDisplay(expense),
+                currency,
+                type: expense.type,
+                category: expense.category,
+                destination: expense.destination,
+                note: expense.note,
+              })),
+            },
+          },
+          {
+            provider: aiProvider,
+            apiKey: activeAiKey,
+            openrouterModel,
+          }
+        );
+        insight = {
+          title: aiResult.title,
+          summary: aiResult.summary,
+          highlights: aiResult.highlights,
+          actions: aiResult.actions,
+        };
+      }
+
+      writeCachedInsight(scopeForCache, intent, promptLabel, insight);
 
       setAssistantMessages((prev) => [
         ...prev,
@@ -449,27 +612,17 @@ const HistoryPage: React.FC = () => {
     }
   }, [
     currency,
-    hasMonthData,
+    expenses,
+    viewYear,
+    viewMonth,
+    insightScope,
+    resolvedScopeLabel,
     activeAiKey,
     aiProvider,
-    monthPrefix,
-    monthExpenses,
-    monthLabelStr,
     openrouterModel,
-    previousScopedTotal,
-    scopedMonthExpenses,
-    scopedTotal,
-    split.needs,
-    split.needsPct,
-    split.wants,
-    split.wantsPct,
-    topCategories,
-    transferTotal,
+    typeFilter,
+    categories,
     filterLabel,
-    familySupportTotal,
-    personalNeedsTotal,
-    personalTotal,
-    personalWantsTotal,
     personalMonthlyBudget,
     familySupportMonthlyBudget,
     toDisplay,
@@ -756,23 +909,17 @@ const HistoryPage: React.FC = () => {
       <button
         type="button"
         onClick={() => { setAssistantOpen(true); haptic(); }}
-        className="fixed bottom-24 right-4 z-30 w-14 h-14 rounded-full border-4 flex items-center justify-center transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0.5 sm:right-6"
-        style={{
-          backgroundColor: '#0F0F0F',
-          borderColor: '#F5F0E8',
-          boxShadow: '4px 4px 0px 0px #000000',
-          color: '#B8F55A',
-        }}
+        className="fixed z-50 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-5 md:bottom-8 md:right-8 neo-btn neo-btn-primary w-16 h-16 rounded-full p-0 flex items-center justify-center"
         aria-label={`Buka insight untuk ${monthLabelStr}`}
       >
-        <Bot size={24} strokeWidth={2.5} />
+        <Bot size={28} strokeWidth={2.5} aria-hidden="true" />
       </button>
 
       <BottomSheet
         isOpen={assistantOpen}
         onClose={() => setAssistantOpen(false)}
         title="Insight Pengeluaran"
-        description={`Bacaan cepat untuk ${monthLabelStr}`}
+        description={`Analisis untuk: ${resolvedScopeLabel}`}
         panelClassName="history-insight-sheet sm:max-w-4xl"
       >
         <div className="space-y-4 lg:grid lg:grid-cols-[minmax(0,1.6fr)_320px] lg:gap-4 lg:space-y-0">
@@ -830,6 +977,46 @@ const HistoryPage: React.FC = () => {
                       )}
 
                     </div>
+                  ) : message.variant === 'breakdown' ? (
+                    <div className="w-full max-w-full space-y-4">
+                      {message.breakdown.map((group, gIndex) => (
+                        <div key={gIndex} className="neo-card !bg-[#1D1D1D] !p-0 overflow-hidden border-2 border-[#3A3A3A]">
+                          <div className="bg-[#262626] border-b-2 border-[#3A3A3A] px-3 py-2 flex items-center justify-between">
+                            <h3 className="text-sm font-black text-brutal-white uppercase tracking-wider">{group.categoryLabel}</h3>
+                            <span className="text-sm font-black text-brutal-yellow">{formatCurrency(group.totalAmount, currency)}</span>
+                          </div>
+                          <div className="divide-y-2 divide-[#3A3A3A]">
+                            {group.items.map((item, iIndex) => (
+                              <div key={iIndex} className="p-3 bg-[#111111] hover:bg-[#1A1A1A] transition-colors">
+                                <div className="flex justify-between items-start gap-4">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                      <span className={`inline-flex shrink-0 items-center justify-center px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest border rounded-sm bg-transparent ${
+                                        item.expense.type === 'NEED' 
+                                          ? 'text-[#3B82F6] border-[#3B82F6]'
+                                          : item.expense.type === 'WANT'
+                                          ? 'text-[#EC4899] border-[#EC4899]'
+                                          : 'text-[#FB923C] border-[#FB923C]'
+                                      }`}>
+                                        {item.expense.type}
+                                      </span>
+                                      <p className="text-sm font-bold text-brutal-white truncate">{item.expense.name}</p>
+                                    </div>
+                                    {item.expense.note && (
+                                       <p className="text-[10px] text-brutal-black/50 italic truncate">{item.expense.note}</p>
+                                    )}
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <p className="text-sm font-black text-brutal-white">{formatCurrency(item.convertedAmount, currency)}</p>
+                                    <p className="text-[10px] text-brutal-black/50 font-bold uppercase mt-1">{item.expense.date.substring(8, 10)}/{item.expense.date.substring(5, 7)}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
                     <div
                       className={`max-w-[88%] border-2 p-3 ${message.role === 'user'
@@ -854,13 +1041,169 @@ const HistoryPage: React.FC = () => {
           </div>
 
           <div className="space-y-4">
+            {/* ── Scope Selector ──────────────────────────── */}
+            <div className="neo-card !bg-[#181818] p-3 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <CalendarRange size={14} strokeWidth={2.5} className="text-brutal-yellow shrink-0" />
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brutal-black/55">
+                    Scope
+                  </p>
+                </div>
+                <p className="text-[10px] font-bold text-brutal-white/40 truncate text-right">
+                  {resolvedScopeLabel}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5">
+                {SCOPE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.type}
+                    type="button"
+                    onClick={() => {
+                      if (opt.type === 'month') {
+                        setInsightScope({ type: 'month', label: monthLabelStr });
+                      } else if (opt.type === 'pick_month') {
+                        setInsightScope({
+                          type: 'pick_month',
+                          label: '',
+                          year: viewYear,
+                          month: viewMonth,
+                        });
+                      } else if (opt.type === 'range') {
+                        setInsightScope({
+                          type: 'range',
+                          label: '',
+                          fromYear: viewYear,
+                          fromMonth: 1,
+                          toYear: viewYear,
+                          toMonth: viewMonth,
+                        });
+                      } else if (opt.type === 'year') {
+                        setInsightScope({
+                          type: 'year',
+                          label: '',
+                          year: viewYear,
+                        });
+                      } else {
+                        setInsightScope({ type: 'all', label: 'Semua' });
+                      }
+                    }}
+                    className={`px-2 py-1.5 text-[10px] font-black uppercase tracking-wider border-2 transition-all duration-150 ${opt.type === 'all' ? 'col-span-2' : ''}`}
+                    style={insightScope.type === opt.type
+                      ? { borderColor: '#B8F55A', backgroundColor: '#B8F55A', color: '#1A1A1A' }
+                      : { borderColor: '#3A3A3A', backgroundColor: '#222222' }
+                    }
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Conditional pickers */}
+              {insightScope.type === 'pick_month' && (
+                <div className="flex gap-1.5">
+                  <select
+                    value={insightScope.month ?? viewMonth}
+                    onChange={(e) => setInsightScope((s) => ({ ...s, month: Number(e.target.value) }))}
+                    className="neo-input !py-1 !px-2 !text-xs flex-1 min-w-0"
+                    style={{ fontSize: '16px' }}
+                  >
+                    {MONTH_NAMES.map((name, i) => (
+                      <option key={i} value={i + 1}>{name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={insightScope.year ?? viewYear}
+                    onChange={(e) => setInsightScope((s) => ({ ...s, year: Number(e.target.value) }))}
+                    className="neo-input !py-1 !px-2 !text-xs w-20 shrink-0"
+                    style={{ fontSize: '16px' }}
+                  >
+                    {Array.from({ length: 10 }, (_, i) => viewYear - 5 + i).map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {insightScope.type === 'range' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold text-brutal-black/40">Dari</span>
+                    <div className="flex gap-1.5">
+                      <select
+                        value={insightScope.fromMonth ?? 1}
+                        onChange={(e) => setInsightScope((s) => ({ ...s, fromMonth: Number(e.target.value) }))}
+                        className="neo-input !py-1 !px-1.5 !text-xs flex-1 min-w-0"
+                        style={{ fontSize: '16px' }}
+                      >
+                        {MONTH_NAMES.map((name, i) => (
+                          <option key={i} value={i + 1}>{name}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={insightScope.fromYear ?? viewYear}
+                        onChange={(e) => setInsightScope((s) => ({ ...s, fromYear: Number(e.target.value) }))}
+                        className="neo-input !py-1 !px-1.5 !text-xs w-16 shrink-0"
+                        style={{ fontSize: '16px' }}
+                      >
+                        {Array.from({ length: 10 }, (_, i) => viewYear - 5 + i).map((y) => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold text-brutal-black/40">Ke</span>
+                    <div className="flex gap-1.5">
+                      <select
+                        value={insightScope.toMonth ?? 12}
+                        onChange={(e) => setInsightScope((s) => ({ ...s, toMonth: Number(e.target.value) }))}
+                        className="neo-input !py-1 !px-1.5 !text-xs flex-1 min-w-0"
+                        style={{ fontSize: '16px' }}
+                      >
+                        {MONTH_NAMES.map((name, i) => (
+                          <option key={i} value={i + 1}>{name}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={insightScope.toYear ?? viewYear}
+                        onChange={(e) => setInsightScope((s) => ({ ...s, toYear: Number(e.target.value) }))}
+                        className="neo-input !py-1 !px-1.5 !text-xs w-16 shrink-0"
+                        style={{ fontSize: '16px' }}
+                      >
+                        {Array.from({ length: 10 }, (_, i) => viewYear - 5 + i).map((y) => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {insightScope.type === 'year' && (
+                <div className="flex gap-2">
+                  <select
+                    value={insightScope.year ?? viewYear}
+                    onChange={(e) => setInsightScope((s) => ({ ...s, year: Number(e.target.value) }))}
+                    className="neo-input !py-1 !px-2 !text-xs w-24"
+                    style={{ fontSize: '16px' }}
+                  >
+                    {Array.from({ length: 10 }, (_, i) => viewYear - 5 + i).map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
             <div className="grid gap-2">
               {QUICK_PROMPTS.map((prompt) => (
                 <button
                   key={prompt.intent}
                   type="button"
                   onClick={() => void runInsight(prompt.intent, prompt.label)}
-                  disabled={isGeneratingInsight || !hasMonthData}
+                  disabled={isGeneratingInsight}
                   className="inline-flex items-center justify-start gap-2 px-3 py-3 border-2 border-[#555555] bg-[#202020] text-xs font-black uppercase tracking-wide transition-all duration-150 hover:bg-[#2D2D2D] disabled:opacity-50"
                 >
                   {prompt.icon}

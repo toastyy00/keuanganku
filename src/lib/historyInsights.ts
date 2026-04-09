@@ -1,7 +1,30 @@
 import type { Expense, ExpenseType } from '../types';
 import { formatCurrency } from './utils';
 
-export type HistoryInsightIntent = 'summary' | 'transaction_insights';
+// ============================================================
+//  Types
+// ============================================================
+
+export type InsightScopeType = 'month' | 'pick_month' | 'range' | 'year' | 'all';
+
+export interface InsightScope {
+  type: InsightScopeType;
+  /** Human label e.g. "April 2026", "Jan–Mar 2026", "2026", "Semua" */
+  label: string;
+  /** For 'pick_month': specific year */
+  year?: number;
+  /** For 'pick_month': specific month (1-12) */
+  month?: number;
+  /** For 'range': start year */
+  fromYear?: number;
+  /** For 'range': start month (1-12) */
+  fromMonth?: number;
+  /** For 'range': end year */
+  toYear?: number;
+  /** For 'range': end month (1-12) */
+  toMonth?: number;
+}
+
 export type HistoryTypeFilter = 'ALL' | ExpenseType;
 
 export interface HistoryInsightResponse {
@@ -18,7 +41,7 @@ export interface HistoryInsightCategory {
 }
 
 export interface HistoryInsightParams {
-  monthLabelStr: string;
+  scopeLabel: string;
   currency: 'IDR' | 'USD';
   scopedExpenses: Expense[];
   scopedTotal: number;
@@ -34,6 +57,136 @@ export interface HistoryInsightParams {
   personalBudget?: number;
   familySupportBudget?: number;
 }
+
+// ============================================================
+//  Scope helpers
+// ============================================================
+
+/** Filter the full expense list based on the selected insight scope. */
+export function getExpensesForScope(
+  expenses: Expense[],
+  scope: InsightScope,
+  activeYear: number,
+  activeMonth: number
+): Expense[] {
+  switch (scope.type) {
+    case 'month': {
+      const prefix = `${activeYear}-${String(activeMonth).padStart(2, '0')}`;
+      return expenses.filter((e) => e.date.startsWith(prefix));
+    }
+    case 'pick_month': {
+      const y = scope.year ?? activeYear;
+      const m = scope.month ?? activeMonth;
+      const prefix = `${y}-${String(m).padStart(2, '0')}`;
+      return expenses.filter((e) => e.date.startsWith(prefix));
+    }
+    case 'range': {
+      const fy = scope.fromYear ?? activeYear;
+      const fm = scope.fromMonth ?? 1;
+      const ty = scope.toYear ?? activeYear;
+      const tm = scope.toMonth ?? 12;
+      const fromPrefix = `${fy}-${String(fm).padStart(2, '0')}`;
+      const toPrefix = `${ty}-${String(tm).padStart(2, '0')}`;
+      return expenses.filter((e) => {
+        const monthStr = e.date.slice(0, 7);
+        return monthStr >= fromPrefix && monthStr <= toPrefix;
+      });
+    }
+    case 'year': {
+      const y = scope.year ?? activeYear;
+      const prefix = `${y}-`;
+      return expenses.filter((e) => e.date.startsWith(prefix));
+    }
+    case 'all':
+      return [...expenses];
+    default:
+      return expenses.filter((e) =>
+        e.date.startsWith(`${activeYear}-${String(activeMonth).padStart(2, '0')}`)
+      );
+  }
+}
+
+/** Get the previous period's expenses for delta comparison. */
+export function getPreviousExpensesForScope(
+  expenses: Expense[],
+  scope: InsightScope,
+  activeYear: number,
+  activeMonth: number
+): Expense[] {
+  switch (scope.type) {
+    case 'month':
+    case 'pick_month': {
+      const y = scope.type === 'pick_month' ? (scope.year ?? activeYear) : activeYear;
+      const m = scope.type === 'pick_month' ? (scope.month ?? activeMonth) : activeMonth;
+      const prevDate = new Date(y, m - 2, 1);
+      const prefix = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+      return expenses.filter((e) => e.date.startsWith(prefix));
+    }
+    case 'range': {
+      const fy = scope.fromYear ?? activeYear;
+      const fm = scope.fromMonth ?? 1;
+      const ty = scope.toYear ?? activeYear;
+      const tm = scope.toMonth ?? 12;
+      // Range length in months
+      const rangeMonths = (ty - fy) * 12 + (tm - fm) + 1;
+      // Previous period = same length before the range start
+      const prevEnd = new Date(fy, fm - 2, 1);
+      const prevStart = new Date(prevEnd.getFullYear(), prevEnd.getMonth() - rangeMonths + 1, 1);
+      const fromPrefix = `${prevStart.getFullYear()}-${String(prevStart.getMonth() + 1).padStart(2, '0')}`;
+      const toPrefix = `${prevEnd.getFullYear()}-${String(prevEnd.getMonth() + 1).padStart(2, '0')}`;
+      return expenses.filter((e) => {
+        const monthStr = e.date.slice(0, 7);
+        return monthStr >= fromPrefix && monthStr <= toPrefix;
+      });
+    }
+    case 'year': {
+      const y = (scope.year ?? activeYear) - 1;
+      const prefix = `${y}-`;
+      return expenses.filter((e) => e.date.startsWith(prefix));
+    }
+    case 'all':
+      // No previous period for "all"
+      return [];
+    default:
+      return [];
+  }
+}
+
+/** Calculate the total number of days the scope covers. */
+export function computeScopeTotalDays(scope: InsightScope, activeYear: number, activeMonth: number): number {
+  switch (scope.type) {
+    case 'month':
+      return new Date(activeYear, activeMonth, 0).getDate();
+    case 'pick_month': {
+      const y = scope.year ?? activeYear;
+      const m = scope.month ?? activeMonth;
+      return new Date(y, m, 0).getDate();
+    }
+    case 'range': {
+      const fy = scope.fromYear ?? activeYear;
+      const fm = scope.fromMonth ?? 1;
+      const ty = scope.toYear ?? activeYear;
+      const tm = scope.toMonth ?? 12;
+      const start = new Date(fy, fm - 1, 1);
+      const end = new Date(ty, tm, 0); // last day of toMonth
+      return Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+    }
+    case 'year': {
+      const y = scope.year ?? activeYear;
+      const start = new Date(y, 0, 1);
+      const end = new Date(y, 11, 31);
+      return Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+    }
+    case 'all':
+      return 0; // indeterminate
+    default:
+      return 30;
+  }
+}
+
+// ============================================================
+//  Family support detection
+// ============================================================
 
 export function isFamilySupportExpense(expense: Expense): boolean {
   const category = expense.category.trim().toLowerCase();
@@ -54,6 +207,10 @@ export function isFamilySupportExpense(expense: Expense): boolean {
   return category === 'keluarga'
     || familyKeywords.some((keyword) => text.includes(keyword));
 }
+
+// ============================================================
+//  Internal helpers
+// ============================================================
 
 function formatPct(value: number | null): string {
   if (value === null) return 'belum bisa dibandingkan';
@@ -94,8 +251,8 @@ function getLargestExpense(expenses: Expense[]): Expense | null {
   return expenses.reduce((max, e) => e.amount > max.amount ? e : max, expenses[0]);
 }
 
-// ── helper: find repeated item names ────────────────────────────
-function getRepeatedItem(expenses: Expense[]): { name: string; count: number; total: number } | null {
+// ── helper: find ALL repeated item names ────────────────────────
+function getAllRepeatedItems(expenses: Expense[]): Array<{ name: string; count: number; total: number }> {
   const freq: Record<string, { count: number; total: number }> = {};
   for (const e of expenses) {
     const key = e.name.trim().toLowerCase();
@@ -104,11 +261,18 @@ function getRepeatedItem(expenses: Expense[]): { name: string; count: number; to
   }
   const repeated = Object.entries(freq)
     .filter(([, v]) => v.count > 1)
-    .sort(([, a], [, b]) => b.total - a.total)[0];
-  if (!repeated) return null;
-  // Normalise capitalisation to match one of the original names
-  const originalName = expenses.find((e) => e.name.trim().toLowerCase() === repeated[0])?.name ?? repeated[0];
-  return { name: originalName, count: repeated[1].count, total: repeated[1].total };
+    .sort(([, a], [, b]) => b.total - a.total);
+  if (!repeated.length) return [];
+  return repeated.map(([key, v]) => {
+    const originalName = expenses.find((e) => e.name.trim().toLowerCase() === key)?.name ?? key;
+    return { name: originalName, count: v.count, total: v.total };
+  });
+}
+
+// ── helper: get the top repeated item (backward compat) ─────────
+function getRepeatedItem(expenses: Expense[]): { name: string; count: number; total: number } | null {
+  const all = getAllRepeatedItems(expenses);
+  return all[0] ?? null;
 }
 
 // ── helper: month-over-month change label ───────────────────────
@@ -116,15 +280,15 @@ function buildDeltaLabel(delta: number, deltaPct: number | null): string {
   if (deltaPct === null) return '';
   const arrow = delta > 0 ? 'naik' : 'turun';
   const sign = delta > 0 ? '+' : '';
-  return `${arrow} ${sign}${formatPct(deltaPct)} dari bulan lalu`;
+  return `${arrow} ${sign}${formatPct(deltaPct)} dari periode sebelumnya`;
 }
 
 // ============================================================
-//  buildSummaryInsight  (improved)
+//  buildCombinedInsight  (merged from summary + transaction)
 // ============================================================
-export function buildSummaryInsight(params: HistoryInsightParams): HistoryInsightResponse {
+export function buildCombinedInsight(params: HistoryInsightParams): HistoryInsightResponse {
   const {
-    monthLabelStr,
+    scopeLabel,
     currency,
     scopedExpenses,
     scopedTotal,
@@ -150,16 +314,32 @@ export function buildSummaryInsight(params: HistoryInsightParams): HistoryInsigh
   const transactionCount = scopedExpenses.length;
   const scopeNoun = filterLabel === 'Semua' ? 'pengeluaran' : `transaksi ${filterLabel}`;
   const fundingTransferPattern = hasFundingTransferPattern(scopedExpenses);
-  const largestExpense = getLargestExpense(scopedExpenses.filter((e) => e.type !== 'TRANSFER'));
-  const repeatedItem = getRepeatedItem(scopedExpenses.filter((e) => e.type !== 'TRANSFER'));
+
+  const spendingExpenses = scopedExpenses.filter((e) => e.type !== 'TRANSFER');
+  
+  // If we are looking at ALL and have family support, isolate personal expenses
+  // for largest expense & repeated items analysis to avoid redundancy.
+  const evaluationExpenses = (filterLabel === 'Semua' && familySupportTotal > 0)
+    ? spendingExpenses.filter(e => !isFamilySupportExpense(e))
+    : spendingExpenses;
+
+  const largestExpense = getLargestExpense(evaluationExpenses);
+  const largestShare = largestExpense && scopedTotal > 0
+    ? Math.round((largestExpense.amount / scopedTotal) * 100)
+    : 0;
+  const repeatedItems = getAllRepeatedItems(evaluationExpenses);
+  const topRepeated = repeatedItems[0] ?? null;
   const avgPerTx = transactionCount > 0 ? Math.round(scopedTotal / transactionCount) : 0;
+
+  // Count unique spending days
+  const uniqueDays = new Set(spendingExpenses.map((e) => e.date)).size;
 
   // ── summary paragraph ────────────────────────────────────────
   const summaryParts: string[] = [];
 
   if (filterLabel === 'NEED') {
     summaryParts.push(
-      `Transaksi need di ${monthLabelStr}: ${transactionCount} transaksi, total ${formatCurrency(scopedTotal, currency)}.`
+      `Transaksi need di ${scopeLabel}: ${transactionCount} transaksi, total ${formatCurrency(scopedTotal, currency)}.`
     );
     if (familySupportTotal > 0) {
       summaryParts.push(`Sebagian need ini masuk ke bantuan keluarga, sehingga kebutuhan harian pribadimu lebih rendah dari total itu.`);
@@ -167,13 +347,13 @@ export function buildSummaryInsight(params: HistoryInsightParams): HistoryInsigh
       summaryParts.push(`Porsi need terbesar ada di ${topCategory.label} (${topCategory.pct}%).`);
     }
     if (deltaPct !== null) {
-      summaryParts.push(`Dibanding bulan lalu, need ${buildDeltaLabel(delta, deltaPct)}.`);
+      summaryParts.push(`Dibanding periode lalu, need ${buildDeltaLabel(delta, deltaPct)}.`);
     } else {
-      summaryParts.push('Belum ada data bulan lalu sebagai pembanding.');
+      summaryParts.push('Belum ada data periode lalu sebagai pembanding.');
     }
   } else if (filterLabel === 'WANT') {
     summaryParts.push(
-      `Transaksi want di ${monthLabelStr}: ${transactionCount} transaksi, total ${formatCurrency(scopedTotal, currency)}.`
+      `Transaksi want di ${scopeLabel}: ${transactionCount} transaksi, total ${formatCurrency(scopedTotal, currency)}.`
     );
     if (topCategory) {
       summaryParts.push(
@@ -183,11 +363,11 @@ export function buildSummaryInsight(params: HistoryInsightParams): HistoryInsigh
       );
     }
     if (deltaPct !== null) {
-      summaryParts.push(`Dibanding bulan lalu, want ${buildDeltaLabel(delta, deltaPct)}.`);
+      summaryParts.push(`Dibanding periode lalu, want ${buildDeltaLabel(delta, deltaPct)}.`);
     }
   } else if (filterLabel === 'TRANSFER') {
     summaryParts.push(
-      `Transfer di ${monthLabelStr}: ${transactionCount} transaksi, total ${formatCurrency(scopedTotal, currency)}.`
+      `Transfer di ${scopeLabel}: ${transactionCount} transaksi, total ${formatCurrency(scopedTotal, currency)}.`
     );
     summaryParts.push(
       fundingTransferPattern
@@ -195,12 +375,12 @@ export function buildSummaryInsight(params: HistoryInsightParams): HistoryInsigh
         : 'Ini lebih tepat dibaca sebagai perpindahan saldo antar akun, bukan pengeluaran harian.'
     );
     if (deltaPct !== null) {
-      summaryParts.push(`Dibanding bulan lalu, total transfer ${buildDeltaLabel(delta, deltaPct)}.`);
+      summaryParts.push(`Dibanding periode lalu, total transfer ${buildDeltaLabel(delta, deltaPct)}.`);
     }
   } else {
     // ALL
     summaryParts.push(
-      `Total ${scopeNoun.toLowerCase()} di ${monthLabelStr}: ${transactionCount} transaksi, ${formatCurrency(scopedTotal, currency)}.`
+      `Total ${scopeNoun.toLowerCase()} di ${scopeLabel}: ${transactionCount} transaksi, ${formatCurrency(scopedTotal, currency)}.`
     );
     if (familySupportTotal > 0) {
       summaryParts.push(
@@ -208,23 +388,46 @@ export function buildSummaryInsight(params: HistoryInsightParams): HistoryInsigh
       );
     }
     if (topCategory) {
-      const topNote = familySupportTotal > 0
-        ? `Di luar keluarga, kategori terbesar ada di ${topCategory.label} (${formatCurrency(topCategory.amount, currency)}, ${topCategory.pct}%).`
-        : `Kategori terbesar adalah ${topCategory.label} sebesar ${formatCurrency(topCategory.amount, currency)} (${topCategory.pct}%).`;
-      summaryParts.push(topNote);
+      const topCatIsFamily = topCategory.label.toLowerCase().includes('keluarga') || topCategory.label.toLowerCase().includes('ortu');
+      if (familySupportTotal > 0 && topCatIsFamily) {
+        const secondCat = secondCategory;
+        if (secondCat) {
+          summaryParts.push(`Porsi pengeluaran terbesar selain itu ada di kategori ${secondCat.label} (${formatCurrency(secondCat.amount, currency)}, ${secondCat.pct}%).`);
+        }
+      } else if (familySupportTotal > 0) {
+        summaryParts.push(
+          `Di luar keluarga, kategori terbesarmu adalah ${topCategory.label} (${formatCurrency(topCategory.amount, currency)}, ${topCategory.pct}%).`
+        );
+      } else {
+        summaryParts.push(
+          `Kategori terbesar adalah ${topCategory.label} sebesar ${formatCurrency(topCategory.amount, currency)} (${topCategory.pct}%).`
+        );
+      }
     }
     if (deltaPct !== null) {
       summaryParts.push(`Pengeluaran ${buildDeltaLabel(delta, deltaPct)}.`);
     } else {
-      summaryParts.push('Belum ada data bulan lalu untuk perbandingan.');
+      summaryParts.push('Belum ada data periode lalu untuk perbandingan.');
     }
     if (avgPerTx > 0 && transactionCount >= 3) {
       summaryParts.push(`Rata-rata per transaksi sekitar ${formatCurrency(avgPerTx, currency)}.`);
     }
   }
 
+  // Append transaction-level pattern summary
+  if (filterLabel !== 'TRANSFER') {
+    if (largestExpense && largestShare >= 35) {
+      summaryParts.push(
+        `"${largestExpense.name}" menyumbang ~${largestShare}% dari total — titik pengeluaran utama.`
+      );
+    }
+    if (topRepeated) {
+      summaryParts.push(`"${topRepeated.name}" adalah pengeluaran paling sering berulang.`);
+    }
+  }
+
   // ── highlights ───────────────────────────────────────────────
-  const highlights = [
+  const highlights: (string | null)[] = [
     // Budget status
     filterLabel === 'Semua' || filterLabel === 'NEED'
       ? buildBudgetLine(personalTotal, personalBudget, currency, 'Belanja pribadimu')
@@ -235,7 +438,7 @@ export function buildSummaryInsight(params: HistoryInsightParams): HistoryInsigh
       : null,
     // Family support share
     filterLabel === 'Semua' && familySupportTotal > 0
-      ? `Bantuan keluarga menyerap ${Math.round((familySupportTotal / scopedTotal) * 100)}% dari total bulan ini.`
+      ? `Bantuan keluarga menyerap ${Math.round((familySupportTotal / scopedTotal) * 100)}% dari total.`
       : null,
     // Top category
     topCategory
@@ -243,36 +446,40 @@ export function buildSummaryInsight(params: HistoryInsightParams): HistoryInsigh
         ? `${topCategory.label} menyerap ${topCategory.pct}% dari total transfer.`
         : `${topCategory.label} menyerap ${topCategory.pct}% dari total ${filterLabel === 'Semua' ? 'pengeluaran' : filterLabel.toLowerCase()}.`
       : null,
-    // Largest single expense (non-transfer)
+    // Largest single expense (non-transfer) with note
     largestExpense && filterLabel !== 'TRANSFER'
-      ? `Pengeluaran terbesar: ${largestExpense.name} — ${formatCurrency(largestExpense.amount, largestExpense.currency)}.`
+      ? `Pengeluaran terbesar: ${largestExpense.name} — ${formatCurrency(largestExpense.amount, largestExpense.currency)}${largestExpense.note ? ` (${largestExpense.note})` : ''}.`
       : null,
-    // Repeated item
-    repeatedItem && filterLabel !== 'TRANSFER'
-      ? `"${repeatedItem.name}" muncul ${repeatedItem.count}× dengan total ${formatCurrency(repeatedItem.total, currency)}.`
-      : null,
+    // All repeated items
+    ...repeatedItems.slice(0, 3).map((item) =>
+      `"${item.name}" muncul ${item.count}× dengan total ${formatCurrency(item.total, currency)}.`
+    ),
     // Needs/wants split
     filterLabel === 'Semua'
       ? familySupportTotal > 0
         ? `Di luar bantuan keluarga: kebutuhan pribadi ${formatCurrency(personalNeedsTotal, currency)}, keinginan ${formatCurrency(personalWantsTotal, currency)}.`
-        : `Need ${split.needsPct}% · Want ${split.wantsPct}% dari total bulan ini.`
+        : `Need ${split.needsPct}% · Want ${split.wantsPct}% dari total.`
       : filterLabel === 'NEED'
         ? familySupportTotal > 0
-          ? 'Need bulan ini termasuk bantuan keluarga — pisahkan keduanya saat evaluasi.'
+          ? 'Need termasuk bantuan keluarga — pisahkan keduanya saat evaluasi.'
           : `Need rata-rata ${formatCurrency(avgPerTx, currency)} per transaksi.`
         : filterLabel === 'WANT'
           ? (buildBudgetLine(scopedTotal, personalBudget, currency, 'Want-mu') ?? `Want rata-rata ${formatCurrency(avgPerTx, currency)} per transaksi.`)
           : fundingTransferPattern
             ? 'Transfer ini terlihat sebagai pencairan dana, bukan belanja langsung.'
             : 'Transfer lebih tepat dibaca sebagai perpindahan saldo, bukan pengeluaran konsumtif.',
+    // Unique spending days
+    uniqueDays > 0 && spendingExpenses.length > 0 && filterLabel !== 'TRANSFER'
+      ? `Pengeluaran tersebar di ${uniqueDays} hari — rata-rata ${Math.round(spendingExpenses.length / uniqueDays)} transaksi/hari.`
+      : null,
     // Transfer note (for non-transfer filter)
     filterLabel !== 'TRANSFER' && transferTotal > 0
       ? `Ada transfer ${formatCurrency(transferTotal, currency)} yang sebaiknya dipisahkan dari evaluasi belanja harian.`
       : null,
-  ].filter(Boolean) as string[];
+  ];
 
   // ── actions ──────────────────────────────────────────────────
-  const actions = [
+  const actions: (string | null)[] = [
     familySupportTotal > 0 && filterLabel === 'Semua'
       ? 'Pisahkan bantuan keluarga sebagai pos tersendiri agar evaluasi belanja pribadimu tidak terpengaruh setiap bulan.'
       : null,
@@ -293,185 +500,32 @@ export function buildSummaryInsight(params: HistoryInsightParams): HistoryInsigh
         ? 'Kalau transfer ini memang pencairan dana rutin, beri nama/catatan konsisten agar histori lebih mudah dibaca.'
         : 'Bedakan transfer saldo dengan dana yang benar-benar keluar agar insight berikutnya lebih akurat.'
       : null,
+    // Repeated item action
+    topRepeated && filterLabel !== 'TRANSFER'
+      ? `"${topRepeated.name}" muncul berulang — pertimbangkan tetapkan batas bulanan untuk pos ini.`
+      : null,
     topCategory && topCategory.pct >= 50
-      ? `${topCategory.label} mendominasi >50% — pertimbangkan pisahkan sebagai pos khusus jika ini tidak rutin setiap bulan.`
-      : repeatedItem
-        ? `"${repeatedItem.name}" muncul berulang — pertimbangkan tetapkan batas bulanan untuk pos ini.`
-        : 'Pantau kategori teratasmu setiap bulan agar tidak ada pos yang diam-diam membengkak.',
+      ? `${topCategory.label} mendominasi >50% — pertimbangkan pisahkan sebagai pos khusus jika ini tidak rutin.`
+      : null,
+    // Largest expense action
+    largestExpense && largestShare >= 35 && filterLabel !== 'TRANSFER'
+      ? `Tandai "${largestExpense.name}" sebagai pengeluaran insidental jika ini tidak rutin setiap bulan.`
+      : null,
     filterLabel === 'WANT'
       ? 'Tetapkan batas bulanan per kategori want agar belanja tidak bocor tanpa disadari.'
       : split.wantsPct >= 35
         ? 'Porsi want sudah cukup besar — mulai dari situ jika ingin menekan total bulanan.'
         : 'Porsi want masih terkendali, fokus ke pengeluaran besar yang sifatnya kebutuhan.',
     previousScopedTotal > 0 && delta > 0
-      ? 'Bandingkan transaksi besar bulan ini dengan bulan lalu untuk tahu apakah kenaikannya memang wajar.'
+      ? 'Bandingkan transaksi besar periode ini dengan periode lalu untuk tahu apakah kenaikannya memang wajar.'
       : 'Pantau transaksi besar agar mudah membedakan kebutuhan rutin dan pengeluaran sesaat.',
-  ].filter(Boolean) as string[];
-
-  return {
-    title: `Ringkasan ${filterLabel === 'Semua' ? '' : `${filterLabel.toLowerCase()} `}${monthLabelStr}`.trim(),
-    summary: summaryParts.join(' '),
-    highlights: highlights.filter((h): h is string => h !== null && h !== undefined && h !== ''),
-    actions: actions.filter((a): a is string => a !== null && a !== undefined && a !== ''),
-  };
-}
-
-// ============================================================
-//  buildTransactionInsight  (improved)
-// ============================================================
-export function buildTransactionInsight(params: Omit<HistoryInsightParams, 'split' | 'transferTotal' | 'previousScopedTotal'>): HistoryInsightResponse {
-  const { monthLabelStr, currency, scopedExpenses, scopedTotal, topCategories, filterLabel, personalBudget = 0 } = params;
-
-  const spendingExpenses = scopedExpenses.filter((e) => e.type !== 'TRANSFER');
-  const sortedByAmount = [...spendingExpenses].sort((a, b) => b.amount - a.amount);
-  const largestExpense = sortedByAmount[0] ?? null;
-  const largestWant = sortedByAmount.find((e) => e.type === 'WANT') ?? null;
-  const largestNeed = sortedByAmount.find((e) => e.type === 'NEED') ?? null;
-
-  const repeatedItem = getRepeatedItem(spendingExpenses);
-
-  const transferDestinations = Object.entries(
-    scopedExpenses
-      .filter((e) => e.type === 'TRANSFER' && e.destination)
-      .reduce<Record<string, number>>((acc, e) => {
-        const key = e.destination ?? '';
-        acc[key] = (acc[key] ?? 0) + e.amount;
-        return acc;
-      }, {})
-  ).sort(([, a], [, b]) => b - a)[0];
-
-  const topCategory = topCategories[0];
-  const secondCategory = topCategories[1];
-  const largestShare = largestExpense && scopedTotal > 0
-    ? Math.round((largestExpense.amount / scopedTotal) * 100)
-    : 0;
-  const fundingTransferPattern = hasFundingTransferPattern(scopedExpenses);
-
-  // Count unique spending days
-  const uniqueDays = new Set(spendingExpenses.map((e) => e.date)).size;
-
-  // ── highlights ───────────────────────────────────────────────
-  const rawHighlights = [
-    largestExpense
-      ? `Transaksi terbesar: ${largestExpense.name} — ${formatCurrency(largestExpense.amount, largestExpense.currency)}${largestExpense.note ? ` (${largestExpense.note})` : ''}.`
-      : 'Belum ada transaksi yang bisa dianalisis.',
-    repeatedItem
-      ? `"${repeatedItem.name}" muncul ${repeatedItem.count}× bulan ini — total ${formatCurrency(repeatedItem.total, currency)}.`
-      : 'Tidak ada nama transaksi yang berulang mencolok bulan ini.',
-    secondCategory
-      ? `Dua kategori teratas: ${topCategory?.label ?? '-'} (${topCategory?.pct ?? 0}%) & ${secondCategory.label} (${secondCategory.pct}%).`
-      : topCategory
-        ? `Satu kategori dominan: ${topCategory.label} menyerap ${topCategory.pct}% dari total.`
-        : null,
-    transferDestinations
-      ? `Transfer paling besar mengarah ke ${transferDestinations[0]} — ${formatCurrency(transferDestinations[1], currency)}.`
-      : null,
-    filterLabel === 'TRANSFER' && fundingTransferPattern
-      ? 'Beberapa transfer terlihat seperti pencairan dana (USDT/crypto) untuk kebutuhan bulanan.'
-      : null,
-    filterLabel === 'WANT' && personalBudget > 0
-      ? buildBudgetLine(scopedTotal, personalBudget, currency, 'Total want-mu')
-      : null,
-    uniqueDays > 0 && spendingExpenses.length > 0
-      ? `Pengeluaran tersebar di ${uniqueDays} hari — rata-rata ${Math.round(spendingExpenses.length / uniqueDays)} transaksi/hari.`
-      : null,
-  ].filter(Boolean) as Array<string | null>;
-  const highlights = rawHighlights.filter((h): h is string => h !== null && h !== '');
-
-  // ── summary paragraph ────────────────────────────────────────
-  const summaryParts: string[] = [];
-
-  if (filterLabel === 'TRANSFER') {
-    summaryParts.push(
-      topCategory
-        ? `Transfer ${monthLabelStr}: aliran dana terbesar mengarah ke ${topCategory.label}.`
-        : `Belum ada pola transfer yang cukup kuat di ${monthLabelStr}.`
-    );
-    summaryParts.push(
-      fundingTransferPattern
-        ? 'Nama transaksi dan tujuan menunjukkan ini pencairan dana (cth. USDT/PINTU), bukan pengeluaran konsumtif.'
-        : 'Belum ada petunjuk kuat bahwa transfer ini pengeluaran langsung.'
-    );
-    if (largestExpense) {
-      summaryParts.push(`Transfer terbesar: ${largestExpense.name} (${formatCurrency(largestExpense.amount, largestExpense.currency)}).`);
-    }
-  } else if (filterLabel === 'WANT') {
-    summaryParts.push(
-      topCategory
-        ? `Want ${monthLabelStr}: porsi terbesar di ${topCategory.label} (${topCategory.pct}%).`
-        : `Belum ada pola want yang kuat di ${monthLabelStr}.`
-    );
-    summaryParts.push(
-      largestExpense
-        ? largestShare >= 35
-          ? `Want terbesar "${largestExpense.name}" menyumbang ~${largestShare}% dari total want bulan ini.`
-          : `Want tersebar cukup merata — tidak ada satu item yang terlalu mendominasi.`
-        : 'Belum ada transaksi want yang bisa dianalisis.'
-    );
-    if (largestWant && largestWant.id !== largestExpense?.id) {
-      summaryParts.push(`Item want menonjol lainnya: ${largestWant.name} (${formatCurrency(largestWant.amount, largestWant.currency)}).`);
-    }
-  } else if (filterLabel === 'NEED') {
-    summaryParts.push(
-      topCategory
-        ? `Need ${monthLabelStr}: porsi terbesar di ${topCategory.label} (${topCategory.pct}%).`
-        : `Belum ada pola need yang kuat di ${monthLabelStr}.`
-    );
-    summaryParts.push(
-      largestExpense
-        ? largestShare >= 35
-          ? `Satu kebutuhan besar "${largestExpense.name}" mendominasi sekitar ${largestShare}% dari total need.`
-          : 'Need bulan ini relatif tersebar di beberapa transaksi — tidak ada satu yg terlalu besar.'
-        : 'Belum ada transaksi need untuk dianalisis.'
-    );
-    if (largestNeed && largestNeed.note) {
-      summaryParts.push(`Catatan pada need terbesar: "${largestNeed.note}".`);
-    }
-  } else {
-    // ALL
-    summaryParts.push(
-      topCategory
-        ? `Pola transaksi ${monthLabelStr}: ${topCategory.label} jadi kategori terbesar${secondCategory ? `, disusul ${secondCategory.label}` : ''}.`
-        : `Belum ada pola kategori yang kuat di ${monthLabelStr}.`
-    );
-    summaryParts.push(
-      largestExpense
-        ? largestShare >= 35
-          ? `"${largestExpense.name}" menyumbang ~${largestShare}% dari total — bulan ini terasa berat karena satu titik pengeluaran utama.`
-          : 'Tidak ada satu transaksi yang terlalu mendominasi — pengeluaran tersebar.'
-        : 'Belum ada transaksi yang bisa dianalisis.'
-    );
-    if (repeatedItem) {
-      summaryParts.push(`"${repeatedItem.name}" adalah pengeluaran paling sering berulang bulan ini.`);
-    }
-  }
-
-  // ── actions ──────────────────────────────────────────────────
-  const actions: string[] = [
-    filterLabel === 'TRANSFER'
-      ? fundingTransferPattern
-        ? 'Beri nama/catatan konsisten pada transfer rutin agar pola dana masuk lebih mudah terlacak.'
-        : 'Bedakan transfer saldo dengan dana yang benar-benar keluar agar histori lebih bersih.'
-      : largestExpense && largestShare >= 35
-        ? `Tandai "${largestExpense.name}" sebagai pengeluaran insidental jika ini tidak rutin setiap bulan.`
-        : 'Perhatikan transaksi nominalnya paling besar karena biasanya paling cepat menggeser total bulanan.',
-    repeatedItem
-      ? `Karena "${repeatedItem.name}" muncul berulang, pertimbangkan tetapkan batas bulanan khusus untuk pos ini.`
-      : filterLabel === 'TRANSFER'
-        ? 'Fokus ke tujuan transfer yang paling sering dipakai supaya arus dana lebih mudah dipantau.'
-        : 'Karena pola transaksi tersebar, pantau kategori teratas dulu sebelum menetapkan batas per item.',
-    filterLabel === 'WANT' && largestWant
-      ? `Kalau mau mulai hemat, pangkas dari "${largestWant.name}" dulu — itu want terbesar bulan ini.`
-      : filterLabel === 'TRANSFER'
-        ? 'Jangan campurkan transfer dengan evaluasi boros/hemat sampai dana itu benar-benar dipakai.'
-        : 'Fokuskan kontrol ke transaksi kebutuhan terbesar agar total bulan depan lebih stabil.',
   ];
 
   return {
-    title: `Pola transaksi ${filterLabel === 'Semua' ? '' : `${filterLabel.toLowerCase()} `}${monthLabelStr}`.trim(),
+    title: `Ringkasan & analisis ${filterLabel === 'Semua' ? '' : `${filterLabel.toLowerCase()} `}${scopeLabel}`.trim(),
     summary: summaryParts.join(' '),
-    highlights,
-    actions,
+    highlights: highlights.filter((h): h is string => h !== null && h !== undefined && h !== ''),
+    actions: actions.filter((a): a is string => a !== null && a !== undefined && a !== ''),
   };
 }
 

@@ -373,8 +373,8 @@ const DashboardPage: React.FC = () => {
               </div>
               <div>
                 <AnimatedNumberFlow
-                  key={`dash-total-1-${monthPrefix}`}
-                  id={`dash-total-1-${monthPrefix}`}
+                  key="dash-total-1"
+                  id="dash-total-1"
                   value={monthTotal}
                   initialDelay={200}
                   locales="id-ID"
@@ -420,8 +420,8 @@ const DashboardPage: React.FC = () => {
                     {monthLabel(year, month)}
                   </p>
                   <AnimatedNumberFlow
-                    key={`dash-total-2-${monthPrefix}`}
-                    id={`dash-total-2-${monthPrefix}`}
+                    key="dash-total-2"
+                    id="dash-total-2"
                     value={monthTotal}
                     initialDelay={200}
                     locales="id-ID"
@@ -448,8 +448,8 @@ const DashboardPage: React.FC = () => {
                     <p className="text-sm font-bold text-brutal-black/40 italic">Belum ada data</p>
                   ) : (
                     <AnimatedNumberFlow
-                      key={`dash-last-month-${monthPrefix}`}
-                      id={`dash-last-month-${monthPrefix}`}
+                      key="dash-last-month"
+                      id="dash-last-month"
                       value={lastMonthSpending}
                       initialDelay={400}
                       locales="id-ID"
@@ -478,8 +478,8 @@ const DashboardPage: React.FC = () => {
                     <span className={`text-[11px] sm:text-sm font-black whitespace-nowrap ${delta > 0 ? 'text-red-500' : 'text-green-600'}`}>
                       {delta > 0 ? '+' : ''}
                       <AnimatedNumberFlow
-                        key={`dash-delta-pct-${monthPrefix}`}
-                        id={`dash-delta-pct-${monthPrefix}`}
+                        key="dash-delta-pct"
+                        id="dash-delta-pct"
                         value={deltaPct ?? 0}
                         initialDelay={600}
                         plugins={[continuous]}
@@ -488,8 +488,8 @@ const DashboardPage: React.FC = () => {
                       />
                       % ({delta > 0 ? '+' : ''}
                       <AnimatedNumberFlow
-                        key={`dash-delta-abs-${monthPrefix}`}
-                        id={`dash-delta-abs-${monthPrefix}`}
+                        key="dash-delta-abs"
+                        id="dash-delta-abs"
                         value={Math.abs(delta)}
                         initialDelay={600}
                         locales="id-ID"
@@ -584,21 +584,29 @@ const DashboardPage: React.FC = () => {
           </p>
           <div className="space-y-2">
             {topCategories.map(({ slug, amount, cat, pct }) => (
-              <Card key={slug} className="!shadow-[4px_4px_0_0_#000] p-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl w-9 shrink-0 text-center">{cat?.emoji ?? '🛍️'}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-bold truncate">{cat?.label ?? slug}</span>
-                      <span className="text-sm font-black shrink-0 ml-2">{fmt(amount)}</span>
+              <Link 
+                key={slug} 
+                to="/history" 
+                state={{ categorySlug: slug }} 
+                className="block group select-none"
+                aria-label={`Lihat semua pengeluaran ${cat?.label ?? slug}`}
+              >
+                <Card className="!shadow-[4px_4px_0_0_#000] p-3 transition-all duration-150 group-hover:-translate-y-0.5 group-hover:!shadow-[4px_6px_0_0_#000] group-active:translate-y-[4px] group-active:translate-x-[4px] group-active:!shadow-none">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl w-9 shrink-0 text-center">{cat?.emoji ?? '🛍️'}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-bold truncate">{cat?.label ?? slug}</span>
+                        <span className="text-sm font-black shrink-0 ml-2">{fmt(amount)}</span>
+                      </div>
+                      <div className="h-2 border-2 border-[#555555] overflow-hidden">
+                        <div className="h-full bg-brutal-black transition-all duration-500" style={{ width: `${pct}%` }} />
+                      </div>
                     </div>
-                    <div className="h-2 border-2 border-[#555555] overflow-hidden">
-                      <div className="h-full bg-brutal-black transition-all duration-500" style={{ width: `${pct}%` }} />
-                    </div>
+                    <span className="text-xs font-black text-brutal-black/50 shrink-0 w-8 text-right">{pct}%</span>
                   </div>
-                  <span className="text-xs font-black text-brutal-black/50 shrink-0 w-8 text-right">{pct}%</span>
-                </div>
-              </Card>
+                </Card>
+              </Link>
             ))}
           </div>
         </div>

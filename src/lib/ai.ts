@@ -15,6 +15,11 @@ export interface ExpenseInsightContext {
   monthLabel: string;
   currency: 'IDR' | 'USD';
   filterLabel?: string;
+  scope?: {
+    type: 'month' | 'range' | 'year' | 'all';
+    label: string;
+    totalDays: number;
+  };
   totals: {
     spending: number;
     transfers: number;
@@ -50,14 +55,6 @@ export interface ExpenseInsightContext {
     type: 'NEED' | 'WANT' | 'TRANSFER';
     category: string;
   }>;
-  recentTransactions: Array<{
-    date: string;
-    name: string;
-    amount: number;
-    type: 'NEED' | 'WANT' | 'TRANSFER';
-    category: string;
-    note?: string;
-  }>;
   transactions?: Array<{
     date: string;
     name: string;
@@ -70,10 +67,7 @@ export interface ExpenseInsightContext {
   }>;
 }
 
-export type ExpenseInsightIntent =
-  | 'summary'
-  | 'transaction_insights'
-  | 'deep_analysis';
+export type ExpenseInsightIntent = 'deep_analysis';
 
 export interface ExpenseInsightRequest {
   intent: ExpenseInsightIntent;
@@ -121,14 +115,19 @@ Return ONLY valid JSON with this exact schema:
   "follow_up_suggestions": ["string (1-2 questions user might want to explore next)"]
 }`;
 
-const QUICK_PROMPT_BY_INTENT: Record<ExpenseInsightIntent, string> = {
-  summary:
-    'Give a concise spending summary for this month in natural Bahasa Indonesia. Cover: total spending, top 1-2 categories with names and amounts, needs vs wants ratio, any notable pattern. Reference specific transaction names where helpful. Keep it to 2-4 sentences in the summary field.',
-  transaction_insights:
-    'Analyze the transaction list in natural Bahasa Indonesia. Surface: the single largest expense and why it matters, any repeated transaction names (and how often), top 2 categories, notable transfer activity. Use exact transaction names, notes, and destinations from the data. Make the highlights feel like discoveries, not dashboard echoes.',
-  deep_analysis:
-    'Perform a thorough, specific analysis of this month\'s full transaction list in natural Bahasa Indonesia. Go beyond surface numbers — look for: (1) any single transaction or category that dominates and why that matters, (2) repeated spending habits by name (e.g. "Le Minerale muncul 4x"), (3) whether TRANSFER activity represents liquidity movement vs real spending, (4) the realistic split between family/parental responsibility and personal spending, (5) one-off large expenses vs recurring costs, (6) whether the user is above or below budget (if provided) and which specific category is the main driver. For actions, suggest only changes that are grounded in the actual data — avoid generic advice. Reference specific transaction names and amounts wherever useful.',
-};
+const DEEP_ANALYSIS_PROMPT = `Analisis seluruh daftar transaksi dalam Bahasa Indonesia yang natural. Data sudah include scope, filter, budget, dan transaksi lengkap — gunakan semuanya.
+
+Kamu WAJIB membahas poin-poin ini secara eksplisit:
+
+(1) Pengeluaran atau kategori paling signifikan — sebut namanya dan jumlah pastinya.
+(2) Pola berulang: daftarkan nama transaksi yang muncul ≥2× beserta jumlah kemunculan dan total nominalnya.
+(3) Klasifikasi transfer: jika ada TRANSFER, tentukan apakah ini perpindahan likuiditas (USDT/crypto/withdraw/tarik) atau belanja langsung. Jangan pernah hitung sebagai konsumsi.
+(4) Bantuan keluarga vs belanja pribadi: pisahkan keduanya secara eksplisit dengan persentase masing-masing terhadap total.
+(5) Pengeluaran sekali vs berulang: mana yang hanya muncul di periode ini vs yang muncul tiap bulan?
+(6) Status budget: jika data budget tersedia, nyatakan secara pasti surplus atau defisit dalam angka.
+(7) Satu pola "silent killer" — pengeluaran kecil tapi sering yang mudah luput dari perhatian.
+
+Aksi: maksimal 3, harus berdasarkan data konkret di atas. Dilarang memberi saran umum/generik.`;
 
 /**
  * Calls the configured AI provider to suggest a category slug
@@ -171,9 +170,9 @@ export async function generateExpenseInsight(
   const prompt = `User intent: ${request.intent}
 
 Instruction:
-${QUICK_PROMPT_BY_INTENT[request.intent]}
+${DEEP_ANALYSIS_PROMPT}
 
-Selected month data:
+Selected data:
 ${JSON.stringify(request.context, null, 2)}
 
 Return JSON only.`;
