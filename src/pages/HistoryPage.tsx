@@ -276,11 +276,13 @@ const HistoryPage: React.FC = () => {
   const location = useLocation();
   useEffect(() => {
     if (location.state?.categorySlug) {
+      setTypeFilter('ALL');
+      setSearch('');
       setCatFilter(new Set([location.state.categorySlug]));
       // Clean up the state so it doesn't persist on refresh
       window.history.replaceState({}, document.title);
     }
-  }, [location.state]);
+  }, [location.state, setTypeFilter, setSearch, setCatFilter]);
 
   const toDisplay = useCallback(
     (exp: Expense) => convertAmount(exp.amount, exp.currency, currency, rateInfo.rate),
