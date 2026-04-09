@@ -136,7 +136,7 @@ function buildScopeLabel(scope: InsightScope, activeYear: number, activeMonth: n
   }
 }
 
-function getScopeMonthsCount(scope: InsightScope, expenses: Expense[], viewYear: number, viewMonth: number): number {
+function getScopeMonthsCount(scope: InsightScope, expenses: Expense[], viewYear: number): number {
   if (scope.type === 'month' || scope.type === 'pick_month') return 1;
   if (scope.type === 'year') return 12;
   if (scope.type === 'range') {
@@ -428,7 +428,7 @@ const HistoryPage: React.FC = () => {
       }
     }
 
-    const scopeMonths = getScopeMonthsCount(insightScope, allScopedExpenses, viewYear, viewMonth);
+    const scopeMonths = getScopeMonthsCount(insightScope, allScopedExpenses, viewYear);
     const scaledPersonalBudget = personalMonthlyBudget ? personalMonthlyBudget * scopeMonths : undefined;
     const scaledFamilySupportBudget = familySupportMonthlyBudget ? familySupportMonthlyBudget * scopeMonths : undefined;
 
