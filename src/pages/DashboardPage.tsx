@@ -232,7 +232,7 @@ function AnimatedNumberFlow({ value, initialDelay = 200, id, ...props }: NumberF
 const DashboardPage: React.FC = () => {
   useEffect(() => { document.title = 'Dashboard'; return () => { document.title = 'Keuanganku'; }; }, []);
 
-  const { expenses, categories, currency: globalCurrency, isLoading, loadExpenses } =
+  const { expenses, categories, isLoading, loadExpenses } =
     useExpenseStore();
   const { activeYear: year, activeMonth: month, resetToCurrentMonth } = useUIStore();
 

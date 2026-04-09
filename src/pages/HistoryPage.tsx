@@ -83,7 +83,7 @@ interface HistoryUIState {
   search: string;
   setSearch: (s: string) => void;
   insightScope: InsightScope;
-  setInsightScope: (s: InsightScope) => void;
+  setInsightScope: (s: InsightScope | ((prev: InsightScope) => InsightScope)) => void;
 }
 
 const useHistoryUIStore = create<HistoryUIState>((set) => ({
@@ -96,7 +96,9 @@ const useHistoryUIStore = create<HistoryUIState>((set) => ({
   search: '',
   setSearch: (search) => set({ search }),
   insightScope: { type: 'month', label: '' },
-  setInsightScope: (insightScope) => set({ insightScope }),
+  setInsightScope: (insightScope) => set((state) => ({
+    insightScope: typeof insightScope === 'function' ? insightScope(state.insightScope) : insightScope
+  })),
 }));
 
 function haptic() { if ('vibrate' in navigator) navigator.vibrate(10); }
