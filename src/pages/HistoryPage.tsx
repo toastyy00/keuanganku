@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
+import { create } from 'zustand';
 import {
   Search,
   ChevronLeft,
@@ -73,6 +74,30 @@ interface CachedInsightEntry {
   promptLabel: string;
   insight: HistoryInsightResponse;
 }
+
+interface HistoryUIState {
+  typeFilter: TypeFilter;
+  setTypeFilter: (filter: TypeFilter) => void;
+  catFilter: Set<string>;
+  setCatFilter: (cats: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
+  search: string;
+  setSearch: (s: string) => void;
+  insightScope: InsightScope;
+  setInsightScope: (s: InsightScope) => void;
+}
+
+const useHistoryUIStore = create<HistoryUIState>((set) => ({
+  typeFilter: 'ALL',
+  setTypeFilter: (typeFilter) => set({ typeFilter }),
+  catFilter: new Set(),
+  setCatFilter: (cats) => set((state) => ({
+    catFilter: typeof cats === 'function' ? cats(state.catFilter) : cats
+  })),
+  search: '',
+  setSearch: (search) => set({ search }),
+  insightScope: { type: 'month', label: '' },
+  setInsightScope: (insightScope) => set({ insightScope }),
+}));
 
 function haptic() { if ('vibrate' in navigator) navigator.vibrate(10); }
 
@@ -213,7 +238,7 @@ function introMessage(scopeText: string): AssistantMessage {
 
 const HistoryPage: React.FC = () => {
   useEffect(() => {
-    document.title = 'Riwayat — Keuanganku';
+    document.title = 'Riwayat';
     return () => { document.title = 'Keuanganku'; };
   }, []);
 
@@ -230,9 +255,8 @@ const HistoryPage: React.FC = () => {
   const activeAiKey = aiProvider === 'openai' ? openaiKey : openrouterKey;
 
   const { activeYear: viewYear, activeMonth: viewMonth, prevMonth, nextMonth } = useUIStore();
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
-  const [catFilter, setCatFilter] = useState<Set<string>>(new Set());
-  const [search, setSearch] = useState('');
+  const { typeFilter, setTypeFilter, catFilter, setCatFilter, search, setSearch, insightScope, setInsightScope } = useHistoryUIStore();
+
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [catFilterOpen, setCatFilterOpen] = useState(false);
   const [rateInfo, setRateInfo] = useState<RateResult>({ rate: 16000, isFallback: true });
@@ -241,12 +265,6 @@ const HistoryPage: React.FC = () => {
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
   const [assistantError, setAssistantError] = useState<string | null>(null);
   const [isQuickInsightExpanded, setIsQuickInsightExpanded] = useState(false);
-
-  // ── Insight scope state ──────────────────────────────────
-  const [insightScope, setInsightScope] = useState<InsightScope>({
-    type: 'month',
-    label: '',
-  });
 
   useEffect(() => {
     loadExpenses();

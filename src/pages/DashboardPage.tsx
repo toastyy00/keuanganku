@@ -230,7 +230,7 @@ function AnimatedNumberFlow({ value, initialDelay = 200, id, ...props }: NumberF
 // ============================================================
 
 const DashboardPage: React.FC = () => {
-  useEffect(() => { document.title = 'Dashboard — Keuanganku'; return () => { document.title = 'Keuanganku'; }; }, []);
+  useEffect(() => { document.title = 'Dashboard'; return () => { document.title = 'Keuanganku'; }; }, []);
 
   const { expenses, categories, currency: globalCurrency, isLoading, loadExpenses } =
     useExpenseStore();
@@ -307,7 +307,9 @@ const DashboardPage: React.FC = () => {
   );
 
   // ── Needs vs Wants split ──────────────────────────────────
-  const split = useMemo(() => calcNeedsWantsSplit(monthExpenses), [monthExpenses]);
+  const split = useMemo(() => calcNeedsWantsSplit(
+    monthExpenses.map((e) => ({ ...e, amount: toDisplay(e) }))
+  ), [monthExpenses, toDisplay]);
 
   // ── Bulan Ini vs Bulan Lalu ───────────────────────────────
   const lastMonthSpending = useMemo(() => {
@@ -562,7 +564,7 @@ const DashboardPage: React.FC = () => {
                 <span className="text-xs font-bold uppercase">Need</span>
                 <span className="text-xs font-black">{split.needsPct}%</span>
               </div>
-              <p className="text-sm font-bold mt-0.5">{fmt(convertAmount(split.needs, globalCurrency, dashCurrency, rateInfo.rate))}</p>
+              <p className="text-sm font-bold mt-0.5">{fmt(split.needs)}</p>
             </div>
             <div className="text-right">
               <div className="flex items-center gap-1.5 justify-end">
@@ -570,7 +572,7 @@ const DashboardPage: React.FC = () => {
                 <span className="text-xs font-bold uppercase">Want</span>
                 <div className="w-3 h-3 bg-pink-500 border-2 border-[#555555]" />
               </div>
-              <p className="text-sm font-bold mt-0.5">{fmt(convertAmount(split.wants, globalCurrency, dashCurrency, rateInfo.rate))}</p>
+              <p className="text-sm font-bold mt-0.5">{fmt(split.wants)}</p>
             </div>
           </div>
         </CardBody>

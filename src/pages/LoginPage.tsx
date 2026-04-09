@@ -11,7 +11,7 @@ import { useAuthStore } from '../store/useAuthStore';
 
 const LoginPage: React.FC = () => {
   useEffect(() => {
-    document.title = 'Masuk — Keuanganku';
+    document.title = 'Masuk';
     return () => { document.title = 'Keuanganku'; };
   }, []);
 

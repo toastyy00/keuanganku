@@ -83,7 +83,7 @@ const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    document.title = 'Settings — Keuanganku';
+    document.title = 'Settings';
     return () => { document.title = 'Keuanganku'; };
   }, []);
 
