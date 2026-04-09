@@ -55,8 +55,8 @@ function SwipeCarousel({
     const t1 = setTimeout(() => {
       markSwipeHintSeen();
       setHintPx(-50);
-    }, 1600);
-    const t2 = setTimeout(() => setHintPx(0), 2200);
+    }, 2000);
+    const t2 = setTimeout(() => setHintPx(0), 2600);
 
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [slides.length]);
@@ -172,11 +172,13 @@ type NumberFlowProps = ComponentProps<typeof NumberFlow>;
 type NumberFlowValue = NumberFlowProps['value'];
 
 const globalPrevValues = new Map<string, NumberFlowValue>();
-let hasAnimatedGlobal = false;
+const globalAnimated = new Set<string>();
 
 function AnimatedNumberFlow({ value, initialDelay = 200, id, ...props }: NumberFlowProps & { initialDelay?: number; id?: string }) {
+  const [localHasAnimated, setLocalHasAnimated] = useState(() => id ? globalAnimated.has(id) : false);
+
   const [displayValue, setDisplayValue] = useState<NumberFlowValue>(() => {
-    if (!hasAnimatedGlobal) return 0;
+    if (!localHasAnimated) return 0;
     if (id && globalPrevValues.has(id)) return globalPrevValues.get(id)!;
     return value;
   });
@@ -196,18 +198,19 @@ function AnimatedNumberFlow({ value, initialDelay = 200, id, ...props }: NumberF
     }
     const observer = new IntersectionObserver(([entry]) => {
       setIsIntersecting(entry.isIntersecting);
-    }, { threshold: 0.5 });
+    }, { threshold: 0.1 });
 
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
-    if (!hasAnimatedGlobal) {
+    if (!localHasAnimated) {
       if (isIntersecting) {
         const t = setTimeout(() => {
           setDisplayValue(value);
-          hasAnimatedGlobal = true;
+          setLocalHasAnimated(true);
+          if (id) globalAnimated.add(id);
         }, initialDelay);
         return () => clearTimeout(t);
       }
@@ -217,7 +220,7 @@ function AnimatedNumberFlow({ value, initialDelay = 200, id, ...props }: NumberF
         return () => clearTimeout(t);
       }
     }
-  }, [value, initialDelay, displayValue, isIntersecting]);
+  }, [value, initialDelay, displayValue, isIntersecting, localHasAnimated, id]);
 
   return <NumberFlow ref={ref} value={displayValue} {...props} />;
 }
@@ -370,7 +373,8 @@ const DashboardPage: React.FC = () => {
               </div>
               <div>
                 <AnimatedNumberFlow
-                  id="dash-total-1"
+                  key={`dash-total-1-${monthPrefix}`}
+                  id={`dash-total-1-${monthPrefix}`}
                   value={monthTotal}
                   initialDelay={200}
                   locales="id-ID"
@@ -416,7 +420,8 @@ const DashboardPage: React.FC = () => {
                     {monthLabel(year, month)}
                   </p>
                   <AnimatedNumberFlow
-                    id="dash-total-2"
+                    key={`dash-total-2-${monthPrefix}`}
+                    id={`dash-total-2-${monthPrefix}`}
                     value={monthTotal}
                     initialDelay={200}
                     locales="id-ID"
@@ -443,7 +448,8 @@ const DashboardPage: React.FC = () => {
                     <p className="text-sm font-bold text-brutal-black/40 italic">Belum ada data</p>
                   ) : (
                     <AnimatedNumberFlow
-                      id="dash-last-month"
+                      key={`dash-last-month-${monthPrefix}`}
+                      id={`dash-last-month-${monthPrefix}`}
                       value={lastMonthSpending}
                       initialDelay={400}
                       locales="id-ID"
@@ -472,7 +478,8 @@ const DashboardPage: React.FC = () => {
                     <span className={`text-[11px] sm:text-sm font-black whitespace-nowrap ${delta > 0 ? 'text-red-500' : 'text-green-600'}`}>
                       {delta > 0 ? '+' : ''}
                       <AnimatedNumberFlow
-                        id="dash-delta-pct"
+                        key={`dash-delta-pct-${monthPrefix}`}
+                        id={`dash-delta-pct-${monthPrefix}`}
                         value={deltaPct ?? 0}
                         initialDelay={600}
                         plugins={[continuous]}
@@ -481,7 +488,8 @@ const DashboardPage: React.FC = () => {
                       />
                       % ({delta > 0 ? '+' : ''}
                       <AnimatedNumberFlow
-                        id="dash-delta-abs"
+                        key={`dash-delta-abs-${monthPrefix}`}
+                        id={`dash-delta-abs-${monthPrefix}`}
                         value={Math.abs(delta)}
                         initialDelay={600}
                         locales="id-ID"

@@ -39,7 +39,7 @@ const AppLoadingScreen: React.FC = () => (
         className="text-3xl font-black uppercase tracking-tight"
         style={{ color: '#F5F0E8' }}
       >
-        Keuangan<span style={{ color: '#B8F55A' }}>ku</span>
+        Keuangan<span style={{ color: '#B8F55A' }}>Ku</span>
       </h1>
       <span
         className="inline-block w-6 h-6 border-4 border-t-transparent rounded-full animate-spin"
