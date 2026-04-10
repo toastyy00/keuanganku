@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -31,6 +31,22 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
   panelClassName,
   children,
 }) => {
+  const [isRendered, setIsRendered] = useState(isOpen);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsRendered(true);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setIsVisible(true));
+      });
+    } else {
+      setIsVisible(false);
+      const timer = setTimeout(() => setIsRendered(false), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
   // ── Close on Escape key ──────────────────────────────────
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -57,13 +73,14 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
   }, [isOpen]);
 
   // ── Render ───────────────────────────────────────────────
-  if (!isOpen) return null;
+  if (!isRendered) return null;
 
   return (
     <>
       {/* Backdrop */}
       <div
         className="bottom-sheet-overlay"
+        data-state={isVisible ? 'open' : 'closed'}
         onClick={disableBackdropClose ? undefined : onClose}
         aria-hidden="true"
       />
@@ -74,6 +91,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
         aria-modal="true"
         aria-label={title || 'Bottom sheet'}
         className={cn('bottom-sheet-panel', panelClassName)}
+        data-state={isVisible ? 'open' : 'closed'}
       >
         {/* Handle bar */}
         <div className="flex items-center justify-center pt-3 pb-1">

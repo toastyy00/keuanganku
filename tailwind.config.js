@@ -69,6 +69,7 @@ export default {
           transition: 'all 150ms ease',
           userSelect: 'none',
           '&:active': {
+            transition: 'transform 30ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 30ms cubic-bezier(0.4, 0, 0.2, 1)',
             boxShadow: '0px 0px 0px 0px #000000',
             transform: 'translate(4px, 4px)',
           },

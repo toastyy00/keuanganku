@@ -656,11 +656,11 @@ const HistoryPage: React.FC = () => {
     toDisplay,
   ]);
 
-  const TYPE_FILTERS: { value: TypeFilter; label: string }[] = [
-    { value: 'ALL', label: 'Semua' },
-    { value: 'NEED', label: 'NEED' },
-    { value: 'WANT', label: 'WANT' },
-    { value: 'TRANSFER', label: 'TRANSFER' },
+  const TYPE_FILTERS: { value: TypeFilter; label: string; color: string }[] = [
+    { value: 'ALL', label: 'Semua', color: '#F5F0E8' },
+    { value: 'NEED', label: 'Need', color: '#5B9CF6' },
+    { value: 'WANT', label: 'Want', color: '#F472B6' },
+    { value: 'TRANSFER', label: 'Transfer', color: '#FB923C' },
   ];
 
 
@@ -696,24 +696,32 @@ const HistoryPage: React.FC = () => {
           </button>
         </div>
 
-        {/* Type filter pills — always in a single scroll row */}
-        <div className="flex gap-1.5 px-3 pt-2.5 pb-1.5 border-b-2 overflow-x-auto sm:px-4" style={{ borderColor: '#3A3A3A' }}>
-          {TYPE_FILTERS.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setTypeFilter(f.value)}
-              className={`shrink-0 px-3 py-1 text-xs font-bold uppercase tracking-wider border-[3px] transition-all duration-150 min-h-[34px] ${typeFilter === f.value
-                ? 'text-[#1A1A1A]'
-                : ''
-                }`}
-              style={typeFilter === f.value
-                ? { borderColor: '#F5F0E8', backgroundColor: f.value === 'ALL' ? '#F5F0E8' : f.value === 'NEED' ? '#5B9CF6' : f.value === 'WANT' ? '#F472B6' : '#FBBF24', color: f.value === 'TRANSFER' ? '#1A1A1A' : f.value === 'ALL' ? '#1A1A1A' : '#fff' }
-                : { borderColor: '#3A3A3A', backgroundColor: '#2A2820' }
-              }
-            >
-              {f.label}
-            </button>
-          ))}
+        {/* Type filter chips */}
+        <div className="flex gap-2 px-3 pt-2.5 pb-2 border-b-2 overflow-x-auto sm:px-4" style={{ borderColor: '#3A3A3A' }}>
+          {TYPE_FILTERS.map((f) => {
+            const isActive = typeFilter === f.value;
+            return (
+              <button
+                key={f.value}
+                onClick={() => setTypeFilter(f.value)}
+                className="shrink-0 flex items-center justify-center gap-1.5 px-3 py-1.5 border-2 font-black uppercase text-xs tracking-wider transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5"
+                style={{
+                  borderColor: isActive ? f.color : '#555555',
+                  color: isActive ? f.color : '#A09890',
+                  boxShadow: isActive ? `3px 3px 0px 0px ${f.color}` : 'none',
+                  backgroundColor: isActive ? '#1A1A1A' : 'transparent',
+                }}
+              >
+                {f.value !== 'ALL' && (
+                  <span
+                    className="w-2.5 h-2.5 shrink-0"
+                    style={{ backgroundColor: f.color }}
+                  />
+                )}
+                {f.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Category filter — collapsible section */}

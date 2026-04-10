@@ -203,8 +203,13 @@
 
   /* Bottom sheet overlay */
   .bottom-sheet-overlay {
-    @apply fixed inset-0 bg-black/50 z-40;
-    @apply transition-all duration-150;
+    @apply fixed inset-0 bg-black/60 z-40;
+    @apply transition-opacity duration-300 ease-out;
+    opacity: 0;
+  }
+
+  .bottom-sheet-overlay[data-state="open"] {
+    opacity: 1;
   }
 
   /* Bottom sheet panel — dark concrete */
@@ -214,7 +219,12 @@
     border-top: 4px solid #F5F0E8;
     @apply max-h-[90dvh] overflow-y-auto;
     will-change: transform;
-    @apply transition-all duration-150;
+    transition: transform 300ms cubic-bezier(0.32, 0.72, 0, 1);
+    transform: translateY(100%);
+  }
+
+  .bottom-sheet-panel[data-state="open"] {
+    transform: translateY(0%);
   }
 
   @media (min-width: 640px) {
@@ -222,8 +232,12 @@
       left: 50%;
       right: auto;
       width: min(92vw, 720px);
-      transform: translateX(-50%);
       border-top: 4px solid #F5F0E8;
+      transform: translateX(-50%) translateY(100%);
+    }
+
+    .bottom-sheet-panel[data-state="open"] {
+      transform: translateX(-50%) translateY(0%);
     }
   }
 
@@ -249,7 +263,12 @@
   }
 
   /* Animated sink on active */
+  .sink-on-active {
+    transition: transform 150ms ease, box-shadow 150ms ease;
+  }
+  
   .sink-on-active:active {
+    transition: transform 30ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 30ms cubic-bezier(0.4, 0, 0.2, 1);
     transform: translate(6px, 6px);
     box-shadow: 0px 0px 0px 0px #F5F0E8 !important;
   }

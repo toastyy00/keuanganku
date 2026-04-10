@@ -3,7 +3,6 @@ import { Sparkles, Loader2, AlertCircle } from 'lucide-react';
 import { BottomSheet } from './ui/BottomSheet';
 import { Button } from './ui/Button';
 import { Input, Textarea } from './ui/Input';
-import { Toggle } from './ui/Toggle';
 import { useUIStore } from '../store/useAppStore';
 import { useExpenseStore } from '../store/useExpenseStore';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -232,32 +231,41 @@ const AddExpenseSheet: React.FC = () => {
           </div>
         )}
 
-        {/* Tab-like switcher for Pengeluaran vs Transfer */}
-        <div className="flex border-2 border-[#555555] p-1 gap-1 bg-[#2A2820]">
-          <button
-            type="button"
-            onClick={() => {
-              if (isTransfer) handleTypeChange('NEED');
-            }}
-            className={`flex-1 py-2 text-xs font-black uppercase tracking-wider transition-all duration-150 ${!isTransfer ? 'bg-[#555555] text-[#F5F0E8]' : 'text-brutal-black/50 hover:text-[#F5F0E8]'}`}
-          >
-            Pengeluaran
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (!isTransfer) handleTypeChange('TRANSFER');
-            }}
-            className={`flex-1 py-2 text-xs font-black uppercase tracking-wider transition-all duration-150 ${isTransfer ? 'bg-orange-400 text-[#1A1A1A]' : 'text-brutal-black/50 hover:text-orange-400'}`}
-          >
-            Transfer
-          </button>
+        {/* Tipe Transaksi Chips */}
+        <div className="flex flex-col gap-1.5 pt-1">
+          <label className="text-xs font-bold uppercase tracking-wider text-brutal-black/80">
+            Tipe Transaksi
+          </label>
+          <div className="flex gap-2">
+            {[
+              { id: 'NEED', label: 'Need', color: '#5B9CF6' }, // Blue
+              { id: 'WANT', label: 'Want', color: '#F472B6' }, // Pink
+              { id: 'TRANSFER', label: 'Transfer', color: '#FB923C' }, // Orange
+            ].map((item) => {
+              const isActive = type === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleTypeChange(item.id as ExpenseType)}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-0.5 border-2 font-black uppercase text-xs tracking-wider transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5"
+                  style={{
+                    borderColor: isActive ? item.color : '#555555',
+                    color: isActive ? item.color : '#A09890',
+                    boxShadow: isActive ? `3px 3px 0px 0px ${item.color}` : 'none',
+                    backgroundColor: isActive ? '#1A1A1A' : 'transparent',
+                  }}
+                >
+                  <span
+                    className="w-2.5 h-2.5 shrink-0"
+                    style={{ backgroundColor: isActive ? item.color : item.color }}
+                  />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-
-        {/* 2-way type toggle (only for Pengeluaran) */}
-        {!isTransfer && (
-          <Toggle label="Prioritas" value={type as 'NEED' | 'WANT'} options={['NEED', 'WANT']} onChange={handleTypeChange} />
-        )}
 
         {/* Item Name */}
         <Input
