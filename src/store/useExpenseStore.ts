@@ -241,13 +241,13 @@ export const useExpenseStore = create<ExpenseStore>()(
     {
       name: 'keuanganku-expense-store',
       // Only persist settings — data comes from repository on loadExpenses()
-      // This prevents stale data from persisting across sessions
+      // Persist data as a warm cache for instant render (Stale-While-Revalidate).
+      // loadExpenses() will silently fetch fresh data from repository on mount.
       partialize: (state) => ({
         currency: state.currency,
-        // We do NOT persist expenses/categories/recurring here;
-        // the repository (localStorage or Supabase) is the source of truth.
-        // However, we persist categories as a warm cache for instant render.
         categories: state.categories,
+        expenses: state.expenses,
+        recurringTemplates: state.recurringTemplates,
       }),
     }
   )
