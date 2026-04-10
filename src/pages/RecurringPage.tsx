@@ -192,7 +192,7 @@ const AddRecurringSheet: React.FC<AddRecurringSheetProps> = ({ isOpen, onClose, 
 
 const RecurringPage: React.FC = () => {
   useEffect(() => {
-    document.title = 'Pengeluaran Rutin';
+    document.title = 'Pengeluaran Rutin - KeuanganKu';
     return () => { document.title = 'Keuanganku'; };
   }, []);
 

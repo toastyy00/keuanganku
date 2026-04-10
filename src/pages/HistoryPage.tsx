@@ -240,8 +240,8 @@ function introMessage(scopeText: string): AssistantMessage {
 
 const HistoryPage: React.FC = () => {
   useEffect(() => {
-    document.title = 'Riwayat';
-    return () => { document.title = 'Keuanganku'; };
+    document.title = 'Riwayat - KeuanganKu';
+    return () => { document.title = 'KeuanganKu'; };
   }, []);
 
   const { expenses, categories, currency, deleteExpense, loadExpenses } = useExpenseStore();

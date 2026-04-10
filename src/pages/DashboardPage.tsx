@@ -230,7 +230,7 @@ function AnimatedNumberFlow({ value, initialDelay = 200, id, ...props }: NumberF
 // ============================================================
 
 const DashboardPage: React.FC = () => {
-  useEffect(() => { document.title = 'Dashboard'; return () => { document.title = 'Keuanganku'; }; }, []);
+  useEffect(() => { document.title = 'Dashboard - KeuanganKu'; return () => { document.title = 'Keuanganku'; }; }, []);
 
   const { expenses, categories, isLoading, loadExpenses } =
     useExpenseStore();
@@ -239,12 +239,12 @@ const DashboardPage: React.FC = () => {
   // Swipe Handlers for Month Header
   const headerStartX = useRef<number | null>(null);
   const [dateDragging, setDateDragging] = useState(false);
-  
+
   const onHeaderTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
     headerStartX.current = 'touches' in e ? e.touches[0].clientX : e.clientX;
     setDateDragging(false);
   };
-  
+
   const onHeaderTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
     if (headerStartX.current !== null) {
       const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
@@ -258,7 +258,7 @@ const DashboardPage: React.FC = () => {
     if (headerStartX.current === null) return;
     const endX = 'changedTouches' in e ? e.changedTouches[0].clientX : e.clientX;
     const dx = endX - headerStartX.current;
-    
+
     if (Math.abs(dx) > 40) {
       if (dx > 0) prevMonth();
       else nextMonth();
@@ -382,7 +382,7 @@ const DashboardPage: React.FC = () => {
   return (
     <div className="section-pad space-y-5 max-w-2xl mx-auto">
       {/* Header */}
-      <div 
+      <div
         className="flex items-center justify-between py-1 -mt-1 -mx-2 px-2 select-none"
         onTouchStart={onHeaderTouchStart}
         onTouchMove={onHeaderTouchMove}
@@ -397,10 +397,10 @@ const DashboardPage: React.FC = () => {
           <h2
             key={monthPrefix}
             className={`text-sm font-black uppercase tracking-wider text-brutal-black/60 transition-all duration-150 page-fade-in ${!isCurrentMonth ? 'cursor-pointer underline underline-offset-2 hover:text-brutal-black' : ''}`}
-            onClick={() => { 
-               // Prevent triggering reset if the user was just swiping
-               if (dateDragging) return;
-               if (!isCurrentMonth) resetToCurrentMonth(); 
+            onClick={() => {
+              // Prevent triggering reset if the user was just swiping
+              if (dateDragging) return;
+              if (!isCurrentMonth) resetToCurrentMonth();
             }}
             title={!isCurrentMonth ? 'Kembali ke bulan ini' : undefined}
           >
