@@ -29,7 +29,7 @@ const NAV_ITEMS = [
 // ============================================================
 
 const Layout: React.FC = () => {
-  const openAddSheet = useUIStore((s) => s.openAddSheet);
+  const { openAddSheet, closeAddSheet, isAddSheetOpen } = useUIStore();
   const navigate = useNavigate();
   const location = useLocation();
   const isDashboard = location.pathname === '/';
@@ -48,8 +48,12 @@ const Layout: React.FC = () => {
   };
 
   const handleFAB = () => {
-    openAddSheet();
-    navigate('/');
+    if (isAddSheetOpen) {
+      closeAddSheet();
+    } else {
+      openAddSheet();
+      navigate('/');
+    }
   };
 
   return (
@@ -170,17 +174,26 @@ const Layout: React.FC = () => {
         <button
           id="fab-add-expense"
           onClick={handleFAB}
-          aria-label="Add new expense"
+          aria-label={isAddSheetOpen ? 'Tutup form' : 'Tambah pengeluaran baru'}
           className={cn(
-            'fixed z-50',
+            'fixed z-[60]',
             'bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-5',
             'md:bottom-8 md:right-8',
             'neo-btn neo-btn-primary',
             'w-16 h-16 rounded-full p-0',
-            'flex items-center justify-center',
+            isAddSheetOpen ? 'hidden md:flex' : 'flex',
+            'items-center justify-center',
           )}
         >
-          <Plus size={28} strokeWidth={2.5} aria-hidden="true" />
+          <Plus 
+            size={28} 
+            strokeWidth={2.5} 
+            aria-hidden="true" 
+            className={cn(
+              "transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+              isAddSheetOpen ? "rotate-[135deg]" : "rotate-0"
+            )}
+          />
         </button>
       )}
 

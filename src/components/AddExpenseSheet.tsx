@@ -77,8 +77,18 @@ const AddExpenseSheet: React.FC = () => {
   }, [entryCurrency, setFromNumber]);
 
   // ── Reset on open ──────────────────────────────────────────
+  const initializedOpenRef = useRef(false);
+
   useEffect(() => {
-    if (!isAddSheetOpen) return;
+    if (!isAddSheetOpen) {
+      initializedOpenRef.current = false;
+      return;
+    }
+
+    // Prevents wiping user input if the app re-renders or resumes while idle
+    if (initializedOpenRef.current) return;
+    initializedOpenRef.current = true;
+
     setErrors({});
     setAiError('');
 
@@ -167,7 +177,7 @@ const AddExpenseSheet: React.FC = () => {
     const next: Record<string, string> = {};
     if (!name.trim()) next.name = 'Nama wajib diisi';
     if (!rawValue || rawValue <= 0) {
-      next.amount = 'Harga harus lebih dari 0';
+      next.amount = 'Nominal harus lebih dari 0';
     }
     if (type === 'TRANSFER' && !destination.trim()) {
       next.destination = 'Tujuan transfer wajib diisi';
@@ -233,7 +243,7 @@ const AddExpenseSheet: React.FC = () => {
 
         {/* Tipe Transaksi Chips */}
         <div className="flex flex-col gap-1.5 pt-1">
-          <label className="text-xs font-bold uppercase tracking-wider text-brutal-black/80">
+          <label className="text-sm font-bold uppercase tracking-wider text-brutal-black/80">
             Tipe Transaksi
           </label>
           <div className="flex gap-2">
@@ -248,7 +258,7 @@ const AddExpenseSheet: React.FC = () => {
                   key={item.id}
                   type="button"
                   onClick={() => handleTypeChange(item.id as ExpenseType)}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-0.5 border-2 font-black uppercase text-xs tracking-wider transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5"
+                  className="flex-1 flex items-center justify-center py-2 px-0.5 border-2 font-black uppercase text-[13px] transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5"
                   style={{
                     borderColor: isActive ? item.color : '#555555',
                     color: isActive ? item.color : '#A09890',
@@ -256,10 +266,6 @@ const AddExpenseSheet: React.FC = () => {
                     backgroundColor: isActive ? '#1A1A1A' : 'transparent',
                   }}
                 >
-                  <span
-                    className="w-2.5 h-2.5 shrink-0"
-                    style={{ backgroundColor: isActive ? item.color : item.color }}
-                  />
                   {item.label}
                 </button>
               );
@@ -283,7 +289,7 @@ const AddExpenseSheet: React.FC = () => {
         {/* Amount + Currency pill */}
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-bold uppercase tracking-wider">
-            Harga
+            Nominal
           </label>
           <div className="flex gap-2">
             <div
@@ -302,7 +308,7 @@ const AddExpenseSheet: React.FC = () => {
                 onChange={(e) => handleChange(e.target.value)}
                 className="flex-1 bg-transparent px-2 py-2.5 font-bold text-brutal-black focus:outline-none transition-colors duration-200"
                 style={{ fontSize: '16px' }}
-                aria-label="Harga"
+                aria-label="Nominal"
               />
             </div>
             {/* Currency pill toggle */}

@@ -602,7 +602,7 @@ const DashboardPage: React.FC = () => {
                         <span className="text-sm font-black shrink-0 ml-2">{fmt(amount)}</span>
                       </div>
                       <div className="h-2 border-2 border-[#555555] overflow-hidden">
-                        <div className="h-full bg-brutal-black transition-all duration-500" style={{ width: `${pct}%` }} />
+                        <div className="h-full bg-brutal-yellow transition-all duration-500" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                     <span className="text-xs font-black text-brutal-black/50 shrink-0 w-8 text-right">{pct}%</span>

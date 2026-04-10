@@ -115,12 +115,12 @@ const QUICK_PROMPTS: Array<{ intent: InsightIntent; label: string; icon: React.R
   { intent: 'deep_analysis', label: 'Analisis AI', icon: <Bot size={14} strokeWidth={2.5} /> },
 ];
 
-const SCOPE_OPTIONS: Array<{ type: InsightScopeType; label: string }> = [
-  { type: 'month', label: 'Bulan aktif' },
-  { type: 'pick_month', label: 'Pilih bulan' },
-  { type: 'range', label: 'Rentang' },
-  { type: 'year', label: 'Tahun' },
-  { type: 'all', label: 'Semua' },
+const SCOPE_OPTIONS: Array<{ type: InsightScopeType; label: string; color: string }> = [
+  { type: 'month', label: 'Bulan aktif', color: '#B8F55A' },
+  { type: 'pick_month', label: 'Pilih bulan', color: '#B8F55A' },
+  { type: 'range', label: 'Rentang', color: '#B8F55A' },
+  { type: 'year', label: 'Tahun', color: '#B8F55A' },
+  { type: 'all', label: 'Semua', color: '#B8F55A' },
 ];
 
 const MONTH_NAMES = [
@@ -712,12 +712,6 @@ const HistoryPage: React.FC = () => {
                   backgroundColor: isActive ? '#1A1A1A' : 'transparent',
                 }}
               >
-                {f.value !== 'ALL' && (
-                  <span
-                    className="w-2.5 h-2.5 shrink-0"
-                    style={{ backgroundColor: f.color }}
-                  />
-                )}
                 {f.label}
               </button>
             );
@@ -1091,48 +1085,53 @@ const HistoryPage: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-1.5">
-                {SCOPE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.type}
-                    type="button"
-                    onClick={() => {
-                      if (opt.type === 'month') {
-                        setInsightScope({ type: 'month', label: monthLabelStr });
-                      } else if (opt.type === 'pick_month') {
-                        setInsightScope({
-                          type: 'pick_month',
-                          label: '',
-                          year: viewYear,
-                          month: viewMonth,
-                        });
-                      } else if (opt.type === 'range') {
-                        setInsightScope({
-                          type: 'range',
-                          label: '',
-                          fromYear: viewYear,
-                          fromMonth: 1,
-                          toYear: viewYear,
-                          toMonth: viewMonth,
-                        });
-                      } else if (opt.type === 'year') {
-                        setInsightScope({
-                          type: 'year',
-                          label: '',
-                          year: viewYear,
-                        });
-                      } else {
-                        setInsightScope({ type: 'all', label: 'Semua' });
-                      }
-                    }}
-                    className={`px-2 py-1.5 text-[10px] font-black uppercase tracking-wider border-2 transition-all duration-150 ${opt.type === 'all' ? 'col-span-2' : ''}`}
-                    style={insightScope.type === opt.type
-                      ? { borderColor: '#B8F55A', backgroundColor: '#B8F55A', color: '#1A1A1A' }
-                      : { borderColor: '#3A3A3A', backgroundColor: '#222222' }
-                    }
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+                {SCOPE_OPTIONS.map((opt) => {
+                  const isActive = insightScope.type === opt.type;
+                  return (
+                    <button
+                      key={opt.type}
+                      type="button"
+                      onClick={() => {
+                        if (opt.type === 'month') {
+                          setInsightScope({ type: 'month', label: monthLabelStr });
+                        } else if (opt.type === 'pick_month') {
+                          setInsightScope({
+                            type: 'pick_month',
+                            label: '',
+                            year: viewYear,
+                            month: viewMonth,
+                          });
+                        } else if (opt.type === 'range') {
+                          setInsightScope({
+                            type: 'range',
+                            label: '',
+                            fromYear: viewYear,
+                            fromMonth: 1,
+                            toYear: viewYear,
+                            toMonth: viewMonth,
+                          });
+                        } else if (opt.type === 'year') {
+                          setInsightScope({
+                            type: 'year',
+                            label: '',
+                            year: viewYear,
+                          });
+                        } else {
+                          setInsightScope({ type: 'all', label: 'Semua' });
+                        }
+                      }}
+                      className={`px-2 py-2 flex items-center justify-center text-[10px] font-black uppercase tracking-wider border-2 transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5 ${opt.type === 'all' ? 'col-span-2' : ''}`}
+                      style={{
+                        borderColor: isActive ? opt.color : '#555555',
+                        color: isActive ? opt.color : '#A09890',
+                        boxShadow: isActive ? `3px 3px 0px 0px ${opt.color}` : 'none',
+                        backgroundColor: isActive ? '#1A1A1A' : 'transparent',
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Conditional pickers */}

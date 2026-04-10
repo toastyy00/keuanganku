@@ -61,7 +61,7 @@ const AddRecurringSheet: React.FC<AddRecurringSheetProps> = ({ isOpen, onClose, 
   const validate = () => {
     const next: Record<string, string> = {};
     if (!form.name.trim()) next.name = 'Nama wajib diisi';
-    if (!amountInput.rawValue || amountInput.rawValue <= 0) next.amount = 'Harga harus lebih dari 0';
+    if (!amountInput.rawValue || amountInput.rawValue <= 0) next.amount = 'Nominal harus lebih dari 0';
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -126,7 +126,7 @@ const AddRecurringSheet: React.FC<AddRecurringSheetProps> = ({ isOpen, onClose, 
         {/* Amount with live formatting */}
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-bold uppercase tracking-wider">
-            Harga ({currency})
+            Nominal ({currency})
           </label>
           <div className={`flex border-2 border-[#555555] ${errors.amount ? 'border-red-500' : ''}`}>
             <span className="flex items-center pl-3 text-sm font-bold text-brutal-black/60 shrink-0">
