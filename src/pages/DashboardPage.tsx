@@ -397,7 +397,7 @@ const DashboardPage: React.FC = () => {
           <h2
             key={monthPrefix}
             className={`text-sm font-black uppercase tracking-wider text-brutal-black/60 transition-all duration-150 page-fade-in ${!isCurrentMonth ? 'cursor-pointer underline underline-offset-2 hover:text-brutal-black' : ''}`}
-            onClick={(e) => { 
+            onClick={() => { 
                // Prevent triggering reset if the user was just swiping
                if (dateDragging) return;
                if (!isCurrentMonth) resetToCurrentMonth(); 
