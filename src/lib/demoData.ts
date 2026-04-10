@@ -1,7 +1,7 @@
-﻿import type { Category, Expense, RecurringTemplate } from '../types';
+import type { Category, Expense, RecurringTemplate } from '../types';
 import { DEFAULT_CATEGORIES } from './categories';
 
-const DEMO_SEEDED_KEY = 'keuanganku-demo-seeded-v1';
+// Seed key is now dynamically generated based on the current month to ensure fresh demo data
 
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -88,7 +88,19 @@ function createDemoRecurring(): RecurringTemplate[] {
 
 export function seedDemoData(): void {
   if (typeof window === 'undefined') return;
-  if (localStorage.getItem(DEMO_SEEDED_KEY) === 'true') return;
+  
+  const now = new Date();
+  const currentMonthKey = `keuanganku-demo-seeded-${now.getFullYear()}-${now.getMonth()}`;
+  
+  if (localStorage.getItem(currentMonthKey) === 'true') return;
+
+  // Clear previous demo data so new data for current month is generated cleanly
+  localStorage.removeItem('expenses');
+  localStorage.removeItem('categories');
+  localStorage.removeItem('recurring');
+
+  // Also remove the old version key if it exists
+  localStorage.removeItem('keuanganku-demo-seeded-v1');
 
   if (!localStorage.getItem('expenses')) {
     localStorage.setItem('expenses', JSON.stringify(createDemoExpenses()));
@@ -100,5 +112,5 @@ export function seedDemoData(): void {
     localStorage.setItem('recurring', JSON.stringify(createDemoRecurring()));
   }
 
-  localStorage.setItem(DEMO_SEEDED_KEY, 'true');
+  localStorage.setItem(currentMonthKey, 'true');
 }
