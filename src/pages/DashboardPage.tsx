@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 import { Link } from 'react-router-dom';
-import { TrendingUp, TrendingDown, Minus, ChevronRight, CalendarClock } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, CalendarClock } from 'lucide-react';
 import { Card, CardBody } from '../components/ui/Card';
 import NumberFlow, { continuous } from '@number-flow/react';
 import { Badge } from '../components/ui/Badge';
@@ -234,7 +234,39 @@ const DashboardPage: React.FC = () => {
 
   const { expenses, categories, isLoading, loadExpenses } =
     useExpenseStore();
-  const { activeYear: year, activeMonth: month, resetToCurrentMonth } = useUIStore();
+  const { activeYear: year, activeMonth: month, resetToCurrentMonth, prevMonth, nextMonth } = useUIStore();
+
+  // Swipe Handlers for Month Header
+  const headerStartX = useRef<number | null>(null);
+  const [dateDragging, setDateDragging] = useState(false);
+  
+  const onHeaderTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
+    headerStartX.current = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    setDateDragging(false);
+  };
+  
+  const onHeaderTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
+    if (headerStartX.current !== null) {
+      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+      if (Math.abs(clientX - headerStartX.current) > 5) {
+        setDateDragging(true);
+      }
+    }
+  };
+
+  const onHeaderTouchEnd = (e: React.TouchEvent | React.MouseEvent) => {
+    if (headerStartX.current === null) return;
+    const endX = 'changedTouches' in e ? e.changedTouches[0].clientX : e.clientX;
+    const dx = endX - headerStartX.current;
+    
+    if (Math.abs(dx) > 40) {
+      if (dx > 0) prevMonth();
+      else nextMonth();
+      haptic();
+    }
+    headerStartX.current = null;
+    setDateDragging(false);
+  };
 
   // Dashboard display currency (saved to localStorage, independent of global default)
   const [dashCurrency, setDashCurrency] = useState<Currency>(() => {
@@ -350,14 +382,31 @@ const DashboardPage: React.FC = () => {
   return (
     <div className="section-pad space-y-5 max-w-2xl mx-auto">
       {/* Header */}
-      <div className="flex items-baseline justify-between">
-        <h2
-          className={`text-sm font-black uppercase tracking-wider text-brutal-black/60 transition-all duration-150 ${!isCurrentMonth ? 'cursor-pointer underline underline-offset-2 hover:text-brutal-black' : ''}`}
-          onClick={() => { if (!isCurrentMonth) resetToCurrentMonth(); }}
-          title={!isCurrentMonth ? 'Kembali ke bulan ini' : undefined}
-        >
-          {monthLabel(year, month)}
-        </h2>
+      <div 
+        className="flex items-center justify-between py-1 -mt-1 -mx-2 px-2 select-none"
+        onTouchStart={onHeaderTouchStart}
+        onTouchMove={onHeaderTouchMove}
+        onTouchEnd={onHeaderTouchEnd}
+        onMouseDown={onHeaderTouchStart}
+        onMouseMove={onHeaderTouchMove}
+        onMouseUp={onHeaderTouchEnd}
+        onMouseLeave={onHeaderTouchEnd}
+        style={{ cursor: dateDragging ? 'grabbing' : 'grab' }}
+      >
+        <div className="flex items-center gap-2">
+          <h2
+            key={monthPrefix}
+            className={`text-sm font-black uppercase tracking-wider text-brutal-black/60 transition-all duration-150 page-fade-in ${!isCurrentMonth ? 'cursor-pointer underline underline-offset-2 hover:text-brutal-black' : ''}`}
+            onClick={(e) => { 
+               // Prevent triggering reset if the user was just swiping
+               if (dateDragging) return;
+               if (!isCurrentMonth) resetToCurrentMonth(); 
+            }}
+            title={!isCurrentMonth ? 'Kembali ke bulan ini' : undefined}
+          >
+            {monthLabel(year, month)}
+          </h2>
+        </div>
       </div>
 
       {/* ── Stats Carousel (Total Bulan Ini + vs Bulan Lalu) ── */}
@@ -624,7 +673,7 @@ const DashboardPage: React.FC = () => {
             to="/history"
             className="text-xs font-black uppercase tracking-wider text-brutal-black flex items-center gap-1 hover:underline"
           >
-            Lihat Semua <ChevronRight size={12} strokeWidth={2.5} />
+            Lihat Semua →
           </Link>
         </div>
 
