@@ -6,6 +6,7 @@ import {
   SupabaseExpenseRepository,
 } from './repository';
 import { getSupabaseClient } from './supabase';
+import { getLocalISODate } from './utils';
 
 // ============================================================
 //  SYNC — Push unsynced localStorage expenses to Supabase
@@ -18,7 +19,7 @@ export interface SyncResult {
 }
 
 type ImportedCategory = Partial<Category> & { user_id?: string };
-type ImportedRecurring = Partial<RecurringTemplate> & { user_id?: string };
+type ImportedRecurring = Partial<RecurringTemplate> & { user_id?: string; frequency?: string };
 type ImportedExpense = Partial<Expense> & { user_id?: string };
 
 /**
@@ -94,7 +95,7 @@ export function exportJSON(data: { expenses: Expense[]; categories: Category[]; 
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `keuanganku-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  anchor.download = `keuanganku-backup-${getLocalISODate()}.json`;
   document.body.appendChild(anchor);
   anchor.click();
   document.body.removeChild(anchor);
@@ -168,7 +169,7 @@ export async function importJSON(raw: string): Promise<BackupData> {
           is_default: false,
         }));
       if (catsToInsert.length > 0) {
-        await client.from('categories').upsert(catsToInsert, { onConflict: 'slug' });
+        await client.from('categories').upsert(catsToInsert, { onConflict: 'slug,user_id' });
       }
     }
 
@@ -184,6 +185,7 @@ export async function importJSON(raw: string): Promise<BackupData> {
           currency: r.currency === 'USD' ? 'USD' : 'IDR',
           category: typeof r.category === 'string' ? r.category : '',
           type: r.type === 'WANT' || r.type === 'TRANSFER' ? r.type : 'NEED',
+          frequency: r.frequency === 'weekly' ? 'weekly' : 'monthly',
           schedule_detail: typeof r.schedule_detail === 'string' ? r.schedule_detail : undefined,
           note: typeof r.note === 'string' ? r.note : undefined,
           last_logged: typeof r.last_logged === 'string' ? r.last_logged : undefined,
@@ -208,7 +210,7 @@ export async function importJSON(raw: string): Promise<BackupData> {
           category: typeof e.category === 'string' ? e.category : '',
           type: e.type === 'WANT' || e.type === 'TRANSFER' ? e.type : 'NEED',
           destination: typeof e.destination === 'string' ? e.destination : undefined,
-          date: typeof e.date === 'string' ? e.date : new Date().toISOString().slice(0, 10),
+          date: typeof e.date === 'string' ? e.date : getLocalISODate(),
           note: typeof e.note === 'string' ? e.note : undefined,
           is_recurring: typeof e.is_recurring === 'boolean' ? e.is_recurring : false,
           recurring_id: typeof e.recurring_id === 'string' ? e.recurring_id : undefined,

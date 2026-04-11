@@ -45,13 +45,21 @@ export function formatAmount(amount: number, currency: Currency): string {
 //  DATE UTILITIES
 // ============================================================
 
+export function getLocalISODate(date: Date = new Date()): string {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  return `${year}-${month}-${day}`;
+}
+
 export function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return getLocalISODate();
 }
 
 export function friendlyDate(isoDate: string, locale = 'id-ID'): string {
   const today = todayISO();
-  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const yesterday = getLocalISODate(new Date(Date.now() - 86_400_000));
   if (isoDate === today) return 'Hari ini';
   if (isoDate === yesterday) return 'Kemarin';
   return new Intl.DateTimeFormat(locale, {

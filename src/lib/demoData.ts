@@ -1,10 +1,11 @@
 import type { Category, Expense, RecurringTemplate } from '../types';
 import { DEFAULT_CATEGORIES } from './categories';
+import { getLocalISODate } from './utils';
 
 // Seed key is now dynamically generated based on the current month to ensure fresh demo data
 
 function isoDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  return getLocalISODate(date);
 }
 
 function isoNow(date: Date): string {

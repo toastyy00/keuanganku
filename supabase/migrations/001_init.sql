@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 --  KEUANGANKU - Supabase Database Migration
 --  001_init.sql (AUTH MODE - per-user data with RLS)
 --
@@ -25,6 +25,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE public.profiles (
   id            UUID        PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   display_name  TEXT        NOT NULL DEFAULT '',
+  is_admin      BOOLEAN     NOT NULL DEFAULT FALSE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -219,10 +220,61 @@ CREATE TRIGGER on_auth_user_created
   EXECUTE FUNCTION public.handle_new_user();
 
 -- ============================================================
+--  ADMIN FUNCTIONS
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.get_pending_users()
+RETURNS TABLE (
+  id UUID,
+  email TEXT,
+  display_name TEXT
+) AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE public.profiles.id = auth.uid() AND public.profiles.is_admin = true
+  ) THEN
+    RAISE EXCEPTION 'Access denied. You are not an admin.';
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    u.id,
+    u.email::TEXT,
+    (u.raw_user_meta_data->>'display_name')::TEXT as display_name
+  FROM auth.users u
+  WHERE (u.raw_user_meta_data->>'is_approved')::boolean = false
+     OR u.raw_user_meta_data->>'is_approved' = 'false'
+     OR u.raw_user_meta_data->>'is_approved' IS NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.approve_user(target_user_id UUID)
+RETURNS void AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE public.profiles.id = auth.uid() AND public.profiles.is_admin = true
+  ) THEN
+    RAISE EXCEPTION 'Access denied. You are not an admin.';
+  END IF;
+
+  UPDATE auth.users
+  SET raw_user_meta_data = jsonb_set(
+        COALESCE(raw_user_meta_data, '{}'::jsonb),
+        '{is_approved}',
+        'true'::jsonb
+      )
+  WHERE id = target_user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ============================================================
 --  COMMENTS
 -- ============================================================
 
 COMMENT ON TABLE public.profiles           IS 'One profile per authenticated user.';
+COMMENT ON COLUMN public.profiles.is_admin IS 'Set to TRUE manually in dashboard to grant admin privileges.';
 COMMENT ON TABLE public.expenses           IS 'Expense entries scoped to auth.uid().';
 COMMENT ON TABLE public.recurring_templates IS 'Recurring expense templates scoped to auth.uid().';
 COMMENT ON TABLE public.categories         IS 'Expense categories scoped to auth.uid(). Seeded on register.';

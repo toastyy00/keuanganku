@@ -1,94 +1,86 @@
-import React, { useState } from 'react';
-import { createClient, type User } from '@supabase/supabase-js';
+import { useState, useEffect } from 'react';
 import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
 import { ShieldCheck, UserCheck, XCircle } from 'lucide-react';
-import { appConfig } from '../lib/appConfig';
+import { getSupabaseClient } from '../lib/supabase';
+import { useAuthStore } from '../store/useAuthStore';
+import { useNavigate } from 'react-router-dom';
 
 // ============================================================
 //  ADMIN APPROVAL PAGE
-//  Uses localStorage to save the Service Role Key safely
-//  on your browser ONLY. Tidak dibundel ke publik!
+//  Secured via Supabase RPC and is_admin flag in profiles table
 // ============================================================
 
-const supabaseUrl = appConfig.supabaseUrl ?? '';
-type PendingUser = Pick<User, 'id' | 'email' | 'user_metadata'>;
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error
-    ? error.message
-    : 'Gagal terhubung. Pastikan Service Role Key benar.';
+interface PendingUser {
+  id: string;
+  email: string;
+  display_name: string;
 }
 
 export default function AdminApprovalPage() {
-  const [serviceKey, setServiceKey] = useState(() => localStorage.getItem('keauanganku_admin_key') || '');
   const [users, setUsers] = useState<PendingUser[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-  const [isConnected, setIsConnected] = useState(false);
+  
+  const { session } = useAuthStore();
+  const navigate = useNavigate();
 
-  const connectAdmin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setSuccessMsg('');
-
-    if (!serviceKey) {
-      setError('Masukkan Service Role Key');
-      return;
-    }
-
+  const loadPendingUsers = async () => {
     setIsLoading(true);
+    setError('');
+    
     try {
-      // Simpan key ke localStorage agar tidak repot ketik ulang nanti
-      localStorage.setItem('keauanganku_admin_key', serviceKey);
+      const client = getSupabaseClient();
+      if (!client) throw new Error('Supabase client tidak tersedia.');
 
-      const adminClient = createClient(supabaseUrl, serviceKey, {
-        auth: { autoRefreshToken: false, persistSession: false },
-      });
+      const { data, error: fetchErr } = await client.rpc('get_pending_users');
+      
+      if (fetchErr) {
+        throw new Error(fetchErr.message || 'Gagal memuat daftar user. Apakah Anda Admin?');
+      }
 
-      // Uji coba ambil user
-      const { data, error: fetchErr } = await adminClient.auth.admin.listUsers();
-      if (fetchErr) throw fetchErr;
-
-      setIsConnected(true);
-
-      // Filter yang belum di-approve
-      const pending = data.users.filter(
-        (u) => u.user_metadata?.is_approved === false
-      );
-      setUsers(pending);
+      setUsers(data || []);
     } catch (err) {
-      setError(getErrorMessage(err));
-      setIsConnected(false);
+      setError(err instanceof Error ? err.message : 'Terjadi kesalahan tidak dikenal.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const approveUser = async (userId: string, currentMeta: PendingUser['user_metadata']) => {
+  useEffect(() => {
+    if (!session) {
+      navigate('/login');
+      return;
+    }
+    loadPendingUsers();
+  }, [session, navigate]);
+
+  const approveUser = async (userId: string) => {
     setError('');
     setSuccessMsg('');
     setIsLoading(true);
     try {
-      const adminClient = createClient(supabaseUrl, serviceKey, {
-        auth: { autoRefreshToken: false, persistSession: false },
+      const client = getSupabaseClient();
+      if (!client) throw new Error('Supabase client tidak tersedia.');
+
+      const { error: updateErr } = await client.rpc('approve_user', {
+        target_user_id: userId
       });
 
-      const { error: updateErr } = await adminClient.auth.admin.updateUserById(userId, {
-        user_metadata: { ...currentMeta, is_approved: true },
-      });
-
-      if (updateErr) throw updateErr;
+      if (updateErr) {
+        throw new Error(updateErr.message || 'Gagal menyetujui user.');
+      }
 
       setSuccessMsg('User berhasil disetujui!');
       setUsers((prev) => prev.filter((u) => u.id !== userId));
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(err instanceof Error ? err.message : 'Terjadi kesalahan tidak dikenal.');
     } finally {
       setIsLoading(false);
     }
   };
+
+  if (!session) return null;
 
   return (
     <div className="min-h-dvh flex flex-col items-center p-4 py-8" style={{ backgroundColor: '#1A1A1A' }}>
@@ -118,69 +110,49 @@ export default function AdminApprovalPage() {
           </div>
         )}
 
-        {/* Connection Form */}
-        {!isConnected ? (
-          <form onSubmit={connectAdmin} className="border-3 border-[#555555] p-5 space-y-4" style={{ backgroundColor: '#242424' }}>
-            <p className="text-xs text-[#A09890] mb-4 font-medium leading-relaxed">
-              Silakan masukkan "service_role" key. Key ini akan disimpan secara otomatis di <strong className="text-[#F5F0E8]">Browser Anda</strong>, jadi Anda tidak perlu mengetiknya lagi besok-besok.
-            </p>
-            <Input
-              id="service-key"
-              type="password"
-              label="Service Role Key"
-              placeholder="eyJhbG..."
-              value={serviceKey}
-              onChange={(e) => setServiceKey(e.target.value)}
-              required
-            />
-            <Button type="submit" loading={isLoading} fullWidth>
-              Koneksikan & Ambil Data
-            </Button>
-          </form>
-        ) : (
-          /* User List */
-          <div className="space-y-4">
-            <div className="flex justify-between items-center mb-2">
-              <h2 className="text-[#F5F0E8] font-bold">Menunggu Persetujuan ({users.length})</h2>
-              <button
-                onClick={() => {
-                  setIsConnected(false);
-                  setServiceKey('');
-                  localStorage.removeItem('keauanganku_admin_key');
-                }}
-                className="text-xs text-[#B8F55A] underline font-bold"
-              >
-                Hapus Key & Keluar
-              </button>
-            </div>
+        {/* Action Bar */}
+        <div className="flex justify-between items-center mb-2">
+          <h2 className="text-[#F5F0E8] font-bold">Menunggu Persetujuan ({users.length})</h2>
+          <button
+            onClick={loadPendingUsers}
+            className="text-xs text-[#B8F55A] underline font-bold"
+          >
+            Muat Ulang
+          </button>
+        </div>
 
-            {users.length === 0 ? (
-              <div className="border-3 border-[#555555] p-6 text-center text-[#A09890] font-medium" style={{ backgroundColor: '#242424' }}>
-                Tidak ada user yang menunggu persetujuan.
-              </div>
-            ) : (
-              users.map((user) => (
-                <div key={user.id} className="border-3 border-[#555555] p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4" style={{ backgroundColor: '#242424' }}>
-                  <div className="overflow-hidden w-full">
-                    <p className="text-[#F5F0E8] font-bold truncate">
-                      {user.user_metadata?.display_name || 'Tanpa Nama'}
-                    </p>
-                    <p className="text-xs text-[#A09890] truncate">{user.email}</p>
-                    <p className="text-[10px] text-[#A09890] mt-1">ID: {user.id.substring(0, 8)}...</p>
-                  </div>
-                  <Button
-                    onClick={() => approveUser(user.id, user.user_metadata)}
-                    loading={isLoading}
-                    className="shrink-0 w-full sm:w-auto"
-                    style={{ backgroundColor: '#4CAF50', borderColor: '#4CAF50', color: 'white' }}
-                  >
-                    Setujui Akun
-                  </Button>
+        {/* User List */}
+        <div className="space-y-4">
+          {isLoading && users.length === 0 ? (
+            <div className="border-3 border-[#555555] p-6 text-center text-[#A09890] font-medium" style={{ backgroundColor: '#242424' }}>
+              Memuat data...
+            </div>
+          ) : users.length === 0 ? (
+            <div className="border-3 border-[#555555] p-6 text-center text-[#A09890] font-medium" style={{ backgroundColor: '#242424' }}>
+              Tidak ada user yang menunggu persetujuan.
+            </div>
+          ) : (
+            users.map((user) => (
+              <div key={user.id} className="border-3 border-[#555555] p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4" style={{ backgroundColor: '#242424' }}>
+                <div className="overflow-hidden w-full">
+                  <p className="text-[#F5F0E8] font-bold truncate">
+                    {user.display_name || 'Tanpa Nama'}
+                  </p>
+                  <p className="text-xs text-[#A09890] truncate">{user.email}</p>
+                  <p className="text-[10px] text-[#A09890] mt-1">ID: {user.id.substring(0, 8)}...</p>
                 </div>
-              ))
-            )}
-          </div>
-        )}
+                <Button
+                  onClick={() => approveUser(user.id)}
+                  loading={isLoading}
+                  className="shrink-0 w-full sm:w-auto"
+                  style={{ backgroundColor: '#4CAF50', borderColor: '#4CAF50', color: 'white' }}
+                >
+                  Setujui Akun
+                </Button>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

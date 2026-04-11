@@ -18,6 +18,7 @@ interface AuthState {
   error: string | null;
   /** True while a signUp is in progress — suppresses onAuthStateChange auto-login */
   isRegistering: boolean;
+  authSubscription: { unsubscribe: () => void } | null;
 
   // ── Actions ─────────────────────────────────────────────
   loadSession: () => Promise<void>;
@@ -35,6 +36,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: false,
   error: null,
   isRegistering: false,
+  authSubscription: null,
 
   // ── loadSession ──────────────────────────────────────────
   // Called once at app startup. Reads the existing session from
@@ -71,8 +73,14 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ isInitializing: false });
     }
 
+    // Cleanup existing subscription to prevent duplicates in React StrictMode
+    const currentSub = useAuthStore.getState().authSubscription;
+    if (currentSub) {
+      currentSub.unsubscribe();
+    }
+
     // Subscribe to future auth state changes (login, logout, token refresh)
-    supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (useAuthStore.getState().isRegistering) {
         return;
       }
@@ -82,6 +90,8 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: session?.user ?? null,
       });
     });
+
+    set({ authSubscription: subscription });
   },
 
   // ── login ────────────────────────────────────────────────

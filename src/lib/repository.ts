@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { getLocalISODate } from './utils';
 import type {
   Expense,
   Category,
@@ -73,7 +74,7 @@ function isoNow(): string {
 }
 
 function isoDate(date: Date = new Date()): string {
-  return date.toISOString().slice(0, 10);
+  return getLocalISODate(date);
 }
 
 function migrateLocalCategorySlugs(): void {
