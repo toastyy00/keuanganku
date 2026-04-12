@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getLocalISODate } from './utils';
+import { readIDB, writeIDB } from './idb-storage';
 import type {
   Expense,
   Category,
@@ -55,20 +56,6 @@ const CATEGORY_NORMALIZATIONS = [
 //  HELPERS
 // ============================================================
 
-function readJSON<T>(key: string): T[] {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return [];
-    return JSON.parse(raw) as T[];
-  } catch {
-    return []
-  }
-}
-
-function writeJSON<T>(key: string, data: T[]): void {
-  localStorage.setItem(key, JSON.stringify(data));
-}
-
 function isoNow(): string {
   return new Date().toISOString();
 }
@@ -77,10 +64,10 @@ function isoDate(date: Date = new Date()): string {
   return getLocalISODate(date);
 }
 
-function migrateLocalCategorySlugs(): void {
-  let categories = readJSON<Category>(KEYS.categories);
-  let expenses = readJSON<Expense>(KEYS.expenses);
-  let recurring = readJSON<RecurringTemplate>(KEYS.recurring);
+async function migrateLocalCategorySlugs(): Promise<void> {
+  let categories = await readIDB<Category>(KEYS.categories);
+  let expenses = await readIDB<Expense>(KEYS.expenses);
+  let recurring = await readIDB<RecurringTemplate>(KEYS.recurring);
   let changed = false;
 
   for (const migration of CATEGORY_MIGRATIONS) {
@@ -129,14 +116,14 @@ function migrateLocalCategorySlugs(): void {
   }
 
   if (changed) {
-    writeJSON(KEYS.categories, categories);
-    writeJSON(KEYS.expenses, expenses);
-    writeJSON(KEYS.recurring, recurring);
+    await writeIDB(KEYS.categories, categories);
+    await writeIDB(KEYS.expenses, expenses);
+    await writeIDB(KEYS.recurring, recurring);
   }
 }
 
-function normalizeLocalCategoryMetadata(): void {
-  const categories = readJSON<Category>(KEYS.categories);
+async function normalizeLocalCategoryMetadata(): Promise<void> {
+  const categories = await readIDB<Category>(KEYS.categories);
   let changed = false;
 
   const normalized = categories.map((item) => {
@@ -153,7 +140,7 @@ function normalizeLocalCategoryMetadata(): void {
   });
 
   if (changed) {
-    writeJSON(KEYS.categories, normalized);
+    await writeIDB(KEYS.categories, normalized);
   }
 }
 
@@ -171,8 +158,8 @@ function isAuthenticated(): boolean {
 
 export async function runCategorySlugMigrations(): Promise<void> {
   if (!isAuthenticated()) {
-    migrateLocalCategorySlugs();
-    normalizeLocalCategoryMetadata();
+    await migrateLocalCategorySlugs();
+    await normalizeLocalCategoryMetadata();
     return;
   }
 
@@ -235,7 +222,7 @@ export async function runCategorySlugMigrations(): Promise<void> {
 
 export class LocalStorageExpenseRepository implements ExpenseRepository {
   async getAll(): Promise<Expense[]> {
-    const expenses = readJSON<Expense>(KEYS.expenses);
+    const expenses = await readIDB<Expense>(KEYS.expenses);
     return expenses.sort((a, b) => {
       const dateDiff = b.date.localeCompare(a.date);
       if (dateDiff !== 0) return dateDiff;
@@ -259,13 +246,13 @@ export class LocalStorageExpenseRepository implements ExpenseRepository {
       created_at: isoNow(),
       synced: false,
     };
-    const all = readJSON<Expense>(KEYS.expenses);
-    writeJSON(KEYS.expenses, [expense, ...all]);
+    const all = await readIDB<Expense>(KEYS.expenses);
+    await writeIDB(KEYS.expenses, [expense, ...all]);
     return expense;
   }
 
   async update(id: string, data: Partial<Expense>): Promise<Expense> {
-    const all = readJSON<Expense>(KEYS.expenses);
+    const all = await readIDB<Expense>(KEYS.expenses);
     const index = all.findIndex((e) => e.id === id);
     if (index === -1) {
       throw new Error(`Expense with id "${id}" not found.`);
@@ -277,13 +264,13 @@ export class LocalStorageExpenseRepository implements ExpenseRepository {
       synced: false,
     };
     all[index] = updated;
-    writeJSON(KEYS.expenses, all);
+    await writeIDB(KEYS.expenses, all);
     return updated;
   }
 
   async delete(id: string): Promise<void> {
-    const all = readJSON<Expense>(KEYS.expenses);
-    writeJSON(
+    const all = await readIDB<Expense>(KEYS.expenses);
+    await writeIDB(
       KEYS.expenses,
       all.filter((e) => e.id !== id)
     );
@@ -296,7 +283,7 @@ export class LocalStorageExpenseRepository implements ExpenseRepository {
 
 export class LocalStorageCategoryRepository implements CategoryRepository {
   async getAll(): Promise<Category[]> {
-    const stored = readJSON<Category>(KEYS.categories);
+    const stored = await readIDB<Category>(KEYS.categories);
 
     // Migration/Sync: update labels for default categories that may have changed in code
     let changed = false;
@@ -314,7 +301,7 @@ export class LocalStorageCategoryRepository implements CategoryRepository {
 
     if (missing.length > 0 || changed) {
       const merged = [...updated, ...missing];
-      writeJSON(KEYS.categories, merged);
+      await writeIDB(KEYS.categories, merged);
       return merged;
     }
 
@@ -328,7 +315,7 @@ export class LocalStorageCategoryRepository implements CategoryRepository {
       throw new Error(`Category slug "${data.slug}" already exists.`);
     }
     const newCategory: Category = { ...data, is_default: false };
-    writeJSON(KEYS.categories, [...all, newCategory]);
+    await writeIDB(KEYS.categories, [...all, newCategory]);
     return newCategory;
   }
 
@@ -338,7 +325,7 @@ export class LocalStorageCategoryRepository implements CategoryRepository {
     if (index === -1) throw new Error(`Category "${slug}" not found.`);
     const updated: Category = { ...all[index], ...data, slug };
     all[index] = updated;
-    writeJSON(KEYS.categories, all);
+    await writeIDB(KEYS.categories, all);
     return updated;
   }
 
@@ -349,7 +336,7 @@ export class LocalStorageCategoryRepository implements CategoryRepository {
     if (target.is_default) {
       throw new Error(`Default category "${slug}" cannot be deleted.`);
     }
-    writeJSON(
+    await writeIDB(
       KEYS.categories,
       all.filter((c) => c.slug !== slug)
     );
@@ -362,15 +349,15 @@ export class LocalStorageCategoryRepository implements CategoryRepository {
 
 export class LocalStorageRecurringRepository implements RecurringRepository {
   async getAll(): Promise<RecurringTemplate[]> {
-    return readJSON<RecurringTemplate>(KEYS.recurring);
+    return readIDB<RecurringTemplate>(KEYS.recurring);
   }
 
   async create(
     data: Omit<RecurringTemplate, 'id'>
   ): Promise<RecurringTemplate> {
     const template: RecurringTemplate = { ...data, id: uuidv4() };
-    const all = readJSON<RecurringTemplate>(KEYS.recurring);
-    writeJSON(KEYS.recurring, [template, ...all]);
+    const all = await readIDB<RecurringTemplate>(KEYS.recurring);
+    await writeIDB(KEYS.recurring, [template, ...all]);
     return template;
   }
 
@@ -378,18 +365,18 @@ export class LocalStorageRecurringRepository implements RecurringRepository {
     id: string,
     data: Partial<RecurringTemplate>
   ): Promise<RecurringTemplate> {
-    const all = readJSON<RecurringTemplate>(KEYS.recurring);
+    const all = await readIDB<RecurringTemplate>(KEYS.recurring);
     const index = all.findIndex((r) => r.id === id);
     if (index === -1) throw new Error(`Recurring template "${id}" not found.`);
     const updated: RecurringTemplate = { ...all[index], ...data, id };
     all[index] = updated;
-    writeJSON(KEYS.recurring, all);
+    await writeIDB(KEYS.recurring, all);
     return updated;
   }
 
   async delete(id: string): Promise<void> {
-    const all = readJSON<RecurringTemplate>(KEYS.recurring);
-    writeJSON(
+    const all = await readIDB<RecurringTemplate>(KEYS.recurring);
+    await writeIDB(
       KEYS.recurring,
       all.filter((r) => r.id !== id)
     );

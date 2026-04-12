@@ -19,6 +19,8 @@ interface BottomSheetProps {
   disableBackdropClose?: boolean;
   /** Extra class for the panel itself */
   panelClassName?: string;
+  /** Extra class for the inner content wrapper */
+  contentClassName?: string;
   children?: React.ReactNode;
 }
 
@@ -29,6 +31,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
   description,
   disableBackdropClose = false,
   panelClassName,
+  contentClassName,
   children,
 }) => {
   const [isRendered, setIsRendered] = useState(isOpen);
@@ -130,7 +133,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
         )}
 
         {/* Content */}
-        <div className="px-4 py-4">
+        <div className={cn("px-4 py-4", contentClassName)}>
           {children}
         </div>
 

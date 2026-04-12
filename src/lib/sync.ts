@@ -7,6 +7,7 @@ import {
 } from './repository';
 import { getSupabaseClient } from './supabase';
 import { getLocalISODate } from './utils';
+import { writeIDB } from './idb-storage';
 
 // ============================================================
 //  SYNC — Push unsynced localStorage expenses to Supabase
@@ -226,15 +227,15 @@ export async function importJSON(raw: string): Promise<BackupData> {
       }
     }
   } else {
-    // Write to localStorage
+    // Write to offline IndexedDB fallback
     if (Array.isArray(parsed.expenses)) {
-      localStorage.setItem('expenses', JSON.stringify(parsed.expenses));
+      await writeIDB('expenses', parsed.expenses);
     }
     if (Array.isArray(parsed.categories)) {
-      localStorage.setItem('categories', JSON.stringify(parsed.categories));
+      await writeIDB('categories', parsed.categories);
     }
     if (Array.isArray(parsed.recurring)) {
-      localStorage.setItem('recurring', JSON.stringify(parsed.recurring));
+      await writeIDB('recurring', parsed.recurring);
     }
   }
 

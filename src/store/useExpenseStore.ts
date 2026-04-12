@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Expense, Category, RecurringTemplate, Currency } from '../types';
 import {
   getExpenseRepository,
@@ -7,6 +7,7 @@ import {
   getRecurringRepository,
   runCategorySlugMigrations,
 } from '../lib/repository';
+import { idbZustandStorage } from '../lib/idb-storage';
 
 // ============================================================
 //  STORE STATE SHAPE
@@ -240,6 +241,7 @@ export const useExpenseStore = create<ExpenseStore>()(
 
     {
       name: 'keuanganku-expense-store',
+      storage: createJSONStorage(() => idbZustandStorage),
       // Only persist settings — data comes from repository on loadExpenses()
       // Persist data as a warm cache for instant render (Stale-While-Revalidate).
       // loadExpenses() will silently fetch fresh data from repository on mount.

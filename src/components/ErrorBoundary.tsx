@@ -28,7 +28,23 @@ export class ErrorBoundary extends React.Component<
     return { hasError: true, error };
   }
 
-  componentDidCatch(): void {
+  componentDidCatch(error: Error): void {
+    // Apabila error berkaitan dengan chunk gagal diload (bisa karena versi baru sudah dideploy)
+    // kita coba auto-refresh saja halamannya.
+    const isModuleLoadError =
+      error.message.includes('Failed to fetch dynamically imported module') ||
+      error.message.includes('Importing a module script failed');
+
+    if (isModuleLoadError) {
+      const lastReload = sessionStorage.getItem('last_chunk_reload');
+      const now = Date.now();
+      
+      // Auto-reload maksimum 1 kali setiap 10 detik untuk menghindari infinite reload loop
+      if (!lastReload || now - parseInt(lastReload) > 10000) {
+        sessionStorage.setItem('last_chunk_reload', now.toString());
+        window.location.reload();
+      }
+    }
   }
 
   handleReset = (): void => {

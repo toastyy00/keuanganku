@@ -141,7 +141,13 @@ const App: React.FC = () => {
       : undefined;
 
   return (
-    <Router basename={basename}>
+    <Router 
+      basename={basename}
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      }}
+    >
       <AppInner />
     </Router>
   );

@@ -885,9 +885,12 @@ const HistoryPage: React.FC = () => {
                               </button>
                             </div>
                           ) : (
-                            <button
+                            <div
+                              role="button"
+                              tabIndex={0}
                               onClick={() => setActiveExpense(e.id)}
-                              className="w-full flex items-center gap-3 p-3 text-left transition-all duration-150"
+                              onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setActiveExpense(e.id); } }}
+                              className="w-full flex items-center gap-3 p-3 text-left transition-all duration-150 cursor-pointer"
                               style={{ color: '#F5F0E8' }}
                               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(245,240,232,0.05)')}
                               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
@@ -917,13 +920,13 @@ const HistoryPage: React.FC = () => {
                                 <p className="text-sm font-black">{formatCurrency(e.amount, e.currency)}</p>
                                 <button
                                   onClick={(ev) => { ev.stopPropagation(); haptic(); setDeletingId(e.id); }}
-                                  className="p-2 text-brutal-black/40 hover:text-red-500 hover:bg-red-50 transition-colors duration-150 min-w-[36px] min-h-[36px] flex items-center justify-center"
+                                  className="p-2 text-brutal-black/40 hover:text-red-500 hover:bg-red-50 transition-colors duration-150 min-w-[36px] min-h-[36px] flex items-center justify-center cursor-pointer"
                                   aria-label={`Hapus ${e.name}`}
                                 >
                                   <Trash2 size={16} strokeWidth={2.5} />
                                 </button>
                               </div>
-                            </button>
+                            </div>
                           )}
                         </div>
                       );
@@ -950,11 +953,12 @@ const HistoryPage: React.FC = () => {
         onClose={() => setAssistantOpen(false)}
         title="Insight Pengeluaran"
         description={`Analisis untuk: ${resolvedScopeLabel}`}
-        panelClassName="history-insight-sheet sm:max-w-4xl"
+        panelClassName="history-insight-sheet flex flex-col h-[90dvh] lg:h-auto !overflow-hidden sm:max-w-4xl"
+        contentClassName="flex-1 flex flex-col min-h-0 overflow-hidden"
       >
-        <div className="space-y-4 lg:grid lg:grid-cols-[minmax(0,1.6fr)_320px] lg:gap-4 lg:space-y-0">
-          <div className="neo-card !bg-[#111111] overflow-hidden min-w-0">
-            <div className="max-h-[44vh] lg:max-h-[62vh] overflow-y-auto px-4 py-4 space-y-3">
+        <div className="flex flex-col flex-1 min-h-0 lg:grid lg:grid-cols-[minmax(0,1.6fr)_320px] gap-3 lg:gap-4 lg:space-y-0">
+          <div className="neo-card !bg-[#111111] overflow-hidden min-w-0 flex-1 flex flex-col">
+            <div className="overflow-y-auto px-4 py-4 space-y-3 flex-1 lg:max-h-[62vh]">
               {!hasMonthData && (
                 <div className="border-2 border-dashed border-[#3A3A3A] bg-[#161616] p-4">
                   <p className="text-sm font-black uppercase tracking-wide text-brutal-black/55">
@@ -1069,22 +1073,22 @@ const HistoryPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="flex flex-col gap-3 lg:gap-4 shrink-0">
             {/* ── Scope Selector ──────────────────────────── */}
-            <div className="neo-card !bg-[#181818] p-3 space-y-3">
+            <div className="neo-card !bg-[#181818] p-2.5 lg:p-3 space-y-2 lg:space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
-                  <CalendarRange size={14} strokeWidth={2.5} className="text-brutal-yellow shrink-0" />
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brutal-black/55">
+                  <CalendarRange strokeWidth={2.5} className="text-brutal-yellow shrink-0 w-[12px] h-[12px] lg:w-[14px] lg:h-[14px]" />
+                  <p className="text-[9px] lg:text-[10px] font-black uppercase tracking-[0.18em] text-brutal-black/55">
                     Scope
                   </p>
                 </div>
-                <p className="text-[10px] font-bold text-brutal-white/40 truncate text-right">
+                <p className="text-[9px] lg:text-[10px] font-bold text-brutal-white/40 truncate text-right">
                   {resolvedScopeLabel}
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="flex lg:grid lg:grid-cols-2 gap-2 lg:gap-1.5 overflow-x-auto lg:overflow-visible pb-1.5 lg:pb-0" style={{ scrollbarWidth: 'none' }}>
                 {SCOPE_OPTIONS.map((opt) => {
                   const isActive = insightScope.type === opt.type;
                   return (
@@ -1120,7 +1124,7 @@ const HistoryPage: React.FC = () => {
                           setInsightScope({ type: 'all', label: 'Semua' });
                         }
                       }}
-                      className={`px-2 py-2 flex items-center justify-center text-[10px] font-black uppercase tracking-wider border-2 transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5 ${opt.type === 'all' ? 'col-span-2' : ''}`}
+                      className={`shrink-0 lg:shrink flex items-center justify-center px-3 py-1.5 lg:px-2 lg:py-2 text-[9px] lg:text-[10px] font-black uppercase tracking-wider border-2 transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5 ${opt.type === 'all' ? 'lg:col-span-2' : ''}`}
                       style={{
                         borderColor: isActive ? opt.color : '#555555',
                         color: isActive ? opt.color : '#A09890',
@@ -1161,9 +1165,9 @@ const HistoryPage: React.FC = () => {
               )}
 
               {insightScope.type === 'range' && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-bold text-brutal-black/40">Dari</span>
+                <div className="flex lg:grid lg:grid-cols-2 items-center lg:items-start gap-1.5 lg:gap-2 flex-wrap lg:flex-nowrap">
+                  <div className="space-y-0 lg:space-y-1 flex-1 min-w-[130px] lg:min-w-0">
+                    <span className="hidden lg:block text-[10px] font-bold text-brutal-black/40">Dari</span>
                     <div className="flex gap-1.5">
                       <select
                         value={insightScope.fromMonth ?? 1}
@@ -1187,8 +1191,9 @@ const HistoryPage: React.FC = () => {
                       </select>
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-bold text-brutal-black/40">Ke</span>
+                  <span className="lg:hidden text-brutal-black/40 font-black shrink-0">-</span>
+                  <div className="space-y-0 lg:space-y-1 flex-1 min-w-[130px] lg:min-w-0">
+                    <span className="hidden lg:block text-[10px] font-bold text-brutal-black/40">Ke</span>
                     <div className="flex gap-1.5">
                       <select
                         value={insightScope.toMonth ?? 12}
@@ -1231,17 +1236,17 @@ const HistoryPage: React.FC = () => {
               )}
             </div>
 
-            <div className="grid gap-2">
+            <div className="grid grid-cols-3 lg:grid-cols-1 gap-1.5 lg:gap-2">
               {QUICK_PROMPTS.map((prompt) => (
                 <button
                   key={prompt.intent}
                   type="button"
                   onClick={() => void runInsight(prompt.intent, prompt.label)}
                   disabled={isGeneratingInsight}
-                  className="inline-flex items-center justify-start gap-2 px-3 py-3 border-2 border-[#555555] bg-[#202020] text-xs font-black uppercase tracking-wide transition-all duration-150 hover:bg-[#2D2D2D] disabled:opacity-50"
+                  className="flex flex-col lg:flex-row items-center justify-center lg:justify-start gap-1 lg:gap-2 px-1 py-2 lg:px-3 lg:py-3 border-2 border-[#555555] bg-[#202020] text-[8.5px] sm:text-[9.5px] lg:text-xs font-black uppercase tracking-wide text-center lg:text-left transition-all duration-150 hover:bg-[#2D2D2D] disabled:opacity-50"
                 >
-                  {prompt.icon}
-                  {prompt.label}
+                  <span className="shrink-0 scale-75 lg:scale-100">{prompt.icon}</span>
+                  <span className="leading-[1.1]">{prompt.label}</span>
                 </button>
               ))}
             </div>

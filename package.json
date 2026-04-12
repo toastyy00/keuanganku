@@ -13,6 +13,7 @@
   "dependencies": {
     "@number-flow/react": "^0.6.0",
     "@supabase/supabase-js": "^2.101.1",
+    "idb-keyval": "^6.2.2",
     "lucide-react": "^1.7.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -37,5 +38,16 @@
     "typescript-eslint": "^8.57.0",
     "vite": "^8.0.1",
     "vite-plugin-pwa": "^1.2.0"
+  },
+  "overrides": {
+    "vite": "$vite"
+  },
+  "resolutions": {
+    "vite": "^8.0.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "vite": "$vite"
+    }
   }
 }

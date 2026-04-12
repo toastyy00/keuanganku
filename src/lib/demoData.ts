@@ -1,6 +1,7 @@
 import type { Category, Expense, RecurringTemplate } from '../types';
 import { DEFAULT_CATEGORIES } from './categories';
 import { getLocalISODate } from './utils';
+import { writeIDB, deleteIDB, readIDB } from './idb-storage';
 
 // Seed key is now dynamically generated based on the current month to ensure fresh demo data
 
@@ -87,7 +88,7 @@ function createDemoRecurring(): RecurringTemplate[] {
   ];
 }
 
-export function seedDemoData(): void {
+export async function seedDemoData(): Promise<void> {
   if (typeof window === 'undefined') return;
   
   const now = new Date();
@@ -96,21 +97,24 @@ export function seedDemoData(): void {
   if (localStorage.getItem(currentMonthKey) === 'true') return;
 
   // Clear previous demo data so new data for current month is generated cleanly
-  localStorage.removeItem('expenses');
-  localStorage.removeItem('categories');
-  localStorage.removeItem('recurring');
+  await deleteIDB('expenses');
+  await deleteIDB('categories');
+  await deleteIDB('recurring');
 
   // Also remove the old version key if it exists
   localStorage.removeItem('keuanganku-demo-seeded-v1');
 
-  if (!localStorage.getItem('expenses')) {
-    localStorage.setItem('expenses', JSON.stringify(createDemoExpenses()));
+  const exps = await readIDB('expenses');
+  if (!exps || exps.length === 0) {
+    await writeIDB('expenses', createDemoExpenses());
   }
-  if (!localStorage.getItem('categories')) {
-    localStorage.setItem('categories', JSON.stringify(DEFAULT_CATEGORIES as Category[]));
+  const cats = await readIDB('categories');
+  if (!cats || cats.length === 0) {
+    await writeIDB('categories', DEFAULT_CATEGORIES as Category[]);
   }
-  if (!localStorage.getItem('recurring')) {
-    localStorage.setItem('recurring', JSON.stringify(createDemoRecurring()));
+  const recs = await readIDB('recurring');
+  if (!recs || recs.length === 0) {
+    await writeIDB('recurring', createDemoRecurring());
   }
 
   localStorage.setItem(currentMonthKey, 'true');
