@@ -27,6 +27,10 @@ interface ExpenseStoreState {
   isLoading: boolean;
   /** Stores the last error message from any async action, or null */
   error: string | null;
+
+  // ── Persistence ───────────────────────────────────────────
+  /** True when IDB persist hydration has completed */
+  _hasHydrated: boolean;
 }
 
 interface ExpenseStoreActions {
@@ -60,6 +64,7 @@ interface ExpenseStoreActions {
 
   // ── Internal ──────────────────────────────────────────────
   clearError: () => void;
+  setHasHydrated: (state: boolean) => void;
 }
 
 type ExpenseStore = ExpenseStoreState & ExpenseStoreActions;
@@ -78,6 +83,9 @@ export const useExpenseStore = create<ExpenseStore>()(
       currency: 'IDR',
       isLoading: false,
       error: null,
+      _hasHydrated: false,
+
+      setHasHydrated: (state) => set({ _hasHydrated: state }),
 
       // ── Load all data ──────────────────────────────────────
       loadExpenses: async () => {
@@ -251,6 +259,11 @@ export const useExpenseStore = create<ExpenseStore>()(
         expenses: state.expenses,
         recurringTemplates: state.recurringTemplates,
       }),
+      onRehydrateStorage: () => (state, error) => {
+        if (!error && state) {
+          state.setHasHydrated(true);
+        }
+      },
     }
   )
 );

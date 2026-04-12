@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 import { Link } from 'react-router-dom';
-import { TrendingUp, TrendingDown, Minus, CalendarClock } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, CalendarClock, Target } from 'lucide-react';
 import { Card, CardBody } from '../components/ui/Card';
 import NumberFlow, { continuous } from '@number-flow/react';
 import { Badge } from '../components/ui/Badge';
 import { SkeletonDashboard } from '../components/SkeletonCard';
 import { useExpenseStore } from '../store/useExpenseStore';
+import { useSettingsStore } from '../store/useSettingsStore';
 import { useUIStore } from '../store/useAppStore';
 import {
   formatCurrency,
@@ -37,10 +38,12 @@ function markSwipeHintSeen(): void {
 function SwipeCarousel({
   slides,
   accentColors,
+  variant = 'lines',
 }: {
   slides: React.ReactNode[];
   /** Per-slide indicator dot accent color. Defaults to #B8F55A */
   accentColors?: string[];
+  variant?: 'lines' | 'dots';
 }) {
   const [active, setActive] = useState(0);
   const startX = useRef<number | null>(null);
@@ -133,10 +136,9 @@ function SwipeCarousel({
         ))}
       </div>
 
-      {/* Indicator lines — minimal, inside bottom of carousel */}
-      {slides.length > 1 && (
+      {/* Indicator lines — minimal, inside bottom of carousel (variant: lines) */}
+      {slides.length > 1 && variant === 'lines' && (
         <div className="absolute bottom-0 left-0 right-0 h-[3px]">
-          {/* Base track (clickable areas) */}
           <div className="absolute inset-0 flex">
             {slides.map((_, i) => (
               <button
@@ -148,7 +150,6 @@ function SwipeCarousel({
               />
             ))}
           </div>
-          {/* Animated active sliding line */}
           <div
             className="absolute top-0 left-0 h-full transition-transform duration-500 ease-out z-10 pointer-events-none"
             style={{
@@ -157,6 +158,25 @@ function SwipeCarousel({
               backgroundColor: accent
             }}
           />
+        </div>
+      )}
+
+      {/* Indicator dots — floating bottom-center, absolutely no height added (variant: dots) */}
+      {slides.length > 1 && variant === 'dots' && (
+        <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10">
+          {slides.map((_, i) => (
+            <button
+              key={i}
+              onClick={(e) => { e.stopPropagation(); goTo(i); }}
+              className="p-1 -m-1" // extend clickable area
+              aria-label={`Go to slide ${i + 1}`}
+            >
+              <div
+                className={`h-1 rounded-full transition-all duration-300 ease-out ${active === i ? 'w-3 opacity-100' : 'w-1 opacity-30 bg-brutal-black'}`}
+                style={active === i && accentColors?.[i] ? { backgroundColor: accentColors[i] } : undefined}
+              />
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -235,6 +255,7 @@ const DashboardPage: React.FC = () => {
   const { expenses, categories, isLoading, loadExpenses } =
     useExpenseStore();
   const { activeYear: year, activeMonth: month, resetToCurrentMonth, prevMonth, nextMonth } = useUIStore();
+  const { personalMonthlyBudget, familySupportMonthlyBudget } = useSettingsStore();
 
   // Swipe Handlers for Month Header
   const headerStartX = useRef<number | null>(null);
@@ -340,7 +361,9 @@ const DashboardPage: React.FC = () => {
 
   // ── Needs vs Wants split ──────────────────────────────────
   const split = useMemo(() => calcNeedsWantsSplit(
-    monthExpenses.map((e) => ({ ...e, amount: toDisplay(e) }))
+    monthExpenses
+      .filter((e) => e.category !== 'keluarga')
+      .map((e) => ({ ...e, amount: toDisplay(e) }))
   ), [monthExpenses, toDisplay]);
 
   // ── Bulan Ini vs Bulan Lalu ───────────────────────────────
@@ -374,6 +397,37 @@ const DashboardPage: React.FC = () => {
 
   // ── Recent 5 transactions (all types) ────────────────────
   const recentExpenses = useMemo(() => expenses.slice(0, 5), [expenses]);
+
+  // ── Budget calculations ───────────────────────────────────
+  const familySupportSpent = useMemo(
+    () => spendingExpenses
+      .filter((e) => e.category === 'keluarga')
+      .reduce((s, e) => s + toDisplay(e), 0),
+    [spendingExpenses, toDisplay]
+  );
+
+  // personalSpent excludes keluarga category (tracked separately)
+  const personalSpent = monthTotal - familySupportSpent;
+
+  const budgetSpentPct = personalMonthlyBudget > 0
+    ? Math.round((personalSpent / personalMonthlyBudget) * 100)
+    : 0;
+  const budgetRemaining = personalMonthlyBudget - personalSpent;
+  const familySpentPct = familySupportMonthlyBudget > 0
+    ? Math.round((familySupportSpent / familySupportMonthlyBudget) * 100)
+    : 0;
+  const familyRemaining = familySupportMonthlyBudget - familySupportSpent;
+
+  function budgetColor(pct: number) {
+    if (pct >= 100) return { text: 'text-red-400', bar: '#EF4444', swatch: 'bg-red-400' };
+    if (pct >= 90)  return { text: 'text-orange-400', bar: '#FB923C', swatch: 'bg-orange-400' };
+    if (pct >= 70)  return { text: 'text-yellow-400', bar: '#FACC15', swatch: 'bg-yellow-400' };
+    return { text: 'text-green-400', bar: '#4ADE80', swatch: 'bg-green-400' };
+  }
+  const bc = budgetColor(budgetSpentPct);
+  const fc = budgetColor(familySpentPct);
+
+  const hasBudget = personalMonthlyBudget > 0 || familySupportMonthlyBudget > 0;
 
 
 
@@ -585,47 +639,118 @@ const DashboardPage: React.FC = () => {
         </Card>
       )}
 
-      {/* ── Needs vs Wants Split Bar ──────────────────────── */}
-      <Card>
-        <CardBody>
-          <p className="text-xs font-black uppercase tracking-wider mb-3 text-brutal-black/60">
-            Needs vs Wants
-          </p>
-          <div className="flex h-6 border-2 border-[#555555] overflow-hidden mb-3">
-            {split.needsPct > 0 && (
-              <div className="bg-blue-500 transition-all duration-500" style={{ width: `${split.needsPct}%` }} />
-            )}
-            {split.wantsPct > 0 && (
-              <div className="bg-pink-500 transition-all duration-500" style={{ width: `${split.wantsPct}%` }} />
-            )}
-            {split.needs === 0 && split.wants === 0 && (
-              <div className="flex-1 bg-brutal-black/10 flex items-center justify-center">
-                <span className="text-[10px] font-bold text-brutal-black/40 uppercase">
-                  Belum ada pengeluaran bulan ini
-                </span>
+      {/* ── Needs vs Wants + Budget Carousel ─────────────── */}
+      <div className="neo-card overflow-hidden !p-0">
+        <SwipeCarousel
+          variant="dots"
+          accentColors={hasBudget ? ['#3B82F6', '#4ADE80'] : ['#3B82F6']}
+          slides={[
+            /* ── Slide 1: Needs vs Wants ── */
+            <div className="px-4 py-3">
+              <p className="text-xs font-black uppercase tracking-wider mb-3 text-brutal-black/60">
+                Needs vs Wants
+              </p>
+              <div className="flex h-6 border-2 border-[#555555] overflow-hidden mb-3">
+                {split.needsPct > 0 && (
+                  <div className="bg-blue-500 transition-all duration-500" style={{ width: `${split.needsPct}%` }} />
+                )}
+                {split.wantsPct > 0 && (
+                  <div className="bg-pink-500 transition-all duration-500" style={{ width: `${split.wantsPct}%` }} />
+                )}
+                {split.needs === 0 && split.wants === 0 && (
+                  <div className="flex-1 bg-brutal-black/10 flex items-center justify-center">
+                    <span className="text-[10px] font-bold text-brutal-black/40 uppercase">
+                      Belum ada pengeluaran bulan ini
+                    </span>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <div className="flex justify-between">
-            <div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-blue-500 border-2 border-[#555555]" />
-                <span className="text-xs font-bold uppercase">Need</span>
-                <span className="text-xs font-black">{split.needsPct}%</span>
+              <div className="flex justify-between">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 bg-blue-500 border-2 border-[#555555]" />
+                    <span className="text-xs font-bold uppercase">Need</span>
+                    <span className="text-xs font-black">{split.needsPct}%</span>
+                  </div>
+                  <p className="text-sm font-bold mt-0.5">{fmt(split.needs)}</p>
+                </div>
+                <div className="text-right">
+                  <div className="flex items-center gap-1.5 justify-end">
+                    <span className="text-xs font-black">{split.wantsPct}%</span>
+                    <span className="text-xs font-bold uppercase">Want</span>
+                    <div className="w-3 h-3 bg-pink-500 border-2 border-[#555555]" />
+                  </div>
+                  <p className="text-sm font-bold mt-0.5">{fmt(split.wants)}</p>
+                </div>
               </div>
-              <p className="text-sm font-bold mt-0.5">{fmt(split.needs)}</p>
-            </div>
-            <div className="text-right">
-              <div className="flex items-center gap-1.5 justify-end">
-                <span className="text-xs font-black">{split.wantsPct}%</span>
-                <span className="text-xs font-bold uppercase">Want</span>
-                <div className="w-3 h-3 bg-pink-500 border-2 border-[#555555]" />
+            </div>,
+
+            /* ── Slide 2: Budget Bulanan — mirrors Need vs Want layout exactly ── */
+            ...( hasBudget ? [
+              <div className="px-4 py-3">
+                {/* Title row — identical height to "Needs vs Wants" label */}
+                <p className="text-xs font-black uppercase tracking-wider mb-3 text-brutal-black/60 flex items-center gap-1.5">
+                  <Target size={11} strokeWidth={2.5} className="shrink-0" />
+                  Budget Bulanan
+                </p>
+
+                {/* Progress bars — 2 columns if both exist, 1 column if solo */}
+                <div className={`grid ${personalMonthlyBudget > 0 && familySupportMonthlyBudget > 0 ? 'grid-cols-2 gap-4' : 'grid-cols-1'} min-h-[72px]`}>
+                  
+                  {/* Left/Only: Personal Budget */}
+                  {personalMonthlyBudget > 0 && (
+                    <div className="flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <div className={`w-2 h-2 border border-[#555555] ${bc.swatch}`} />
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-brutal-black/60">Pribadi</span>
+                          </div>
+                          <span className={`text-[11px] font-black ${bc.text}`}>{budgetSpentPct}%</span>
+                        </div>
+                        <div className="h-2 border-2 border-[#555555] overflow-hidden bg-[#111111]">
+                          <div className="h-full transition-all duration-700 ease-out" style={{ width: `${Math.min(100, budgetSpentPct)}%`, backgroundColor: bc.bar }} />
+                        </div>
+                      </div>
+                      <div className="mt-2">
+                        <p className="text-sm font-bold leading-none">{fmt(personalSpent)}</p>
+                        <p className="text-[10px] font-medium text-brutal-black/40 mt-1">
+                          {budgetRemaining >= 0 ? `sisa ${fmt(budgetRemaining)}` : `lebih ${fmt(Math.abs(budgetRemaining))}`}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Right: Keluarga Budget */}
+                  {familySupportMonthlyBudget > 0 && (
+                    <div className="flex flex-col justify-between">
+                      <div>
+                        {/* Reversed Header for Right Alignment */}
+                        <div className="flex items-center justify-between mb-1.5 flex-row-reverse">
+                          <div className="flex items-center gap-1.5 flex-row-reverse">
+                            <div className={`w-2 h-2 border border-[#555555] ${fc.swatch}`} />
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-brutal-black/60">Keluarga</span>
+                          </div>
+                          <span className={`text-[11px] font-black ${fc.text}`}>{familySpentPct}%</span>
+                        </div>
+                        <div className="h-2 border-2 border-[#555555] overflow-hidden bg-[#111111]">
+                          <div className="h-full transition-all duration-700 ease-out float-right" style={{ width: `${Math.min(100, familySpentPct)}%`, backgroundColor: fc.bar }} />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-right">
+                        <p className="text-sm font-bold leading-none">{fmt(familySupportSpent)}</p>
+                        <p className="text-[10px] font-medium text-brutal-black/40 mt-1">
+                          {familyRemaining >= 0 ? `sisa ${fmt(familyRemaining)}` : `lebih ${fmt(Math.abs(familyRemaining))}`}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-              <p className="text-sm font-bold mt-0.5">{fmt(split.wants)}</p>
-            </div>
-          </div>
-        </CardBody>
-      </Card>
+            ] : []),
+          ]}
+        />
+      </div>
 
       {/* ── Top 3 Categories ───────────────────────────────── */}
       {topCategories.length > 0 && (

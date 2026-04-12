@@ -57,26 +57,32 @@ const AppLoadingScreen: React.FC = () => (
 const AppInner: React.FC = () => {
   const { isInitializing, session, loadSession } = useAuthStore();
   const loadExpenses = useExpenseStore((s) => s.loadExpenses);
+  const _hasHydrated = useExpenseStore((s) => s._hasHydrated);
   const demoMode = isDemoMode();
 
   // 1. Resolve auth session on mount (must happen before render)
   useEffect(() => {
     if (demoMode) {
-      seedDemoData();
+      // seedDemoData is async (writes to IndexedDB); must be awaited before
+      // loadSession triggers loadExpenses, otherwise demo data may not be
+      // ready yet and the page would render empty on first load.
+      void seedDemoData().then(() => loadSession());
+    } else {
+      loadSession();
     }
-    loadSession();
   }, [demoMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 2. Load data whenever auth state settles
+  // 2. Load data whenever auth state settles AND Zustand hydration is done
   useEffect(() => {
-    if (!isInitializing) {
+    if (!isInitializing && _hasHydrated) {
       loadExpenses();
     }
-  }, [isInitializing, session]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isInitializing, session, _hasHydrated]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Block render until we know auth state — prevents flash of login for
-  // users who are already authenticated
-  if (isInitializing) {
+  // Block render until we know auth state AND cache is hydrated
+  // This prevents a flash of login for authenticated users AND prevents
+  // overwriting IDB cache with empty state during async Zustand hydration.
+  if (isInitializing || !_hasHydrated) {
     return <AppLoadingScreen />;
   }
 

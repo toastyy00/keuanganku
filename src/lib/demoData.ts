@@ -2,6 +2,9 @@ import type { Category, Expense, RecurringTemplate } from '../types';
 import { DEFAULT_CATEGORIES } from './categories';
 import { getLocalISODate } from './utils';
 import { writeIDB, deleteIDB, readIDB } from './idb-storage';
+import { get, set, createStore } from 'idb-keyval';
+
+const appStore = createStore('keuanganku-db', 'app-store');
 
 // Seed key is now dynamically generated based on the current month to ensure fresh demo data
 
@@ -93,8 +96,10 @@ export async function seedDemoData(): Promise<void> {
   
   const now = new Date();
   const currentMonthKey = `keuanganku-demo-seeded-${now.getFullYear()}-${now.getMonth()}`;
-  
-  if (localStorage.getItem(currentMonthKey) === 'true') return;
+
+  // Use IDB for the flag so it's consistent with all other storage
+  const alreadySeeded = await get<boolean>(currentMonthKey, appStore);
+  if (alreadySeeded) return;
 
   // Clear previous demo data so new data for current month is generated cleanly
   await deleteIDB('expenses');
@@ -117,5 +122,5 @@ export async function seedDemoData(): Promise<void> {
     await writeIDB('recurring', createDemoRecurring());
   }
 
-  localStorage.setItem(currentMonthKey, 'true');
+  await set(currentMonthKey, true, appStore);
 }
