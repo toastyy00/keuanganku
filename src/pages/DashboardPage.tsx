@@ -39,11 +39,13 @@ function SwipeCarousel({
   slides,
   accentColors,
   variant = 'lines',
+  disableHint = false,
 }: {
   slides: React.ReactNode[];
   /** Per-slide indicator dot accent color. Defaults to #B8F55A */
   accentColors?: string[];
   variant?: 'lines' | 'dots';
+  disableHint?: boolean;
 }) {
   const [active, setActive] = useState(0);
   const startX = useRef<number | null>(null);
@@ -52,7 +54,7 @@ function SwipeCarousel({
   const [hintPx, setHintPx] = useState(0);
 
   useEffect(() => {
-    if (slides.length <= 1 || hasSeenSwipeHint()) return;
+    if (disableHint || slides.length <= 1 || hasSeenSwipeHint()) return;
 
     // Set to true after delay to avoid React 18 Strict Mode double-mount cancellation
     const t1 = setTimeout(() => {
@@ -114,6 +116,7 @@ function SwipeCarousel({
   return (
     <div
       className="relative overflow-hidden select-none"
+      data-no-swipe="true"
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
       onMouseDown={onMouseDown}
@@ -163,7 +166,7 @@ function SwipeCarousel({
 
       {/* Indicator dots — floating bottom-center, absolutely no height added (variant: dots) */}
       {slides.length > 1 && variant === 'dots' && (
-        <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10">
+        <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 flex items-center gap-1 z-10">
           {slides.map((_, i) => (
             <button
               key={i}
@@ -172,8 +175,8 @@ function SwipeCarousel({
               aria-label={`Go to slide ${i + 1}`}
             >
               <div
-                className={`h-1 rounded-full transition-all duration-300 ease-out ${active === i ? 'w-3 opacity-100' : 'w-1 opacity-30 bg-brutal-black'}`}
-                style={active === i && accentColors?.[i] ? { backgroundColor: accentColors[i] } : undefined}
+                className={`h-1.5 rounded-full transition-all duration-300 ease-out ${active === i ? 'w-3.5 opacity-100' : 'w-1.5 opacity-40 bg-white'}`}
+                style={active === i ? { backgroundColor: accentColors?.[i] ?? '#FFFFFF' } : undefined}
               />
             </button>
           ))}
@@ -203,6 +206,7 @@ function AnimatedNumberFlow({ value, initialDelay = 200, id, ...props }: NumberF
     return value;
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ref = useRef<any>(null);
   const [isIntersecting, setIsIntersecting] = useState(false);
 
@@ -213,6 +217,7 @@ function AnimatedNumberFlow({ value, initialDelay = 200, id, ...props }: NumberF
   useEffect(() => {
     const el = ref.current;
     if (!el) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsIntersecting(true);
       return;
     }
@@ -244,6 +249,10 @@ function AnimatedNumberFlow({ value, initialDelay = 200, id, ...props }: NumberF
 
   return <NumberFlow ref={ref} value={displayValue} {...props} />;
 }
+
+// Module-level rate cache — persists across Dashboard re-mounts so amounts
+// don't flash from the default 16000 fallback rate on each navigation return.
+let _cachedRateInfo: RateResult = { rate: 16000, isFallback: true };
 
 // ============================================================
 //  DASHBOARD PAGE
@@ -295,8 +304,8 @@ const DashboardPage: React.FC = () => {
     return (saved === 'USD' ? 'USD' : 'IDR') as Currency;
   });
 
-  // Exchange rate state
-  const [rateInfo, setRateInfo] = useState<RateResult>({ rate: 16000, isFallback: true });
+  // Exchange rate state — init from cache to avoid flash on re-mount
+  const [rateInfo, setRateInfo] = useState<RateResult>(() => _cachedRateInfo);
 
   const handleDashCurrencyToggle = () => {
     haptic();
@@ -308,7 +317,10 @@ const DashboardPage: React.FC = () => {
   // Load data + exchange rate on mount
   useEffect(() => {
     loadExpenses();
-    getExchangeRate().then(setRateInfo);
+    getExchangeRate().then((res) => {
+      _cachedRateInfo = res;
+      setRateInfo(res);
+    });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Conversion helper
@@ -379,26 +391,7 @@ const DashboardPage: React.FC = () => {
     : null;
   const trend: 'up' | 'down' | 'same' = delta === null || delta === 0 ? 'same' : delta > 0 ? 'up' : 'down';
 
-  // ── Top 3 categories (NEED + WANT only) ──────────────────
-  const topCategories = useMemo(() => {
-    const totals: Record<string, number> = {};
-    spendingExpenses.forEach((e) => {
-      totals[e.category] = (totals[e.category] ?? 0) + toDisplay(e);
-    });
-    return Object.entries(totals)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 3)
-      .map(([slug, amount]) => ({
-        slug, amount,
-        cat: categories.find((c) => c.slug === slug),
-        pct: monthTotal > 0 ? Math.round((amount / monthTotal) * 100) : 0,
-      }));
-  }, [spendingExpenses, categories, monthTotal, toDisplay]);
-
-  // ── Recent 5 transactions (all types) ────────────────────
-  const recentExpenses = useMemo(() => expenses.slice(0, 5), [expenses]);
-
-  // ── Budget calculations ───────────────────────────────────
+  // ── Budget calculations & Base Values ─────────────────────
   const familySupportSpent = useMemo(
     () => spendingExpenses
       .filter((e) => e.category === 'keluarga')
@@ -408,6 +401,27 @@ const DashboardPage: React.FC = () => {
 
   // personalSpent excludes keluarga category (tracked separately)
   const personalSpent = monthTotal - familySupportSpent;
+
+  // ── Top 3 categories (NEED + WANT only, exclude 'keluarga') ──────────────────
+  const topCategories = useMemo(() => {
+    const totals: Record<string, number> = {};
+    spendingExpenses
+      .filter((e) => e.category !== 'keluarga')
+      .forEach((e) => {
+        totals[e.category] = (totals[e.category] ?? 0) + toDisplay(e);
+      });
+    return Object.entries(totals)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 3)
+      .map(([slug, amount]) => ({
+        slug, amount,
+        cat: categories.find((c) => c.slug === slug),
+        pct: personalSpent > 0 ? Math.round((amount / personalSpent) * 100) : 0,
+      }));
+  }, [spendingExpenses, categories, personalSpent, toDisplay]);
+
+  // ── Recent 5 transactions (all types) ────────────────────
+  const recentExpenses = useMemo(() => expenses.slice(0, 5), [expenses]);
 
   const budgetSpentPct = personalMonthlyBudget > 0
     ? Math.round((personalSpent / personalMonthlyBudget) * 100)
@@ -420,8 +434,8 @@ const DashboardPage: React.FC = () => {
 
   function budgetColor(pct: number) {
     if (pct >= 100) return { text: 'text-red-400', bar: '#EF4444', swatch: 'bg-red-400' };
-    if (pct >= 90)  return { text: 'text-orange-400', bar: '#FB923C', swatch: 'bg-orange-400' };
-    if (pct >= 70)  return { text: 'text-yellow-400', bar: '#FACC15', swatch: 'bg-yellow-400' };
+    if (pct >= 90) return { text: 'text-orange-400', bar: '#FB923C', swatch: 'bg-orange-400' };
+    if (pct >= 70) return { text: 'text-yellow-400', bar: '#FACC15', swatch: 'bg-yellow-400' };
     return { text: 'text-green-400', bar: '#4ADE80', swatch: 'bg-green-400' };
   }
   const bc = budgetColor(budgetSpentPct);
@@ -619,31 +633,12 @@ const DashboardPage: React.FC = () => {
         />
       </div>
 
-      {/* ── TRANSFER Widget (only when transfers exist) ───── */}
-      {transferExpenses.length > 0 && (
-        <Card className="border-[#555555] bg-[#242424]">
-          <CardBody>
-            <div className="flex items-start gap-3">
-              <div>
-                <p className="text-xs font-black uppercase tracking-wider mb-1 text-brutal-black/60">
-                  Cashout
-                </p>
-                <p className="text-2xl font-black">{fmt(transferTotal)}</p>
-                <p className="text-xs font-medium text-[#F5F0E8]/50 mt-0.5">
-                  {transferExpenses.length} transaksi
-                  {uniqueDestinations.length > 0 && ` · ${uniqueDestinations.join(', ')}`}
-                </p>
-              </div>
-            </div>
-          </CardBody>
-        </Card>
-      )}
-
       {/* ── Needs vs Wants + Budget Carousel ─────────────── */}
       <div className="neo-card overflow-hidden !p-0">
         <SwipeCarousel
           variant="dots"
-          accentColors={hasBudget ? ['#3B82F6', '#4ADE80'] : ['#3B82F6']}
+          disableHint
+          accentColors={hasBudget ? ['#FFFFFF', '#FFFFFF'] : ['#FFFFFF']}
           slides={[
             /* ── Slide 1: Needs vs Wants ── */
             <div className="px-4 py-3">
@@ -686,7 +681,7 @@ const DashboardPage: React.FC = () => {
             </div>,
 
             /* ── Slide 2: Budget Bulanan — mirrors Need vs Want layout exactly ── */
-            ...( hasBudget ? [
+            ...(hasBudget ? [
               <div className="px-4 py-3">
                 {/* Title row — identical height to "Needs vs Wants" label */}
                 <p className="text-xs font-black uppercase tracking-wider mb-3 text-brutal-black/60 flex items-center gap-1.5">
@@ -696,7 +691,7 @@ const DashboardPage: React.FC = () => {
 
                 {/* Progress bars — 2 columns if both exist, 1 column if solo */}
                 <div className={`grid ${personalMonthlyBudget > 0 && familySupportMonthlyBudget > 0 ? 'grid-cols-2 gap-4' : 'grid-cols-1'} min-h-[72px]`}>
-                  
+
                   {/* Left/Only: Personal Budget */}
                   {personalMonthlyBudget > 0 && (
                     <div className="flex flex-col justify-between">
@@ -752,6 +747,26 @@ const DashboardPage: React.FC = () => {
         />
       </div>
 
+      {/* ── TRANSFER Widget (only when transfers exist) ───── */}
+      {transferExpenses.length > 0 && (
+        <Card className="border-[#555555] bg-[#242424]">
+          <CardBody>
+            <div className="flex items-start gap-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-wider mb-1 text-brutal-black/60">
+                  Cashout
+                </p>
+                <p className="text-2xl font-black">{fmt(transferTotal)}</p>
+                <p className="text-xs font-medium text-[#F5F0E8]/50 mt-0.5">
+                  {transferExpenses.length} transaksi
+                  {uniqueDestinations.length > 0 && ` · ${uniqueDestinations.join(', ')}`}
+                </p>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
       {/* ── Top 3 Categories ───────────────────────────────── */}
       {topCategories.length > 0 && (
         <div>
@@ -776,7 +791,7 @@ const DashboardPage: React.FC = () => {
                         <span className="text-sm font-black shrink-0 ml-2">{fmt(amount)}</span>
                       </div>
                       <div className="h-2 border-2 border-[#555555] overflow-hidden">
-                        <div className="h-full bg-brutal-yellow transition-all duration-500" style={{ width: `${pct}%` }} />
+                        <div className="h-full bg-brutal-black transition-all duration-500" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                     <span className="text-xs font-black text-brutal-black/50 shrink-0 w-8 text-right">{pct}%</span>

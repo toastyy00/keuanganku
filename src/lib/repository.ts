@@ -65,7 +65,7 @@ function isoDate(date: Date = new Date()): string {
 }
 
 async function migrateLocalCategorySlugs(): Promise<void> {
-  let categories = await readIDB<Category>(KEYS.categories);
+  const categories = await readIDB<Category>(KEYS.categories);
   let expenses = await readIDB<Expense>(KEYS.expenses);
   let recurring = await readIDB<RecurringTemplate>(KEYS.recurring);
   let changed = false;

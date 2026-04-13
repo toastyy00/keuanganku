@@ -27,6 +27,15 @@ interface UIState {
   setActiveExpense: (id: string | null) => void;
   clearPrefill: () => void;
 
+  // ── Global FAB signals for page-specific actions ─────────
+  isHistoryInsightOpen: boolean;
+  openHistoryInsight: () => void;
+  closeHistoryInsight: () => void;
+
+  isRecurringSheetOpen: boolean;
+  openRecurringSheet: () => void;
+  closeRecurringSheet: () => void;
+
   // ── Shared active month ────────────────────────────────
   activeYear: number;
   activeMonth: number;
@@ -53,6 +62,15 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ activeExpenseId: id, isAddSheetOpen: true, prefillData: null }),
 
   clearPrefill: () => set({ prefillData: null }),
+
+  // ── Global FAB signals ────────────────────────────────
+  isHistoryInsightOpen: false,
+  openHistoryInsight: () => set({ isHistoryInsightOpen: true }),
+  closeHistoryInsight: () => set({ isHistoryInsightOpen: false }),
+
+  isRecurringSheetOpen: false,
+  openRecurringSheet: () => set({ isRecurringSheetOpen: true }),
+  closeRecurringSheet: () => set({ isRecurringSheetOpen: false }),
 
   // ── Active month ─────────────────────────────────────
   activeYear: now.getFullYear(),

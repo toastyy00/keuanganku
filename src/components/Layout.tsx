@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useRef } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
-  History,
+  CalendarDays,
   RefreshCcw,
   Settings,
   Plus,
+  Bot,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -14,30 +15,70 @@ import { isDemoMode } from '../lib/appConfig';
 import { useUIStore } from '../store';
 
 // ============================================================
-//  NAV ITEMS config
+//  NAV ITEMS config  (without FAB slot — inserted via JSX)
+//  Layout: [Dashboard] [History] [FAB] [Recurring] [Settings]
 // ============================================================
 
-const NAV_ITEMS = [
-  { label: 'Dashboard', to: '/', icon: LayoutDashboard, end: true },
-  { label: 'History', to: '/history', icon: History, end: false },
-  { label: 'Recurring', to: '/recurring', icon: RefreshCcw, end: false },
-  { label: 'Settings', to: '/settings', icon: Settings, end: false },
+const LEFT_ITEMS = [
+  { label: 'Dashboard', to: '/', icon: LayoutDashboard, end: true, index: 0 },
+  { label: 'History',   to: '/history', icon: CalendarDays,   end: false, index: 1 },
 ] as const;
+
+const RIGHT_ITEMS = [
+  { label: 'Recurring', to: '/recurring', icon: RefreshCcw, end: false, index: 2 },
+  { label: 'Settings',  to: '/settings',  icon: Settings,  end: false, index: 3 },
+] as const;
+
+// All items in order — used for slide-direction calculation
+const ALL_ITEMS = [...LEFT_ITEMS, ...RIGHT_ITEMS];
+
+// ============================================================
+//  Per-route FAB icon & action config
+// ============================================================
+
+type FABConfig = {
+  icon: React.ReactNode;
+  label: string;
+  action: () => void;
+};
 
 // ============================================================
 //  LAYOUT COMPONENT
 // ============================================================
 
 const Layout: React.FC = () => {
-  const { openAddSheet, closeAddSheet, isAddSheetOpen } = useUIStore();
+  const {
+    openAddSheet, closeAddSheet, isAddSheetOpen,
+    openHistoryInsight,
+    openRecurringSheet,
+  } = useUIStore();
+
   const navigate = useNavigate();
   const location = useLocation();
-  const isDashboard = location.pathname === '/';
   const demoMode = isDemoMode();
 
   const [isMinimized, setIsMinimized] = useState(
     () => localStorage.getItem('sidebar_min') === 'true'
   );
+
+  // ── True Scroll Restoration ──────────────────────────────
+  const scrollPositions = useRef<Record<string, number>>({});
+  const locationRef = useRef(location.pathname);
+
+  React.useEffect(() => {
+    locationRef.current = location.pathname;
+  }, [location.pathname]);
+
+  React.useEffect(() => {
+    const mainEl = document.getElementById('main-content');
+    if (mainEl) {
+      requestAnimationFrame(() => {
+        mainEl.scrollTo(0, scrollPositions.current[location.pathname] || 0);
+      });
+    }
+  }, [location.pathname]);
+
+
 
   const toggleMinimize = () => {
     setIsMinimized((prev) => {
@@ -47,23 +88,55 @@ const Layout: React.FC = () => {
     });
   };
 
-  const handleFAB = () => {
-    if (isAddSheetOpen) {
-      closeAddSheet();
-    } else {
-      openAddSheet();
-      navigate('/');
+  // ── FAB config per route ─────────────────────────────────
+  const getFABConfig = (): FABConfig => {
+    switch (location.pathname) {
+      case '/history':
+        return {
+          icon: <Bot size={26} strokeWidth={2.5} aria-hidden="true" />,
+          label: 'Buka insight pengeluaran',
+          action: openHistoryInsight,
+        };
+      case '/recurring':
+        return {
+          icon: <RefreshCcw size={22} strokeWidth={2.5} aria-hidden="true" />,
+          label: 'Tambah pengeluaran rutin',
+          action: openRecurringSheet,
+        };
+      default:
+        return {
+          icon: (
+            <Plus
+              size={28}
+              strokeWidth={2.5}
+              aria-hidden="true"
+              className={cn(
+                'transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',
+                isAddSheetOpen ? 'rotate-[135deg]' : 'rotate-0'
+              )}
+            />
+          ),
+          label: isAddSheetOpen ? 'Tutup form' : 'Tambah pengeluaran baru',
+          action: () => {
+            if (isAddSheetOpen) closeAddSheet();
+            else openAddSheet();
+          },
+        };
     }
   };
+
+  const fab = getFABConfig();
+
+  // ── Active pill indicator index ──────────────────────────
+  const activeIndex = ALL_ITEMS.findIndex((i) =>
+    i.end ? location.pathname === i.to : location.pathname.startsWith(i.to)
+  );
 
   return (
     <div className="flex h-dvh overflow-hidden" style={{ backgroundColor: '#1A1A1A' }}>
 
       {/*
         ── Desktop sidebar ──────────────────────────────────────
-        KEY: sidebar is a regular flex column child (NOT position:fixed).
-        This means <main> gets exactly the remaining viewport width,
-        so max-w-2xl + mx-auto inside pages always centers correctly.
       */}
       <aside
         className={cn(
@@ -74,7 +147,7 @@ const Layout: React.FC = () => {
         )}
         style={{ backgroundColor: '#1A1A1A', borderColor: '#F5F0E8' }}
       >
-        {/* Toggle button — floats over right edge */}
+        {/* Toggle button */}
         <button
           onClick={toggleMinimize}
           className="absolute -right-4 top-6 w-8 h-8 rounded-full border-4 flex items-center justify-center z-40 transition-colors duration-150"
@@ -122,9 +195,9 @@ const Layout: React.FC = () => {
           </div>
         )}
 
-        {/* Nav links */}
+        {/* Nav links (desktop) */}
         <nav className="flex flex-col flex-1 overflow-y-auto" aria-label="Main navigation">
-          {NAV_ITEMS.map(({ label, to, icon: Icon, end }) => (
+          {ALL_ITEMS.map(({ label, to, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}
@@ -155,91 +228,152 @@ const Layout: React.FC = () => {
 
       {/*
         ── Main content ─────────────────────────────────────────
-        flex-1 + min-w-0 → fills whatever width the sidebar leaves behind.
-        Pages can then safely use max-w-2xl mx-auto to center their content
-        in precisely this area.
       */}
-      <main id="main-content" className="flex-1 min-w-0 overflow-y-auto">
+      <main
+        id="main-content"
+        className="flex-1 min-w-0 overflow-y-auto"
+        onScroll={(e) => {
+          if (locationRef.current === location.pathname) {
+            scrollPositions.current[location.pathname] = e.currentTarget.scrollTop;
+          }
+        }}
+        onTouchStart={(e) => {
+          if ((e.target as HTMLElement).closest('[data-no-swipe="true"]')) return;
+          const touch = e.touches[0];
+          scrollPositions.current['touchStartX'] = touch.clientX;
+          scrollPositions.current['touchStartY'] = touch.clientY;
+        }}
+        onTouchEnd={(e) => {
+          if ((e.target as HTMLElement).closest('[data-no-swipe="true"]')) return;
+          const touchX = scrollPositions.current['touchStartX'];
+          const touchY = scrollPositions.current['touchStartY'];
+          if (touchX === undefined || touchY === undefined) return;
+          
+          const deltaX = e.changedTouches[0].clientX - touchX;
+          const deltaY = e.changedTouches[0].clientY - touchY;
+          
+          // Require mostly horizontal movement and a minimum distance (e.g. 50px)
+          if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+            if (activeIndex !== -1) {
+              if (deltaX > 0 && activeIndex > 0) {
+                // Swipe right -> go to previous
+                navigate(ALL_ITEMS[activeIndex - 1].to);
+              } else if (deltaX < 0 && activeIndex < ALL_ITEMS.length - 1) {
+                // Swipe left -> go to next
+                navigate(ALL_ITEMS[activeIndex + 1].to);
+              }
+            }
+          }
+          delete scrollPositions.current['touchStartX'];
+          delete scrollPositions.current['touchStartY'];
+        }}
+      >
         <Outlet />
-        {/* Spacer so mobile content is not hidden behind bottom nav */}
+        {/* Spacer so mobile content is not hidden behind bottom floating nav */}
         <div
           className="md:hidden"
-          style={{ height: 'calc(72px + env(safe-area-inset-bottom, 0px))' }}
+          style={{ height: 'calc(104px + env(safe-area-inset-bottom, 0px))' }}
           aria-hidden="true"
         />
       </main>
 
-      {/* ── FAB — Dashboard only ── */}
-      {isDashboard && (
-        <button
-          id="fab-add-expense"
-          onClick={handleFAB}
-          aria-label={isAddSheetOpen ? 'Tutup form' : 'Tambah pengeluaran baru'}
-          className={cn(
-            'fixed z-[60]',
-            'bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-5',
-            'md:bottom-8 md:right-8',
-            'neo-btn neo-btn-primary',
-            'w-16 h-16 rounded-full p-0',
-            isAddSheetOpen ? 'hidden md:flex' : 'flex',
-            'items-center justify-center',
-          )}
-        >
-          <Plus 
-            size={28} 
-            strokeWidth={2.5} 
-            aria-hidden="true" 
-            className={cn(
-              "transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
-              isAddSheetOpen ? "rotate-[135deg]" : "rotate-0"
-            )}
-          />
-        </button>
-      )}
-
-      {/* ── Mobile bottom navigation ── */}
-      <nav
-        aria-label="Mobile navigation"
-        className={cn(
-          'md:hidden',
-          'fixed bottom-0 left-0 right-0 z-30',
-          'flex items-stretch border-t-4',
-        )}
-        style={{
-          backgroundColor: '#1A1A1A',
-          borderColor: '#F5F0E8',
-          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        }}
+      {/* ══ Mobile bottom navigation — Single Full Pill + Floating FAB ══ */}
+      {/* Wrapper: positions the pill and anchors the floating FAB */}
+      <div
+        className="md:hidden fixed z-[45] bottom-0 left-0 right-0 w-full"
       >
-        {NAV_ITEMS.map(({ label, to, icon: Icon, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) => cn('nav-item flex-1', isActive && 'active')}
-            style={{ minHeight: '72px' }}
-          >
-            {({ isActive }) => (
-              <>
-                <Icon
-                  size={22}
-                  strokeWidth={2.5}
-                  aria-hidden="true"
-                  style={{ color: isActive ? '#1A1A1A' : '#F5F0E8' }}
-                />
-                <span
-                  style={{ color: isActive ? '#1A1A1A' : '#F5F0E8' }}
-                  className="text-[10px]"
-                >
-                  {label}
-                </span>
-              </>
-            )}
-          </NavLink>
-        ))}
+        {/* ── Floating FAB — absolute, center-top, overlaps pill ── */}
+        <button
+          id="mobile-fab"
+          onClick={fab.action}
+          aria-label={fab.label}
+          className="fab-tap absolute left-1/2 flex items-center justify-center rounded-full z-[50]"
+          style={{
+            width: '60px',
+            height: '60px',
+            transform: 'translateX(-50%) translateY(-15%)',
+            top: 0,
+            backgroundColor: '#111111',
+            borderTop: '2px solid #262626',
+            borderLeft: '2px solid #262626',
+            borderRight: '2px solid #262626',
+            borderBottom: '2px solid #111111',
+            boxShadow: 'none',
+            color: '#B8F55A',
+            transition: 'transform 0.15s cubic-bezier(0.34,1.56,0.64,1)',
+          }}
+        >
+          {fab.icon}
+        </button>
 
+        {/* ── Flat Bottom Bar ── */}
+        <nav
+          aria-label="Mobile navigation"
+          className="relative flex items-center w-full px-2 pt-1.5 border-t-2 overflow-hidden"
+          style={{
+            paddingBottom: 'calc(6px + env(safe-area-inset-bottom, 0px))',
+            backgroundColor: '#111111',
+            borderColor: '#181818',
+            boxShadow: '0 -4px 20px rgba(0,0,0,0.5)',
+          }}
+        >
+          {/* Nav items with FAB-width spacer in the middle */}
+          <div className="relative z-10 flex w-full items-center">
+            {/* Left 2 items */}
+            {ALL_ITEMS.slice(0, 2).map(({ label, to, icon: Icon, end }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={end}
+                className={({ isActive }) => cn('nav-item flex-1', isActive && 'active')}
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon
+                      size={20}
+                      strokeWidth={isActive ? 2.5 : 2}
+                      aria-hidden="true"
+                      className="nav-item-icon"
+                      style={{ color: isActive ? '#B8F55A' : 'currentColor' }}
+                    />
+                    <span className="nav-item-label" style={{ color: isActive ? '#F5F0E8' : 'currentColor' }}>
+                      {label}
+                    </span>
+                  </>
+                )}
+              </NavLink>
+            ))}
 
-      </nav>
+            {/* Transparent spacer matching FAB footprint — prevents nav items colliding with FAB */}
+            <div aria-hidden="true" style={{ width: '60px', flexShrink: 0 }} />
+
+            {/* Right 2 items */}
+            {ALL_ITEMS.slice(2).map(({ label, to, icon: Icon, end }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={end}
+                className={({ isActive }) => cn('nav-item flex-1', isActive && 'active')}
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon
+                      size={20}
+                      strokeWidth={isActive ? 2.5 : 2}
+                      aria-hidden="true"
+                      className="nav-item-icon"
+                      style={{ color: isActive ? '#B8F55A' : 'currentColor' }}
+                    />
+                    <span className="nav-item-label" style={{ color: isActive ? '#F5F0E8' : 'currentColor' }}>
+                      {label}
+                    </span>
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </div>
+        </nav>
+      </div>
     </div>
   );
 };

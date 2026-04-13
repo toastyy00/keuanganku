@@ -245,7 +245,7 @@ const HistoryPage: React.FC = () => {
   }, []);
 
   const { expenses, categories, currency, deleteExpense, loadExpenses } = useExpenseStore();
-  const { setActiveExpense } = useUIStore();
+  const { setActiveExpense, isHistoryInsightOpen, openHistoryInsight, closeHistoryInsight } = useUIStore();
   const {
     aiProvider,
     openaiKey,
@@ -262,7 +262,8 @@ const HistoryPage: React.FC = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [catFilterOpen, setCatFilterOpen] = useState(false);
   const [rateInfo, setRateInfo] = useState<RateResult>({ rate: 16000, isFallback: true });
-  const [assistantOpen, setAssistantOpen] = useState(false);
+  const assistantOpen = isHistoryInsightOpen;
+  const setAssistantOpen = (v: boolean) => v ? openHistoryInsight() : closeHistoryInsight();
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
   const [assistantError, setAssistantError] = useState<string | null>(null);
@@ -302,10 +303,9 @@ const HistoryPage: React.FC = () => {
     [insightScope, viewYear, viewMonth]
   );
 
-  // Reset scope when active month changes
   useEffect(() => {
     setInsightScope({ type: 'month', label: monthLabelStr });
-  }, [viewYear, viewMonth, monthLabelStr]);
+  }, [viewYear, viewMonth, monthLabelStr, setInsightScope]);
 
   // Filtered
   const filtered = useMemo(() => {
@@ -639,6 +639,7 @@ const HistoryPage: React.FC = () => {
       setIsGeneratingInsight(false);
     }
   }, [
+    setAssistantOpen,
     currency,
     expenses,
     viewYear,
@@ -667,7 +668,7 @@ const HistoryPage: React.FC = () => {
   return (
     <div className="flex flex-col min-h-full max-w-2xl mx-auto w-full">
       {/* ── Sticky filter bar ─────────────────────────────── */}
-      <div className="sticky top-0 z-20 border-b-4" style={{ backgroundColor: '#1A1A1A', borderColor: '#F5F0E8' }}>
+      <div className="sticky top-0 z-20 border-b-2" style={{ backgroundColor: '#1A1A1A', borderColor: '#F5F0E8' }}>
         {/* Month navigator */}
         <div className="flex items-center justify-between px-3 py-2.5 border-b-4 sm:px-4 sm:py-3" style={{ borderColor: '#3A3A3A' }}>
           <button
@@ -939,14 +940,6 @@ const HistoryPage: React.FC = () => {
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={() => { setAssistantOpen(true); haptic(); }}
-        className="fixed z-50 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-5 md:bottom-8 md:right-8 neo-btn neo-btn-primary w-16 h-16 rounded-full p-0 flex items-center justify-center"
-        aria-label={`Buka insight untuk ${monthLabelStr}`}
-      >
-        <Bot size={28} strokeWidth={2.5} aria-hidden="true" />
-      </button>
 
       <BottomSheet
         isOpen={assistantOpen}

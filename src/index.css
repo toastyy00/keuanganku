@@ -86,18 +86,17 @@
 
   /* Scrollbar styling — dark concrete */
   ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
+    width: 2px;
+    height: 0px;
   }
 
   ::-webkit-scrollbar-track {
-    background: #1A1A1A;
-    border-left: 1px solid #3A3A3A;
+    background: transparent;
   }
 
   ::-webkit-scrollbar-thumb {
     background: #F5F0E8;
-    border-radius: 0;
+    border-radius: 2px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
@@ -140,25 +139,41 @@
     }
   }
 
-  /* Bottom nav item */
+  /* Mobile Bottom nav item (Split Pill style) */
   .nav-item {
-    @apply flex flex-col items-center justify-center gap-0.5 px-3 py-2;
-    @apply font-bold text-xs uppercase tracking-wider;
-    @apply transition-all duration-150;
-    min-width: 60px;
+    @apply flex flex-col items-center justify-center gap-1;
+    @apply font-black text-[9px] uppercase tracking-widest;
+    height: 50px;
+    flex: 1;
+    position: relative;
+    transition: color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .nav-item.active {
-    background-color: #F5F0E8;
     color: #1A1A1A;
   }
 
   .nav-item:not(.active) {
-    color: #F5F0E8;
+    color: #666666;
   }
 
-  .nav-item:not(.active):hover {
-    background-color: rgba(245, 240, 232, 0.1);
+  .nav-item-icon {
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .nav-item.active .nav-item-icon {
+    transform: scale(1.15) translateY(-2px);
+  }
+
+  .nav-item-label {
+    transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    opacity: 0.6;
+    transform: translateY(-1.5px) scale(0.95);
+  }
+
+  .nav-item.active .nav-item-label {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 
   /* Sidebar nav item (desktop) */
@@ -288,6 +303,13 @@
       opacity: 1;
       transform: translateY(0);
     }
+  }
+
+
+  /* FAB tap feedback — use simple scale transform, NOT animation.
+     CSS animations on :active can suppress onClick on mobile browsers. */
+  .fab-tap:active {
+    transform: translateX(-50%) translateY(-25%) scale(0.9) !important;
   }
 
   /* slide-in-from-bottom utility (for banners) */

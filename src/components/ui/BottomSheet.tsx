@@ -36,9 +36,11 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
 }) => {
   const [isRendered, setIsRendered] = useState(isOpen);
   const [isVisible, setIsVisible] = useState(false);
+  const dragStartY = React.useRef<number | null>(null);
 
   useEffect(() => {
     if (isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsRendered(true);
       requestAnimationFrame(() => {
         requestAnimationFrame(() => setIsVisible(true));
@@ -96,41 +98,54 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
         className={cn('bottom-sheet-panel', panelClassName)}
         data-state={isVisible ? 'open' : 'closed'}
       >
-        {/* Handle bar */}
-        <div className="flex items-center justify-center pt-3 pb-1">
-          <div className="w-10 h-1.5 rounded-full bg-brutal-black/30" />
-        </div>
-
-        {/* Header */}
-        {(title || description) && (
-          <div className="flex items-start justify-between px-4 pt-2 pb-3 border-b-2 border-[#555555]">
-            <div>
-              {title && (
-                <h3 className="text-lg font-bold uppercase tracking-tight leading-tight">
-                  {title}
-                </h3>
-              )}
-              {description && (
-                <p className="text-sm text-brutal-black/60 mt-0.5 font-medium">
-                  {description}
-                </p>
-              )}
-            </div>
-            <button
-              onClick={onClose}
-              className={cn(
-                'ml-3 mt-0.5 p-1.5 -mr-1',
-                'border-2 border-[#555555]',
-                'hover:bg-brutal-black hover:text-brutal-yellow',
-                'active:translate-x-0.5 active:translate-y-0.5',
-                'transition-all duration-150',
-              )}
-              aria-label="Close sheet"
-            >
-              <X size={18} strokeWidth={2.5} />
-            </button>
+        {/* Draggable Header Area */}
+        <div
+          onTouchStart={(e) => {
+            dragStartY.current = e.touches[0].clientY;
+          }}
+          onTouchEnd={(e) => {
+            if (dragStartY.current === null) return;
+            const deltaY = e.changedTouches[0].clientY - dragStartY.current;
+            if (deltaY > 50) onClose();
+            dragStartY.current = null;
+          }}
+        >
+          {/* Handle bar */}
+          <div className="flex items-center justify-center pt-3 pb-1">
+            <div className="w-10 h-1.5 rounded-full bg-brutal-black/30" />
           </div>
-        )}
+
+          {/* Header */}
+          {(title || description) && (
+            <div className="flex items-start justify-between px-4 pt-2 pb-3 border-b-2 border-[#555555]">
+              <div>
+                {title && (
+                  <h3 className="text-lg font-bold uppercase tracking-tight leading-tight">
+                    {title}
+                  </h3>
+                )}
+                {description && (
+                  <p className="text-sm text-brutal-black/60 mt-0.5 font-medium">
+                    {description}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={onClose}
+                className={cn(
+                  'ml-3 mt-0.5 p-1.5 -mr-1',
+                  'border-2 border-[#555555]',
+                  'hover:bg-brutal-black hover:text-brutal-yellow',
+                  'active:translate-x-0.5 active:translate-y-0.5',
+                  'transition-all duration-150',
+                )}
+                aria-label="Close sheet"
+              >
+                <X size={18} strokeWidth={2.5} />
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Content */}
         <div className={cn("px-4 py-4", contentClassName)}>

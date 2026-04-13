@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, RefreshCcw, Trash2, ToggleLeft, ToggleRight, CalendarClock, Zap, AlertCircle } from 'lucide-react';
+import { RefreshCcw, Trash2, ToggleLeft, ToggleRight, CalendarClock, Zap, AlertCircle } from 'lucide-react';
 import { BottomSheet } from '../components/ui/BottomSheet';
 import { Button } from '../components/ui/Button';
 import { Input, Textarea } from '../components/ui/Input';
@@ -198,11 +198,20 @@ const RecurringPage: React.FC = () => {
 
   const { recurringTemplates, categories, currency, deleteRecurring, updateRecurring, loadExpenses } =
     useExpenseStore();
-  const { openAddSheet } = useUIStore();
+  const { openAddSheet, isRecurringSheetOpen, closeRecurringSheet } = useUIStore();
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing] = useState<RecurringTemplate | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Sync global FAB signal → open sheet
+  React.useEffect(() => {
+    if (isRecurringSheetOpen) {
+      setEditing(null);
+      setSheetOpen(true);
+      closeRecurringSheet(); // reset signal
+    }
+  }, [isRecurringSheetOpen, closeRecurringSheet]);
 
   useEffect(() => { loadExpenses(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -231,16 +240,6 @@ const RecurringPage: React.FC = () => {
     <div className="section-pad max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-5">
         <h1 className="text-2xl font-black uppercase tracking-tight">Pengeluaran Rutin</h1>
-
-        <Button
-          className="fixed z-50 bottom-[5.5rem] right-5 md:bottom-8 md:right-8 w-16 h-16 rounded-full p-0 flex items-center justify-center"
-          style={{ bottom: "calc(5.5rem + env(safe-area-inset-bottom, 0px))" }}
-          variant="primary"
-          leftIcon={<Plus size={28} strokeWidth={2.5} />}
-          onClick={() => { setEditing(null); setSheetOpen(true); }}
-        >
-          {/* Kosongkan teks agar tetap bulat sempurna */}
-        </Button>
       </div>
 
       {recurringTemplates.length === 0 && (
