@@ -268,9 +268,24 @@ const DashboardPage: React.FC = () => {
 
   // Swipe Handlers for Month Header
   const headerStartX = useRef<number | null>(null);
+  const suppressHeaderClickRef = useRef(false);
+  const clearHeaderClickSuppressTimerRef = useRef<number | null>(null);
   const [dateDragging, setDateDragging] = useState(false);
 
+  useEffect(() => {
+    return () => {
+      if (clearHeaderClickSuppressTimerRef.current !== null) {
+        window.clearTimeout(clearHeaderClickSuppressTimerRef.current);
+      }
+    };
+  }, []);
+
   const onHeaderTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
+    if (clearHeaderClickSuppressTimerRef.current !== null) {
+      window.clearTimeout(clearHeaderClickSuppressTimerRef.current);
+      clearHeaderClickSuppressTimerRef.current = null;
+    }
+    suppressHeaderClickRef.current = false;
     headerStartX.current = 'touches' in e ? e.touches[0].clientX : e.clientX;
     setDateDragging(false);
   };
@@ -288,11 +303,18 @@ const DashboardPage: React.FC = () => {
     if (headerStartX.current === null) return;
     const endX = 'changedTouches' in e ? e.changedTouches[0].clientX : e.clientX;
     const dx = endX - headerStartX.current;
+    const didSwipeMonth = Math.abs(dx) > 40;
 
-    if (Math.abs(dx) > 40) {
+    if (didSwipeMonth) {
+      suppressHeaderClickRef.current = true;
       if (dx > 0) prevMonth();
       else nextMonth();
       haptic();
+
+      clearHeaderClickSuppressTimerRef.current = window.setTimeout(() => {
+        suppressHeaderClickRef.current = false;
+        clearHeaderClickSuppressTimerRef.current = null;
+      }, 250);
     }
     headerStartX.current = null;
     setDateDragging(false);
@@ -442,6 +464,7 @@ const DashboardPage: React.FC = () => {
   const fc = budgetColor(familySpentPct);
 
   const hasBudget = personalMonthlyBudget > 0 || familySupportMonthlyBudget > 0;
+  const dashboardDarkShadow = '3px 3px 0px 0px #746C62';
 
 
 
@@ -452,6 +475,7 @@ const DashboardPage: React.FC = () => {
       {/* Header */}
       <div
         className="flex items-center justify-between py-1 -mt-1 -mx-2 px-2 select-none"
+        data-no-swipe="true"
         onTouchStart={onHeaderTouchStart}
         onTouchMove={onHeaderTouchMove}
         onTouchEnd={onHeaderTouchEnd}
@@ -466,8 +490,8 @@ const DashboardPage: React.FC = () => {
             key={monthPrefix}
             className={`text-sm font-black uppercase tracking-wider text-brutal-black/60 transition-all duration-150 page-fade-in ${!isCurrentMonth ? 'cursor-pointer underline underline-offset-2 hover:text-brutal-black' : ''}`}
             onClick={() => {
-              // Prevent triggering reset if the user was just swiping
-              if (dateDragging) return;
+              // Ignore the synthetic click that follows a successful swipe gesture.
+              if (suppressHeaderClickRef.current || dateDragging) return;
               if (!isCurrentMonth) resetToCurrentMonth();
             }}
             title={!isCurrentMonth ? 'Kembali ke bulan ini' : undefined}
@@ -634,7 +658,7 @@ const DashboardPage: React.FC = () => {
       </div>
 
       {/* ── Needs vs Wants + Budget Carousel ─────────────── */}
-      <div className="neo-card overflow-hidden !p-0">
+      <div className="neo-card overflow-hidden !p-0" style={{ boxShadow: dashboardDarkShadow }}>
         <SwipeCarousel
           variant="dots"
           disableHint
@@ -779,7 +803,7 @@ const DashboardPage: React.FC = () => {
 
       {/* ── TRANSFER Widget (only when transfers exist) ───── */}
       {transferExpenses.length > 0 && (
-        <Card className="border-[#555555] bg-[#242424]">
+        <Card className="border-[#555555] bg-[#242424]" style={{ boxShadow: dashboardDarkShadow }}>
           <CardBody>
             <div className="flex items-start gap-3">
               <div>

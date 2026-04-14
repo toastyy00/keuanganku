@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { create } from 'zustand';
 import {
@@ -95,7 +95,7 @@ const useHistoryUIStore = create<HistoryUIState>((set) => ({
   })),
   search: '',
   setSearch: (search) => set({ search }),
-  insightScope: { type: 'month', label: '' },
+  insightScope: { type: 'pick_month', label: '' },
   setInsightScope: (insightScope) => set((state) => ({
     insightScope: typeof insightScope === 'function' ? insightScope(state.insightScope) : insightScope
   })),
@@ -116,16 +116,20 @@ const QUICK_PROMPTS: Array<{ intent: InsightIntent; label: string; icon: React.R
 ];
 
 const SCOPE_OPTIONS: Array<{ type: InsightScopeType; label: string; color: string }> = [
-  { type: 'month', label: 'Bulan aktif', color: '#B8F55A' },
-  { type: 'pick_month', label: 'Pilih bulan', color: '#B8F55A' },
-  { type: 'range', label: 'Rentang', color: '#B8F55A' },
+  { type: 'pick_month', label: 'Bulan', color: '#B8F55A' },
   { type: 'year', label: 'Tahun', color: '#B8F55A' },
-  { type: 'all', label: 'Semua', color: '#B8F55A' },
+  { type: 'range', label: 'Rentang', color: '#B8F55A' },
+  { type: 'all', label: 'Semua', color: '#F5F0E8' },
 ];
 
 const MONTH_NAMES = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+];
+
+const SCOPE_MONTH_NAMES_COMPACT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+  'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
 ];
 
 function uid(prefix: string): string {
@@ -296,6 +300,7 @@ const HistoryPage: React.FC = () => {
   }).format(new Date(viewYear, viewMonth - 1, 1));
   const previousMonthDate = useMemo(() => new Date(viewYear, viewMonth - 2, 1), [viewYear, viewMonth]);
   const previousMonthPrefix = `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}`;
+  const lastSyncedPickMonthRef = useRef<{ year: number; month: number } | null>(null);
 
   // Resolve scope label (reactive)
   const resolvedScopeLabel = useMemo(
@@ -304,8 +309,33 @@ const HistoryPage: React.FC = () => {
   );
 
   useEffect(() => {
-    setInsightScope({ type: 'month', label: monthLabelStr });
-  }, [viewYear, viewMonth, monthLabelStr, setInsightScope]);
+    setInsightScope((currentScope) => (
+      (() => {
+        const lastSynced = lastSyncedPickMonthRef.current;
+
+        if (currentScope.type === 'month') {
+          return { type: 'pick_month', label: '', year: viewYear, month: viewMonth };
+        }
+
+        if (currentScope.type !== 'pick_month') {
+          return currentScope;
+        }
+
+        if (
+          lastSynced === null ||
+          currentScope.year == null ||
+          currentScope.month == null ||
+          (currentScope.year === lastSynced.year && currentScope.month === lastSynced.month)
+        ) {
+          return { ...currentScope, year: viewYear, month: viewMonth };
+        }
+
+        return currentScope;
+      })()
+    ));
+
+    lastSyncedPickMonthRef.current = { year: viewYear, month: viewMonth };
+  }, [viewYear, viewMonth, setInsightScope]);
 
   // Filtered
   const filtered = useMemo(() => {
@@ -336,7 +366,11 @@ const HistoryPage: React.FC = () => {
     () => expenses.filter((e) => e.date.startsWith(previousMonthPrefix) && e.type !== 'TRANSFER'),
     [expenses, previousMonthPrefix]
   );
-  const hasMonthData = monthExpenses.length > 0;
+  const selectedScopeExpenses = useMemo(
+    () => getExpensesForScope(expenses, insightScope, viewYear, viewMonth),
+    [expenses, insightScope, viewYear, viewMonth]
+  );
+  const hasSelectedScopeData = selectedScopeExpenses.length > 0;
 
   const toggleCat = (slug: string) => {
     setCatFilter((prev) => {
@@ -445,14 +479,12 @@ const HistoryPage: React.FC = () => {
       { id: uid('user'), role: 'user', variant: 'prompt', content: `${promptLabel} — ${resolvedScopeLabel}` },
     ]);
 
-    // Resolve scoped expenses for the selected scope
-    const allScopedExpenses = getExpensesForScope(expenses, insightScope, viewYear, viewMonth);
-    const hasScopeData = allScopedExpenses.length > 0;
-
-    if (!hasScopeData) {
+    if (!hasSelectedScopeData) {
       setAssistantError('Belum ada transaksi di periode ini, jadi insight belum bisa dibuat.');
       return;
     }
+
+    const allScopedExpenses = selectedScopeExpenses;
 
     if (intent === 'deep_analysis' && !activeAiKey) {
       setAssistantError('AI key belum diatur. Tambahkan dulu di Settings > AI Provider.');
@@ -685,6 +717,8 @@ const HistoryPage: React.FC = () => {
     viewYear,
     viewMonth,
     insightScope,
+    selectedScopeExpenses,
+    hasSelectedScopeData,
     resolvedScopeLabel,
     activeAiKey,
     aiProvider,
@@ -703,6 +737,12 @@ const HistoryPage: React.FC = () => {
     { value: 'WANT', label: 'Want', color: '#F472B6' },
     { value: 'TRANSFER', label: 'Transfer', color: '#FB923C' },
   ];
+  const insightActionColorMap: Record<InsightIntent, string> = {
+    combined: '#F5F0E8',
+    breakdown: '#B8F55A',
+    deep_analysis: '#FB923C',
+  };
+  const insightCompactYears = Array.from({ length: 10 }, (_, i) => viewYear - 5 + i);
 
 
   return (
@@ -990,15 +1030,15 @@ const HistoryPage: React.FC = () => {
         contentClassName="flex-1 flex flex-col min-h-0 overflow-hidden"
       >
         <div className="flex flex-col flex-1 min-h-0 lg:grid lg:grid-cols-[minmax(0,1.6fr)_320px] gap-3 lg:gap-4 lg:space-y-0">
-          <div className="neo-card !bg-[#111111] overflow-hidden min-w-0 flex-1 flex flex-col">
+          <div className="neo-card !bg-[#111111] [box-shadow:3px_3px_0px_0px_#746C62] overflow-hidden min-w-0 flex-1 flex flex-col">
             <div className="overflow-y-auto px-4 py-4 space-y-3 flex-1 lg:max-h-[62vh]">
-              {!hasMonthData && (
+              {!hasSelectedScopeData && (
                 <div className="border-2 border-dashed border-[#3A3A3A] bg-[#161616] p-4">
                   <p className="text-sm font-black uppercase tracking-wide text-brutal-black/55">
-                    Belum ada data bulan ini
+                    Belum ada data untuk scope ini
                   </p>
                   <p className="mt-1 text-sm leading-6 text-brutal-bone-dim">
-                    Pilih bulan yang punya transaksi dulu, lalu saya bisa bantu merangkum atau membaca pola transaksi di bulan itu.
+                    Pilih scope yang punya transaksi, lalu insight bisa merangkum pola pengeluaran untuk periode tersebut.
                   </p>
                 </div>
               )}
@@ -1108,12 +1148,12 @@ const HistoryPage: React.FC = () => {
 
           <div className="flex flex-col gap-3 lg:gap-4 shrink-0">
             {/* ── Scope Selector ──────────────────────────── */}
-            <div className="neo-card !bg-[#181818] p-2.5 lg:p-3 space-y-2 lg:space-y-3">
+            <div className="neo-card !bg-[#181818] [box-shadow:3px_3px_0px_0px_#746C62] p-2.5 lg:p-3 space-y-2.5">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
                   <CalendarRange strokeWidth={2.5} className="text-brutal-yellow shrink-0 w-[12px] h-[12px] lg:w-[14px] lg:h-[14px]" />
                   <p className="text-[9px] lg:text-[10px] font-black uppercase tracking-[0.18em] text-brutal-black/55">
-                    Scope
+                    Periode
                   </p>
                 </div>
                 <p className="text-[9px] lg:text-[10px] font-bold text-brutal-white/40 truncate text-right">
@@ -1121,7 +1161,7 @@ const HistoryPage: React.FC = () => {
                 </p>
               </div>
 
-              <div className="flex lg:grid lg:grid-cols-2 gap-2 lg:gap-1.5 overflow-x-auto lg:overflow-visible pb-1.5 lg:pb-0" style={{ scrollbarWidth: 'none' }}>
+              <div className="grid grid-cols-4 gap-2">
                 {SCOPE_OPTIONS.map((opt) => {
                   const isActive = insightScope.type === opt.type;
                   return (
@@ -1129,9 +1169,7 @@ const HistoryPage: React.FC = () => {
                       key={opt.type}
                       type="button"
                       onClick={() => {
-                        if (opt.type === 'month') {
-                          setInsightScope({ type: 'month', label: monthLabelStr });
-                        } else if (opt.type === 'pick_month') {
+                        if (opt.type === 'pick_month') {
                           setInsightScope({
                             type: 'pick_month',
                             label: '',
@@ -1157,7 +1195,7 @@ const HistoryPage: React.FC = () => {
                           setInsightScope({ type: 'all', label: 'Semua' });
                         }
                       }}
-                      className={`shrink-0 lg:shrink flex items-center justify-center px-3 py-1.5 lg:px-2 lg:py-2 text-[9px] lg:text-[10px] font-black uppercase tracking-wider border-2 transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5 ${opt.type === 'all' ? 'lg:col-span-2' : ''}`}
+                      className="min-h-[38px] px-1 py-1 flex items-center justify-center text-center text-[8px] sm:text-[9px] font-black uppercase leading-[1.05] tracking-[0.08em] border-2 transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5"
                       style={{
                         borderColor: isActive ? opt.color : '#555555',
                         color: isActive ? opt.color : '#A09890',
@@ -1173,24 +1211,24 @@ const HistoryPage: React.FC = () => {
 
               {/* Conditional pickers */}
               {insightScope.type === 'pick_month' && (
-                <div className="flex gap-1.5">
+                <div className="grid grid-cols-[minmax(0,1fr)_88px] gap-2">
                   <select
                     value={insightScope.month ?? viewMonth}
                     onChange={(e) => setInsightScope((s) => ({ ...s, month: Number(e.target.value) }))}
-                    className="neo-input !py-1 !px-2 !text-xs flex-1 min-w-0"
+                    className="neo-input !py-1 !px-1.5 !text-[10px] min-w-0"
                     style={{ fontSize: '16px' }}
                   >
-                    {MONTH_NAMES.map((name, i) => (
+                    {SCOPE_MONTH_NAMES_COMPACT.map((name, i) => (
                       <option key={i} value={i + 1}>{name}</option>
                     ))}
                   </select>
                   <select
                     value={insightScope.year ?? viewYear}
                     onChange={(e) => setInsightScope((s) => ({ ...s, year: Number(e.target.value) }))}
-                    className="neo-input !py-1 !px-2 !text-xs w-20 shrink-0"
+                    className="neo-input !py-1 !px-1.5 !text-[10px] min-w-0"
                     style={{ fontSize: '16px' }}
                   >
-                    {Array.from({ length: 10 }, (_, i) => viewYear - 5 + i).map((y) => (
+                    {insightCompactYears.map((y) => (
                       <option key={y} value={y}>{y}</option>
                     ))}
                   </select>
@@ -1198,70 +1236,59 @@ const HistoryPage: React.FC = () => {
               )}
 
               {insightScope.type === 'range' && (
-                <div className="flex lg:grid lg:grid-cols-2 items-center lg:items-start gap-1.5 lg:gap-2 flex-wrap lg:flex-nowrap">
-                  <div className="space-y-0 lg:space-y-1 flex-1 min-w-[130px] lg:min-w-0">
-                    <span className="hidden lg:block text-[10px] font-bold text-brutal-black/40">Dari</span>
-                    <div className="flex gap-1.5">
-                      <select
-                        value={insightScope.fromMonth ?? 1}
-                        onChange={(e) => setInsightScope((s) => ({ ...s, fromMonth: Number(e.target.value) }))}
-                        className="neo-input !py-1 !px-1.5 !text-xs flex-1 min-w-0"
-                        style={{ fontSize: '16px' }}
-                      >
-                        {MONTH_NAMES.map((name, i) => (
-                          <option key={i} value={i + 1}>{name}</option>
-                        ))}
-                      </select>
-                      <select
-                        value={insightScope.fromYear ?? viewYear}
-                        onChange={(e) => setInsightScope((s) => ({ ...s, fromYear: Number(e.target.value) }))}
-                        className="neo-input !py-1 !px-1.5 !text-xs w-16 shrink-0"
-                        style={{ fontSize: '16px' }}
-                      >
-                        {Array.from({ length: 10 }, (_, i) => viewYear - 5 + i).map((y) => (
-                          <option key={y} value={y}>{y}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <span className="lg:hidden text-brutal-black/40 font-black shrink-0">-</span>
-                  <div className="space-y-0 lg:space-y-1 flex-1 min-w-[130px] lg:min-w-0">
-                    <span className="hidden lg:block text-[10px] font-bold text-brutal-black/40">Ke</span>
-                    <div className="flex gap-1.5">
-                      <select
-                        value={insightScope.toMonth ?? 12}
-                        onChange={(e) => setInsightScope((s) => ({ ...s, toMonth: Number(e.target.value) }))}
-                        className="neo-input !py-1 !px-1.5 !text-xs flex-1 min-w-0"
-                        style={{ fontSize: '16px' }}
-                      >
-                        {MONTH_NAMES.map((name, i) => (
-                          <option key={i} value={i + 1}>{name}</option>
-                        ))}
-                      </select>
-                      <select
-                        value={insightScope.toYear ?? viewYear}
-                        onChange={(e) => setInsightScope((s) => ({ ...s, toYear: Number(e.target.value) }))}
-                        className="neo-input !py-1 !px-1.5 !text-xs w-16 shrink-0"
-                        style={{ fontSize: '16px' }}
-                      >
-                        {Array.from({ length: 10 }, (_, i) => viewYear - 5 + i).map((y) => (
-                          <option key={y} value={y}>{y}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
+                <div className="grid grid-cols-[minmax(0,1fr)_78px_minmax(0,1fr)_78px] gap-2">
+                  <select
+                    value={insightScope.fromMonth ?? 1}
+                    onChange={(e) => setInsightScope((s) => ({ ...s, fromMonth: Number(e.target.value) }))}
+                    className="neo-input !py-1 !px-1.5 !text-[10px] min-w-0"
+                    style={{ fontSize: '16px' }}
+                  >
+                    {SCOPE_MONTH_NAMES_COMPACT.map((name, i) => (
+                      <option key={i} value={i + 1}>{name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={insightScope.fromYear ?? viewYear}
+                    onChange={(e) => setInsightScope((s) => ({ ...s, fromYear: Number(e.target.value) }))}
+                    className="neo-input !py-1 !px-1.5 !text-[10px] min-w-0"
+                    style={{ fontSize: '16px' }}
+                  >
+                    {insightCompactYears.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={insightScope.toMonth ?? 12}
+                    onChange={(e) => setInsightScope((s) => ({ ...s, toMonth: Number(e.target.value) }))}
+                    className="neo-input !py-1 !px-1.5 !text-[10px] min-w-0"
+                    style={{ fontSize: '16px' }}
+                  >
+                    {SCOPE_MONTH_NAMES_COMPACT.map((name, i) => (
+                      <option key={i} value={i + 1}>{name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={insightScope.toYear ?? viewYear}
+                    onChange={(e) => setInsightScope((s) => ({ ...s, toYear: Number(e.target.value) }))}
+                    className="neo-input !py-1 !px-1.5 !text-[10px] min-w-0"
+                    style={{ fontSize: '16px' }}
+                  >
+                    {insightCompactYears.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
                 </div>
               )}
 
               {insightScope.type === 'year' && (
-                <div className="flex gap-2">
+                <div className="grid grid-cols-1">
                   <select
                     value={insightScope.year ?? viewYear}
                     onChange={(e) => setInsightScope((s) => ({ ...s, year: Number(e.target.value) }))}
-                    className="neo-input !py-1 !px-2 !text-xs w-24"
+                    className="neo-input !py-1 !px-1.5 !text-[10px] w-full"
                     style={{ fontSize: '16px' }}
                   >
-                    {Array.from({ length: 10 }, (_, i) => viewYear - 5 + i).map((y) => (
+                    {insightCompactYears.map((y) => (
                       <option key={y} value={y}>{y}</option>
                     ))}
                   </select>
@@ -1269,18 +1296,30 @@ const HistoryPage: React.FC = () => {
               )}
             </div>
 
-            <div className="grid grid-cols-3 lg:grid-cols-1 gap-1.5 lg:gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {QUICK_PROMPTS.map((prompt) => (
-                <button
-                  key={prompt.intent}
-                  type="button"
-                  onClick={() => void runInsight(prompt.intent, prompt.label)}
-                  disabled={isGeneratingInsight}
-                  className="flex flex-col lg:flex-row items-center justify-center lg:justify-start gap-1 lg:gap-2 px-1 py-2 lg:px-3 lg:py-3 border-2 border-[#555555] bg-[#202020] text-[8.5px] sm:text-[9.5px] lg:text-xs font-black uppercase tracking-wide text-center lg:text-left transition-all duration-150 hover:bg-[#2D2D2D] disabled:opacity-50"
-                >
-                  <span className="shrink-0 scale-75 lg:scale-100">{prompt.icon}</span>
-                  <span className="leading-[1.1]">{prompt.label}</span>
-                </button>
+                (() => {
+                  const accentColor = insightActionColorMap[prompt.intent];
+                  return (
+                    <button
+                      key={prompt.intent}
+                      type="button"
+                      onClick={() => void runInsight(prompt.intent, prompt.label)}
+                      disabled={isGeneratingInsight}
+                      className="min-h-[46px] px-1.5 py-1 flex flex-col items-center justify-center gap-0.5 border-2 font-black uppercase text-[7px] sm:text-[8px] leading-[1.05] tracking-[0.1em] text-center transition-all duration-150 shadow-none [border-color:var(--insight-idle)] [color:var(--insight-idle)] active:translate-y-0.5 active:translate-x-0.5 active:[border-color:var(--insight-accent)] active:[color:var(--insight-accent)] active:[box-shadow:3px_3px_0px_0px_var(--insight-accent)] disabled:opacity-50"
+                      style={{
+                        '--insight-accent': accentColor,
+                        '--insight-idle': '#A09890',
+                      } as React.CSSProperties & {
+                        '--insight-accent': string;
+                        '--insight-idle': string;
+                      }}
+                    >
+                      <span className="shrink-0">{prompt.icon}</span>
+                      <span>{prompt.label}</span>
+                    </button>
+                  );
+                })()
               ))}
             </div>
 

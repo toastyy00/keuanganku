@@ -94,13 +94,13 @@ const Layout: React.FC = () => {
     switch (location.pathname) {
       case '/history':
         return {
-          icon: <LineChart size={24} strokeWidth={2.5} aria-hidden="true" />,
+          icon: <LineChart size={26} strokeWidth={2.5} aria-hidden="true" />,
           label: 'Buka insight pengeluaran',
           action: openHistoryInsight,
         };
       case '/recurring':
         return {
-          icon: <RefreshCcw size={22} strokeWidth={2.5} aria-hidden="true" />,
+          icon: <RefreshCcw size={24} strokeWidth={2.5} aria-hidden="true" />,
           label: 'Tambah pengeluaran rutin',
           action: openRecurringSheet,
         };
@@ -108,7 +108,7 @@ const Layout: React.FC = () => {
         return {
           icon: (
             <Plus
-              size={28}
+              size={33}
               strokeWidth={2.5}
               aria-hidden="true"
               className={cn(
@@ -132,6 +132,9 @@ const Layout: React.FC = () => {
   const activeIndex = ALL_ITEMS.findIndex((i) =>
     i.end ? location.pathname === i.to : location.pathname.startsWith(i.to)
   );
+
+  const isBottomSheetActive = () =>
+    document.body.dataset.bottomSheetOpen === 'true';
 
   return (
     <div className="flex h-dvh overflow-hidden" style={{ backgroundColor: '#1A1A1A' }}>
@@ -239,11 +242,19 @@ const Layout: React.FC = () => {
           }
         }}
         onTouchStart={(e) => {
+          if (isBottomSheetActive()) {
+            touchStartRef.current = null;
+            return;
+          }
           if ((e.target as HTMLElement).closest('[data-no-swipe="true"]')) return;
           const touch = e.touches[0];
           touchStartRef.current = { x: touch.clientX, y: touch.clientY };
         }}
         onTouchEnd={(e) => {
+          if (isBottomSheetActive()) {
+            touchStartRef.current = null;
+            return;
+          }
           if ((e.target as HTMLElement).closest('[data-no-swipe="true"]')) return;
           if (!touchStartRef.current) return;
           
@@ -299,16 +310,16 @@ const Layout: React.FC = () => {
           style={{
             width: '60px',
             height: '60px',
-            transform: 'translateX(-50%) translateY(-15%)',
+            transform: 'translateX(-50%) translateY(-20%)',
             top: 0,
-            backgroundColor: '#161616',
-            borderTop: '2px solid #777777',
-            borderLeft: '2px solid #777777',
-            borderRight: '2px solid #777777',
-            borderBottom: '2px solid #0A0A0A',
-            boxShadow: 'none',
-            color: '#B8F55A',
-            transition: 'transform 0.15s cubic-bezier(0.34,1.56,0.64,1)',
+            backgroundColor: '#232019',
+            borderTop: '3px solid #9FD65C',
+            borderLeft: '3px solid #9FD65C',
+            borderRight: '3px solid #9FD65C',
+            borderBottom: '3px solid #0A0A0A',
+            boxShadow: '0 5px 0 #17130F',
+            color: '#9FD65C',
+            transition: 'transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.15s ease',
           }}
         >
           <div key={location.pathname} className="animate-pop-rotate flex items-center justify-center">
@@ -323,7 +334,7 @@ const Layout: React.FC = () => {
           style={{
             paddingBottom: 'calc(6px + env(safe-area-inset-bottom, 0px))',
             backgroundColor: '#0A0A0A',
-            borderColor: '#444444',
+            borderColor: '#3A3A3A',
             boxShadow: '0 -4px 20px rgba(0,0,0,0.5)',
           }}
         >
@@ -340,8 +351,8 @@ const Layout: React.FC = () => {
                 {({ isActive }) => (
                   <>
                     <Icon
-                      size={20}
-                      strokeWidth={isActive ? 2.5 : 2}
+                      size={21}
+                      strokeWidth={isActive ? 2.55 : 2.05}
                       aria-hidden="true"
                       className="nav-item-icon"
                       style={{ color: isActive ? '#F5F0E8' : 'currentColor' }}
@@ -368,8 +379,8 @@ const Layout: React.FC = () => {
                 {({ isActive }) => (
                   <>
                     <Icon
-                      size={20}
-                      strokeWidth={isActive ? 2.5 : 2}
+                      size={21}
+                      strokeWidth={isActive ? 2.55 : 2.05}
                       aria-hidden="true"
                       className="nav-item-icon"
                       style={{ color: isActive ? '#F5F0E8' : 'currentColor' }}

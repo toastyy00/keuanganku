@@ -119,7 +119,7 @@ export default {
           borderRadius: '0px',
           transition: 'all 150ms ease',
           '&:focus': {
-            boxShadow: '4px 4px 0px 0px #000000',
+            boxShadow: '3px 3px 0px 0px #7ABF3A',
             borderColor: '#B8F55A',
           },
           '&::placeholder': {
