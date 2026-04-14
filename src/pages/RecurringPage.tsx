@@ -128,7 +128,7 @@ const AddRecurringSheet: React.FC<AddRecurringSheetProps> = ({ isOpen, onClose, 
           <label className="text-xs font-bold uppercase tracking-wider">
             Nominal ({currency})
           </label>
-          <div className={`flex border-2 border-[#555555] ${errors.amount ? 'border-red-500' : ''}`}>
+          <div className={`flex border-2 border-[#555555] bg-[#222222] transition-all duration-150 ${errors.amount ? 'border-red-500' : 'focus-within:border-brutal-yellow focus-within:shadow-[3px_3px_0px_0px_#7ABF3A]'}`}>
             <span className="flex items-center pl-3 text-sm font-bold text-brutal-black/60 shrink-0">
               {currency === 'IDR' ? 'Rp' : '$'}
             </span>
@@ -138,7 +138,7 @@ const AddRecurringSheet: React.FC<AddRecurringSheetProps> = ({ isOpen, onClose, 
               placeholder={currency === 'IDR' ? '0' : '0.00'}
               value={amountInput.displayValue}
               onChange={(e) => amountInput.handleChange(e.target.value)}
-              className="flex-1 bg-transparent px-2 py-2.5 font-bold text-brutal-black focus:outline-none"
+              className="flex-1 bg-transparent px-2 py-2.5 font-bold text-brutal-black focus:outline-none focus-visible:shadow-none"
               style={{ fontSize: '16px' }}
             />
           </div>

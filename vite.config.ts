@@ -110,7 +110,7 @@ export default defineConfig(({ mode }) => {
   },
   build: {
     target: 'es2020',
-    sourcemap: 'hidden',
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks(id: string) {

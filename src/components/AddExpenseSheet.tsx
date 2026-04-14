@@ -293,8 +293,8 @@ const AddExpenseSheet: React.FC = () => {
           </label>
           <div className="flex gap-2">
             <div
-              className={`flex-1 flex border-2 border-[#555555] transition-all duration-150 ${flashAmount ? 'bg-brutal-yellow' : ''
-                } ${errors.amount ? 'border-red-500' : ''}`}
+              className={`flex-1 flex border-2 border-[#555555] bg-[#222222] transition-all duration-150 ${flashAmount ? 'bg-brutal-yellow' : ''
+                } ${errors.amount ? 'border-red-500' : 'focus-within:border-brutal-yellow focus-within:shadow-[3px_3px_0px_0px_#7ABF3A]'}`}
             >
               <span className="flex items-center pl-3 text-sm font-bold text-brutal-black/60 shrink-0">
                 {symbol}
@@ -306,7 +306,7 @@ const AddExpenseSheet: React.FC = () => {
                 placeholder={entryCurrency === 'IDR' ? '0' : '0.00'}
                 value={displayValue}
                 onChange={(e) => handleChange(e.target.value)}
-                className="flex-1 bg-transparent px-2 py-2.5 font-bold text-brutal-black focus:outline-none transition-colors duration-200"
+                className="flex-1 bg-transparent px-2 py-2.5 font-bold text-brutal-black focus:outline-none focus-visible:shadow-none transition-colors duration-200"
                 style={{ fontSize: '16px' }}
                 aria-label="Nominal"
               />
