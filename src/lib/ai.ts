@@ -65,6 +65,17 @@ export interface ExpenseInsightContext {
     destination?: string;
     note?: string;
   }>;
+  personalTopCategories?: Array<{
+    label: string;
+    amount: number;
+    pct: number;
+  }>;
+  personalNeedWantRatio?: {
+    needsPct: number;
+    wantsPct: number;
+    needsTotal: number;
+    wantsTotal: number;
+  };
 }
 
 export type ExpenseInsightIntent = 'deep_analysis';
@@ -126,6 +137,8 @@ Kamu WAJIB membahas poin-poin ini secara eksplisit:
 (5) Pengeluaran sekali vs berulang: mana yang hanya muncul di periode ini vs yang muncul tiap bulan?
 (6) Status budget: jika data budget tersedia, nyatakan secara pasti surplus atau defisit dalam angka.
 (7) Satu pola "silent killer" — pengeluaran kecil tapi sering yang mudah luput dari perhatian.
+(8) Need vs Want ratio analysis — hitung rasio ini SETELAH mengecualikan bantuan keluarga, lalu evaluasi apakah sehat (<50% want = bagus, 50-65% = perlu perhatian, >65% = perlu aksi). Gunakan data personalNeedWantRatio jika tersedia.
+(9) Top 3 kategori personal (excl keluarga) — gunakan data personalTopCategories jika tersedia, sebutkan masing-masing dengan nominal dan persentase, lalu identifikasi mana yang paling bisa ditekan.
 
 Aksi: maksimal 3, harus berdasarkan data konkret di atas. Dilarang memberi saran umum/generik.`;
 

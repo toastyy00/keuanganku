@@ -397,6 +397,23 @@ const HistoryPage: React.FC = () => {
     () => buildTopCategories(scopedMonthExpenses, categories, scopedTotal, toDisplay),
     [scopedMonthExpenses, categories, scopedTotal, toDisplay]
   );
+  // Personal top categories — excluding keluarga for accurate personal evaluation
+  const personalTopCategories = useMemo<HistoryInsightCategory[]>(
+    () => buildTopCategories(scopedMonthExpenses, categories, scopedTotal, toDisplay, ['keluarga']),
+    [scopedMonthExpenses, categories, scopedTotal, toDisplay]
+  );
+  const personalNeedsTotal = useMemo(
+    () => sumDisplayedExpenses(
+      personalExpenses.filter((e) => e.type === 'NEED'), toDisplay
+    ),
+    [personalExpenses, toDisplay]
+  );
+  const personalWantsTotal = useMemo(
+    () => sumDisplayedExpenses(
+      personalExpenses.filter((e) => e.type === 'WANT'), toDisplay
+    ),
+    [personalExpenses, toDisplay]
+  );
   const filterLabel = getInsightFilterLabel(typeFilter);
   const quickInsightLine = useMemo(() => buildQuickInsightLine({
     filterLabel,
@@ -404,11 +421,14 @@ const HistoryPage: React.FC = () => {
     scopedExpenses: scopedMonthExpenses,
     scopedTotal,
     topCategories,
+    personalTopCategories,
     previousScopedTotal,
     familySupportTotal,
     personalTotal,
+    personalNeedsTotal,
+    personalWantsTotal,
     personalBudget: personalMonthlyBudget,
-  }), [filterLabel, currency, scopedMonthExpenses, scopedTotal, topCategories, previousScopedTotal, familySupportTotal, personalTotal, personalMonthlyBudget]);
+  }), [filterLabel, currency, scopedMonthExpenses, scopedTotal, topCategories, personalTopCategories, previousScopedTotal, familySupportTotal, personalTotal, personalNeedsTotal, personalWantsTotal, personalMonthlyBudget]);
   useEffect(() => {
     setAssistantMessages([introMessage(resolvedScopeLabel)]);
     setAssistantError(null);
@@ -528,6 +548,10 @@ const HistoryPage: React.FC = () => {
       let insight: HistoryInsightResponse;
 
       if (intent === 'combined') {
+        // Build personal top categories for better evaluation (excl keluarga)
+        const scopePersonalTopCategories = buildTopCategories(
+          scopeTypeFiltered, categories, scopeScopedTotal, toDisplay, ['keluarga']
+        );
         insight = buildCombinedInsight({
           scopeLabel: resolvedScopeLabel,
           currency,
@@ -536,6 +560,7 @@ const HistoryPage: React.FC = () => {
           transferTotal: scopeTransferTotal,
           previousScopedTotal: scopePreviousScopedTotal,
           topCategories: scopeTopCategories,
+          personalTopCategories: scopePersonalTopCategories,
           split: scopeSplit,
           filterLabel,
           familySupportTotal: scopeFamilySupportTotal,
@@ -590,6 +615,21 @@ const HistoryPage: React.FC = () => {
                 amount: item.amount,
                 pct: item.pct,
               })),
+              // Personal top categories (excl keluarga) for AI evaluation
+              personalTopCategories: buildTopCategories(
+                scopeTypeFiltered, categories, scopeScopedTotal, toDisplay, ['keluarga']
+              ).map((item) => ({
+                label: item.label,
+                amount: item.amount,
+                pct: item.pct,
+              })),
+              // Personal Need/Want ratio (excl keluarga)
+              personalNeedWantRatio: (scopePersonalNeedsTotal + scopePersonalWantsTotal) > 0 ? {
+                needsPct: Math.round((scopePersonalNeedsTotal / (scopePersonalNeedsTotal + scopePersonalWantsTotal)) * 100),
+                wantsPct: Math.round((scopePersonalWantsTotal / (scopePersonalNeedsTotal + scopePersonalWantsTotal)) * 100),
+                needsTotal: scopePersonalNeedsTotal,
+                wantsTotal: scopePersonalWantsTotal,
+              } : undefined,
               recurringExpenses: allScopedExpenses
                 .filter((expense) => expense.is_recurring)
                 .map((expense) => ({

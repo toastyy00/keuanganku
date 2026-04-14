@@ -1,7 +1,14 @@
 #!/bin/sh
 set -eu
 
-node -e "const fs=require('fs'); const config={VITE_SUPABASE_URL:process.env.VITE_SUPABASE_URL||'',VITE_SUPABASE_ANON_KEY:process.env.VITE_SUPABASE_ANON_KEY||''}; fs.writeFileSync('/app/dist/config.js', 'window.__APP_CONFIG__ = ' + JSON.stringify(config, null, 2) + ';\\n');"
+# Inject runtime environment variables into config.js using pure shell
+# (no Node.js needed — works on any base image including nginx:alpine)
+cat > /usr/share/nginx/html/config.js << EOF
+window.__APP_CONFIG__ = {
+  "VITE_SUPABASE_URL": "${VITE_SUPABASE_URL:-}",
+  "VITE_SUPABASE_ANON_KEY": "${VITE_SUPABASE_ANON_KEY:-}"
+};
+EOF
 
-exec serve -s dist -l 7432
-
+# Start nginx in foreground
+exec nginx -g 'daemon off;'

@@ -156,7 +156,12 @@ function isAuthenticated(): boolean {
   return useAuthStore.getState().session !== null;
 }
 
+let _migrationDone = false;
+
 export async function runCategorySlugMigrations(): Promise<void> {
+  if (_migrationDone) return;
+  _migrationDone = true;
+
   if (!isAuthenticated()) {
     await migrateLocalCategorySlugs();
     await normalizeLocalCategoryMetadata();
@@ -598,8 +603,23 @@ export class SupabaseRecurringRepository implements RecurringRepository {
 }
 
 // ============================================================
-//  REPOSITORY FACTORY FUNCTIONS
+//  REPOSITORY FACTORY FUNCTIONS  (cached singletons)
 // ============================================================
+
+let _expenseRepo: ExpenseRepository | null = null;
+let _categoryRepo: CategoryRepository | null = null;
+let _recurringRepo: RecurringRepository | null = null;
+let _lastAuthState: boolean | null = null;
+
+function getOrCreate<T>(
+  current: T | null,
+  authed: boolean,
+  AuthedClass: new () => T,
+  LocalClass: new () => T,
+): T {
+  if (current && _lastAuthState === authed) return current;
+  return authed ? new AuthedClass() : new LocalClass();
+}
 
 /**
  * Returns the correct ExpenseRepository based on auth state.
@@ -607,19 +627,28 @@ export class SupabaseRecurringRepository implements RecurringRepository {
  * Unauthenticated → LocalStorageExpenseRepository (offline fallback)
  */
 export function getExpenseRepository(): ExpenseRepository {
-  return isAuthenticated()
-    ? new SupabaseExpenseRepository()
-    : new LocalStorageExpenseRepository();
+  const authed = isAuthenticated();
+  if (_lastAuthState !== authed) {
+    _expenseRepo = null;
+    _categoryRepo = null;
+    _recurringRepo = null;
+    _lastAuthState = authed;
+  }
+  _expenseRepo = getOrCreate(_expenseRepo, authed, SupabaseExpenseRepository, LocalStorageExpenseRepository);
+  return _expenseRepo;
 }
 
 export function getCategoryRepository(): CategoryRepository {
-  return isAuthenticated()
-    ? new SupabaseCategoryRepository()
-    : new LocalStorageCategoryRepository();
+  const authed = isAuthenticated();
+  if (_lastAuthState !== authed) { _lastAuthState = authed; _expenseRepo = null; _categoryRepo = null; _recurringRepo = null; }
+  _categoryRepo = getOrCreate(_categoryRepo, authed, SupabaseCategoryRepository, LocalStorageCategoryRepository);
+  return _categoryRepo;
 }
 
 export function getRecurringRepository(): RecurringRepository {
-  return isAuthenticated()
-    ? new SupabaseRecurringRepository()
-    : new LocalStorageRecurringRepository();
+  const authed = isAuthenticated();
+  if (_lastAuthState !== authed) { _lastAuthState = authed; _expenseRepo = null; _categoryRepo = null; _recurringRepo = null; }
+  _recurringRepo = getOrCreate(_recurringRepo, authed, SupabaseRecurringRepository, LocalStorageRecurringRepository);
+  return _recurringRepo;
 }
+

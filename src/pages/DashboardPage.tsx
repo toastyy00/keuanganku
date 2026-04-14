@@ -433,10 +433,10 @@ const DashboardPage: React.FC = () => {
   const familyRemaining = familySupportMonthlyBudget - familySupportSpent;
 
   function budgetColor(pct: number) {
-    if (pct >= 100) return { text: 'text-red-400', bar: '#EF4444', swatch: 'bg-red-400' };
-    if (pct >= 90) return { text: 'text-orange-400', bar: '#FB923C', swatch: 'bg-orange-400' };
-    if (pct >= 70) return { text: 'text-yellow-400', bar: '#FACC15', swatch: 'bg-yellow-400' };
-    return { text: 'text-green-400', bar: '#4ADE80', swatch: 'bg-green-400' };
+    if (pct > 100) return { text: 'text-red-500', bar: '#DC2626', swatch: 'bg-red-500', over: true };
+    if (pct >= 90)  return { text: 'text-orange-400', bar: '#FB923C', swatch: 'bg-orange-400', over: false };
+    if (pct >= 70)  return { text: 'text-yellow-400', bar: '#FACC15', swatch: 'bg-yellow-400', over: false };
+    return { text: 'text-green-400', bar: '#4ADE80', swatch: 'bg-green-400', over: false };
   }
   const bc = budgetColor(budgetSpentPct);
   const fc = budgetColor(familySpentPct);
@@ -704,12 +704,27 @@ const DashboardPage: React.FC = () => {
                           <span className={`text-[11px] font-black ${bc.text}`}>{budgetSpentPct}%</span>
                         </div>
                         <div className="h-2 border-2 border-[#555555] overflow-hidden bg-[#111111]">
-                          <div className="h-full transition-all duration-700 ease-out" style={{ width: `${Math.min(100, budgetSpentPct)}%`, backgroundColor: bc.bar }} />
+                          <div
+                            className="h-full transition-all duration-700 ease-out"
+                            style={{
+                              width: `${Math.min(100, budgetSpentPct)}%`,
+                              backgroundColor: bc.bar,
+                              ...(bc.over ? {
+                                backgroundImage: `repeating-linear-gradient(
+                                  -45deg,
+                                  transparent,
+                                  transparent 3px,
+                                  rgba(0,0,0,0.3) 3px,
+                                  rgba(0,0,0,0.3) 6px
+                                )`,
+                              } : {}),
+                            }}
+                          />
                         </div>
                       </div>
                       <div className="mt-2">
                         <p className="text-sm font-bold leading-none">{fmt(personalSpent)}</p>
-                        <p className="text-[10px] font-medium text-brutal-black/40 mt-1">
+                        <p className={`text-[10px] font-medium mt-1 ${budgetRemaining < 0 ? 'text-red-400 font-bold' : 'text-brutal-black/40'}`}>
                           {budgetRemaining >= 0 ? `sisa ${fmt(budgetRemaining)}` : `lebih ${fmt(Math.abs(budgetRemaining))}`}
                         </p>
                       </div>
@@ -729,12 +744,27 @@ const DashboardPage: React.FC = () => {
                           <span className={`text-[11px] font-black ${fc.text}`}>{familySpentPct}%</span>
                         </div>
                         <div className="h-2 border-2 border-[#555555] overflow-hidden bg-[#111111]">
-                          <div className="h-full transition-all duration-700 ease-out float-right" style={{ width: `${Math.min(100, familySpentPct)}%`, backgroundColor: fc.bar }} />
+                          <div
+                            className="h-full transition-all duration-700 ease-out float-right"
+                            style={{
+                              width: `${Math.min(100, familySpentPct)}%`,
+                              backgroundColor: fc.bar,
+                              ...(fc.over ? {
+                                backgroundImage: `repeating-linear-gradient(
+                                  -45deg,
+                                  transparent,
+                                  transparent 3px,
+                                  rgba(0,0,0,0.3) 3px,
+                                  rgba(0,0,0,0.3) 6px
+                                )`,
+                              } : {}),
+                            }}
+                          />
                         </div>
                       </div>
                       <div className="mt-2 text-right">
                         <p className="text-sm font-bold leading-none">{fmt(familySupportSpent)}</p>
-                        <p className="text-[10px] font-medium text-brutal-black/40 mt-1">
+                        <p className={`text-[10px] font-medium mt-1 ${familyRemaining < 0 ? 'text-red-400 font-bold' : 'text-brutal-black/40'}`}>
                           {familyRemaining >= 0 ? `sisa ${fmt(familyRemaining)}` : `lebih ${fmt(Math.abs(familyRemaining))}`}
                         </p>
                       </div>

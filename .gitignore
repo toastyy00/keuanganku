@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+keuanganku-backup-*.json
+
 
 # Environment — NEVER commit real secrets
 .env

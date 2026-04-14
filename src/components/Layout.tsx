@@ -6,7 +6,7 @@ import {
   RefreshCcw,
   Settings,
   Plus,
-  Bot,
+  LineChart,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -63,6 +63,7 @@ const Layout: React.FC = () => {
 
   // ── True Scroll Restoration ──────────────────────────────
   const scrollPositions = useRef<Record<string, number>>({});
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const locationRef = useRef(location.pathname);
 
   React.useEffect(() => {
@@ -93,7 +94,7 @@ const Layout: React.FC = () => {
     switch (location.pathname) {
       case '/history':
         return {
-          icon: <Bot size={26} strokeWidth={2.5} aria-hidden="true" />,
+          icon: <LineChart size={24} strokeWidth={2.5} aria-hidden="true" />,
           label: 'Buka insight pengeluaran',
           action: openHistoryInsight,
         };
@@ -240,17 +241,15 @@ const Layout: React.FC = () => {
         onTouchStart={(e) => {
           if ((e.target as HTMLElement).closest('[data-no-swipe="true"]')) return;
           const touch = e.touches[0];
-          scrollPositions.current['touchStartX'] = touch.clientX;
-          scrollPositions.current['touchStartY'] = touch.clientY;
+          touchStartRef.current = { x: touch.clientX, y: touch.clientY };
         }}
         onTouchEnd={(e) => {
           if ((e.target as HTMLElement).closest('[data-no-swipe="true"]')) return;
-          const touchX = scrollPositions.current['touchStartX'];
-          const touchY = scrollPositions.current['touchStartY'];
-          if (touchX === undefined || touchY === undefined) return;
+          if (!touchStartRef.current) return;
           
-          const deltaX = e.changedTouches[0].clientX - touchX;
-          const deltaY = e.changedTouches[0].clientY - touchY;
+          const deltaX = e.changedTouches[0].clientX - touchStartRef.current.x;
+          const deltaY = e.changedTouches[0].clientY - touchStartRef.current.y;
+          touchStartRef.current = null;
           
           // Require mostly horizontal movement and a minimum distance (e.g. 50px)
           if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
@@ -264,8 +263,6 @@ const Layout: React.FC = () => {
               }
             }
           }
-          delete scrollPositions.current['touchStartX'];
-          delete scrollPositions.current['touchStartY'];
         }}
       >
         <Outlet />
@@ -276,6 +273,17 @@ const Layout: React.FC = () => {
           aria-hidden="true"
         />
       </main>
+
+      {/* ── Desktop FAB ── */}
+      <button
+        className="fab hidden md:flex"
+        onClick={fab.action}
+        aria-label={fab.label}
+      >
+        <div key={location.pathname} className="animate-pop-rotate flex items-center justify-center">
+          {fab.icon}
+        </div>
+      </button>
 
       {/* ══ Mobile bottom navigation — Single Full Pill + Floating FAB ══ */}
       {/* Wrapper: positions the pill and anchors the floating FAB */}
@@ -293,17 +301,19 @@ const Layout: React.FC = () => {
             height: '60px',
             transform: 'translateX(-50%) translateY(-15%)',
             top: 0,
-            backgroundColor: '#111111',
-            borderTop: '2px solid #262626',
-            borderLeft: '2px solid #262626',
-            borderRight: '2px solid #262626',
-            borderBottom: '2px solid #111111',
+            backgroundColor: '#161616',
+            borderTop: '2px solid #777777',
+            borderLeft: '2px solid #777777',
+            borderRight: '2px solid #777777',
+            borderBottom: '2px solid #0A0A0A',
             boxShadow: 'none',
             color: '#B8F55A',
             transition: 'transform 0.15s cubic-bezier(0.34,1.56,0.64,1)',
           }}
         >
-          {fab.icon}
+          <div key={location.pathname} className="animate-pop-rotate flex items-center justify-center">
+            {fab.icon}
+          </div>
         </button>
 
         {/* ── Flat Bottom Bar ── */}
@@ -312,8 +322,8 @@ const Layout: React.FC = () => {
           className="relative flex items-center w-full px-2 pt-1.5 border-t-2 overflow-hidden"
           style={{
             paddingBottom: 'calc(6px + env(safe-area-inset-bottom, 0px))',
-            backgroundColor: '#111111',
-            borderColor: '#181818',
+            backgroundColor: '#0A0A0A',
+            borderColor: '#444444',
             boxShadow: '0 -4px 20px rgba(0,0,0,0.5)',
           }}
         >
@@ -334,7 +344,7 @@ const Layout: React.FC = () => {
                       strokeWidth={isActive ? 2.5 : 2}
                       aria-hidden="true"
                       className="nav-item-icon"
-                      style={{ color: isActive ? '#B8F55A' : 'currentColor' }}
+                      style={{ color: isActive ? '#F5F0E8' : 'currentColor' }}
                     />
                     <span className="nav-item-label" style={{ color: isActive ? '#F5F0E8' : 'currentColor' }}>
                       {label}
@@ -362,7 +372,7 @@ const Layout: React.FC = () => {
                       strokeWidth={isActive ? 2.5 : 2}
                       aria-hidden="true"
                       className="nav-item-icon"
-                      style={{ color: isActive ? '#B8F55A' : 'currentColor' }}
+                      style={{ color: isActive ? '#F5F0E8' : 'currentColor' }}
                     />
                     <span className="nav-item-label" style={{ color: isActive ? '#F5F0E8' : 'currentColor' }}>
                       {label}

@@ -40,8 +40,24 @@ export default defineConfig(({ mode }) => {
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+        // Activate new SW immediately — no waiting for tab close
+        skipWaiting: true,
+        clientsClaim: true,
+        // Precache all built assets except index.html (must be network-first)
+        globPatterns: ['**/*.{js,css,ico,png,svg,woff,woff2}'],
+        // SPA navigation fallback
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/config\.js/],
         runtimeCaching: [
+          {
+            // index.html — NetworkFirst so new deploys are picked up
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'html-cache',
+              networkTimeoutSeconds: 3,
+            },
+          },
           {
             // Google Fonts — CacheFirst, max 30 days
             urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
@@ -69,7 +85,7 @@ export default defineConfig(({ mode }) => {
           },
           {
             // Exchange rate API — NetworkFirst
-            urlPattern: /^https:\/\/api\.frankfurter\.app\/.*/i,
+            urlPattern: /^https:\/\/api\.frankfurter\.(app|dev)\/.*/i,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'exchange-rate-cache',
@@ -94,7 +110,24 @@ export default defineConfig(({ mode }) => {
   },
   build: {
     target: 'es2020',
-    sourcemap: true,
+    sourcemap: 'hidden',
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react-dom') || id.includes('react-router') || id.includes('/react/')) {
+              return 'vendor-react';
+            }
+            if (id.includes('@supabase')) {
+              return 'vendor-supabase';
+            }
+            if (id.includes('@number-flow') || id.includes('lucide-react')) {
+              return 'vendor-ui';
+            }
+          }
+        },
+      },
+    },
   },
 };
 });

@@ -219,8 +219,8 @@
   /* Bottom sheet overlay */
   .bottom-sheet-overlay {
     @apply fixed inset-0 bg-black/60 z-40;
-    @apply transition-opacity duration-300 ease-out;
     opacity: 0;
+    transition: opacity 150ms ease-out;
   }
 
   .bottom-sheet-overlay[data-state="open"] {
@@ -234,11 +234,16 @@
     border-top: 4px solid #F5F0E8;
     @apply max-h-[90dvh] overflow-y-auto;
     will-change: transform;
-    transition: transform 300ms cubic-bezier(0.32, 0.72, 0, 1);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    /* Closing: fast snap out */
+    transition: transform 180ms cubic-bezier(0.4, 0, 1, 1);
     transform: translateY(100%);
   }
 
   .bottom-sheet-panel[data-state="open"] {
+    /* Opening: snappy spring — fast in, minimal settle */
+    transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
     transform: translateY(0%);
   }
 
@@ -261,6 +266,30 @@
       width: min(92vw, 1120px);
       max-height: min(88vh, 920px);
     }
+  }
+
+  /* ── Green scrollbar for insight chatbox ───────────────────── */
+  .history-insight-sheet .overflow-y-auto::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .history-insight-sheet .overflow-y-auto::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .history-insight-sheet .overflow-y-auto::-webkit-scrollbar-thumb {
+    background: #B8F55A;
+    border-radius: 4px;
+  }
+
+  .history-insight-sheet .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+    background: #9AD84B;
+  }
+
+  /* Firefox scrollbar */
+  .history-insight-sheet .overflow-y-auto {
+    scrollbar-width: thin;
+    scrollbar-color: #B8F55A transparent;
   }
 }
 
@@ -348,5 +377,14 @@
       opacity: 1;
       transform: translateY(0);
     }
+  }
+
+  @keyframes popRotate {
+    0% { transform: scale(0.4) rotate(-90deg); opacity: 0; }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  }
+
+  .animate-pop-rotate {
+    animation: popRotate 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
   }
 }

@@ -73,6 +73,9 @@ type ExpenseStore = ExpenseStoreState & ExpenseStoreActions;
 //  STORE IMPLEMENTATION
 // ============================================================
 
+// In-flight promise guard — prevents concurrent loadExpenses() calls
+let _loadInflight: Promise<void> | null = null;
+
 export const useExpenseStore = create<ExpenseStore>()(
   persist(
     (set, get) => ({
@@ -87,24 +90,34 @@ export const useExpenseStore = create<ExpenseStore>()(
 
       setHasHydrated: (state) => set({ _hasHydrated: state }),
 
-      // ── Load all data ──────────────────────────────────────
+      // ── Load all data (deduped — concurrent calls share one promise) ──
       loadExpenses: async () => {
-        set({ isLoading: true, error: null });
-        try {
-          await runCategorySlugMigrations();
+        // Dedup guard: if already loading, return the in-flight promise
+        const existing = _loadInflight;
+        if (existing) return existing;
 
-          const [expenses, categories, recurringTemplates] = await Promise.all([
-            getExpenseRepository().getAll(),
-            getCategoryRepository().getAll(),
-            getRecurringRepository().getAll(),
-          ]);
-          set({ expenses, categories, recurringTemplates });
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : 'Failed to load data';
-          set({ error: msg });
-        } finally {
-          set({ isLoading: false });
-        }
+        const run = async () => {
+          set({ isLoading: true, error: null });
+          try {
+            await runCategorySlugMigrations();
+
+            const [expenses, categories, recurringTemplates] = await Promise.all([
+              getExpenseRepository().getAll(),
+              getCategoryRepository().getAll(),
+              getRecurringRepository().getAll(),
+            ]);
+            set({ expenses, categories, recurringTemplates });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Failed to load data';
+            set({ error: msg });
+          } finally {
+            set({ isLoading: false });
+            _loadInflight = null;
+          }
+        };
+
+        _loadInflight = run();
+        return _loadInflight;
       },
 
       // ── Add expense ────────────────────────────────────────
