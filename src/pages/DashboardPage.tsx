@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom';
 import { TrendingUp, TrendingDown, Minus, CalendarClock, Target } from 'lucide-react';
 import { Card, CardBody } from '../components/ui/Card';
 import NumberFlow, { continuous } from '@number-flow/react';
-import { Badge } from '../components/ui/Badge';
 import { SkeletonDashboard } from '../components/SkeletonCard';
 import { useExpenseStore } from '../store/useExpenseStore';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -13,7 +12,6 @@ import {
   formatCurrency,
   calcNeedsWantsSplit,
   monthLabel,
-  friendlyDate,
 } from '../lib/utils';
 import { getExchangeRate, convertAmount, type RateResult } from '../lib/exchangeRate';
 import type { Currency, Expense } from '../types';
@@ -24,7 +22,7 @@ import type { Currency, Expense } from '../types';
 
 function haptic() { if ('vibrate' in navigator) navigator.vibrate(10); }
 
-// ── Swipeable Card Carousel ─────────────────────────────────
+// Swipeable Card Carousel
 const SWIPE_HINT_KEY = 'dashboard_swipe_hint_seen';
 
 function hasSeenSwipeHint(): boolean {
@@ -139,7 +137,7 @@ function SwipeCarousel({
         ))}
       </div>
 
-      {/* Indicator lines — minimal, inside bottom of carousel (variant: lines) */}
+      {/* Indicator lines - minimal, inside bottom of carousel (variant: lines) */}
       {slides.length > 1 && variant === 'lines' && (
         <div className="absolute bottom-0 left-0 right-0 h-[3px]">
           <div className="absolute inset-0 flex">
@@ -164,7 +162,7 @@ function SwipeCarousel({
         </div>
       )}
 
-      {/* Indicator dots — floating bottom-center, absolutely no height added (variant: dots) */}
+      {/* Indicator dots - floating bottom-center, adds no extra height (variant: dots) */}
       {slides.length > 1 && variant === 'dots' && (
         <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 flex items-center gap-1 z-10">
           {slides.map((_, i) => (
@@ -187,7 +185,7 @@ function SwipeCarousel({
 }
 
 // ============================================================
-//  AnimatedNumberFlow — Wraps NumberFlow with IntersectionObserver
+//  AnimatedNumberFlow wraps NumberFlow with IntersectionObserver
 //  so it transitions from 0 only when the element is visible
 // ============================================================
 
@@ -250,7 +248,7 @@ function AnimatedNumberFlow({ value, initialDelay = 200, id, ...props }: NumberF
   return <NumberFlow ref={ref} value={displayValue} {...props} />;
 }
 
-// Module-level rate cache — persists across Dashboard re-mounts so amounts
+// Module-level rate cache persists across Dashboard re-mounts so amounts
 // don't flash from the default 16000 fallback rate on each navigation return.
 let _cachedRateInfo: RateResult = { rate: 16000, isFallback: true };
 
@@ -326,7 +324,7 @@ const DashboardPage: React.FC = () => {
     return (saved === 'USD' ? 'USD' : 'IDR') as Currency;
   });
 
-  // Exchange rate state — init from cache to avoid flash on re-mount
+  // Exchange rate state - init from cache to avoid flash on re-mount
   const [rateInfo, setRateInfo] = useState<RateResult>(() => _cachedRateInfo);
 
   const handleDashCurrencyToggle = () => {
@@ -352,7 +350,7 @@ const DashboardPage: React.FC = () => {
 
   const fmt = (amount: number) => formatCurrency(amount, dashCurrency);
 
-  // ── Month prefix ──────────────────────────────────────────
+  // Month prefixes used for filtering
   const nowDate = new Date();
   const isCurrentMonth = year === nowDate.getFullYear() && month === nowDate.getMonth() + 1;
   const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
@@ -361,7 +359,7 @@ const DashboardPage: React.FC = () => {
   const lastMonthDate = new Date(year, month - 2, 1);
   const lastMonthPrefix = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`;
 
-  // ── This month expenses ───────────────────────────────────
+  // This month expenses
   const monthExpenses = useMemo(
     () => expenses.filter((e) => e.date.startsWith(monthPrefix)),
     [expenses, monthPrefix]
@@ -392,14 +390,14 @@ const DashboardPage: React.FC = () => {
     [spendingExpenses, toDisplay]
   );
 
-  // ── Needs vs Wants split ──────────────────────────────────
+  // Needs vs Wants split
   const split = useMemo(() => calcNeedsWantsSplit(
     monthExpenses
       .filter((e) => e.category !== 'keluarga')
       .map((e) => ({ ...e, amount: toDisplay(e) }))
   ), [monthExpenses, toDisplay]);
 
-  // ── Bulan Ini vs Bulan Lalu ───────────────────────────────
+  // Bulan Ini vs Bulan Lalu
   const lastMonthSpending = useMemo(() => {
     return expenses
       .filter((e) => e.date.startsWith(lastMonthPrefix) && e.type !== 'TRANSFER')
@@ -412,7 +410,7 @@ const DashboardPage: React.FC = () => {
     : null;
   const trend: 'up' | 'down' | 'same' = delta === null || delta === 0 ? 'same' : delta > 0 ? 'up' : 'down';
 
-  // ── Budget calculations & Base Values ─────────────────────
+  // Budget calculations and base values
   const familySupportSpent = useMemo(
     () => spendingExpenses
       .filter((e) => e.category === 'keluarga')
@@ -423,7 +421,7 @@ const DashboardPage: React.FC = () => {
   // personalSpent excludes keluarga category (tracked separately)
   const personalSpent = monthTotal - familySupportSpent;
 
-  // ── Top 3 categories (NEED + WANT only, exclude 'keluarga') ──────────────────
+  // Top 3 categories (NEED + WANT only, exclude keluarga)
   const topCategories = useMemo(() => {
     const totals: Record<string, number> = {};
     spendingExpenses
@@ -441,7 +439,7 @@ const DashboardPage: React.FC = () => {
       }));
   }, [spendingExpenses, categories, personalSpent, toDisplay]);
 
-  // ── Recent 5 transactions (all types) ────────────────────
+  // Recent 5 transactions (all types)
   const recentExpenses = useMemo(() => expenses.slice(0, 5), [expenses]);
 
   const budgetSpentPct = personalMonthlyBudget > 0
@@ -455,8 +453,8 @@ const DashboardPage: React.FC = () => {
 
   function budgetColor(pct: number) {
     if (pct > 100) return { text: 'text-red-500', bar: '#DC2626', swatch: 'bg-red-500', over: true };
-    if (pct >= 90)  return { text: 'text-orange-400', bar: '#FB923C', swatch: 'bg-orange-400', over: false };
-    if (pct >= 70)  return { text: 'text-yellow-400', bar: '#FACC15', swatch: 'bg-yellow-400', over: false };
+    if (pct >= 90) return { text: 'text-orange-400', bar: '#FB923C', swatch: 'bg-orange-400', over: false };
+    if (pct >= 70) return { text: 'text-yellow-400', bar: '#FACC15', swatch: 'bg-yellow-400', over: false };
     return { text: 'text-green-400', bar: '#4ADE80', swatch: 'bg-green-400', over: false };
   }
   const bc = budgetColor(budgetSpentPct);
@@ -500,13 +498,13 @@ const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ── Stats Carousel (Total Bulan Ini + vs Bulan Lalu) ── */}
+      {/* Stats Carousel (Total Bulan Ini + vs Bulan Lalu) */}
       {/* neo-card border/shadow wrapper, overflow-hidden so slides clip properly */}
       <div className="neo-card overflow-hidden !p-0">
         <SwipeCarousel
           accentColors={['#1A1A1A', '#B8F55A']}
           slides={[
-            /* ── Slide 1: Total Bulan Ini — Yellow highlight background ── */
+            /* Slide 1: Total Bulan Ini - yellow highlight background */
             <div className="h-full p-5 pt-4 pb-5 bg-brutal-yellow text-[#1A1A1A] flex flex-col justify-between" style={{ minHeight: 148 }}>
               <div>
                 <p className="text-xs font-black uppercase tracking-widest text-[#1A1A1A]/60">
@@ -537,7 +535,7 @@ const DashboardPage: React.FC = () => {
                     {dashCurrency === 'USD' && (
                       <p className="text-[10px] font-medium text-[#1A1A1A]/45 text-right relative -top-0.5">
                         {rateInfo.isFallback
-                          ? `≈ Rp ${rateInfo.rate.toLocaleString('id-ID')}`
+                          ? `~ Rp ${rateInfo.rate.toLocaleString('id-ID')}`
                           : `= Rp ${rateInfo.rate.toLocaleString('id-ID')}`
                         }
                       </p>
@@ -554,7 +552,7 @@ const DashboardPage: React.FC = () => {
               </div>
             </div>,
 
-            /* ── Slide 2: Bulan Ini vs Bulan Lalu — Dark card background ── */
+            /* Slide 2: Bulan Ini vs Bulan Lalu - dark card background */
             <div className="h-full p-5 flex flex-col justify-between" style={{ backgroundColor: '#2A2A2A', minHeight: 148 }}>
               <div className="flex items-center justify-between gap-1.5 sm:gap-4 flex-1">
                 <div className="flex-1 min-w-0">
@@ -656,14 +654,14 @@ const DashboardPage: React.FC = () => {
         />
       </div>
 
-      {/* ── Needs vs Wants + Budget Carousel ─────────────── */}
+      {/* Needs vs Wants + Budget Carousel */}
       <div className="neo-card overflow-hidden !p-0" style={{ boxShadow: dashboardDarkShadow }}>
         <SwipeCarousel
           variant="dots"
           disableHint
           accentColors={hasBudget ? ['#FFFFFF', '#FFFFFF'] : ['#FFFFFF']}
           slides={[
-            /* ── Slide 1: Needs vs Wants ── */
+            /* Slide 1: Needs vs Wants */
             <div className="px-4 py-3">
               <p className="text-xs font-black uppercase tracking-wider mb-3 text-brutal-black/60">
                 Needs vs Wants
@@ -703,16 +701,16 @@ const DashboardPage: React.FC = () => {
               </div>
             </div>,
 
-            /* ── Slide 2: Budget Bulanan — mirrors Need vs Want layout exactly ── */
+            /* Slide 2: Budget Bulanan - mirrors Need vs Want layout */
             ...(hasBudget ? [
               <div className="px-4 py-3">
-                {/* Title row — identical height to "Needs vs Wants" label */}
+                {/* Title row matches the Needs vs Wants label height */}
                 <p className="text-xs font-black uppercase tracking-wider mb-3 text-brutal-black/60 flex items-center gap-1.5">
                   <Target size={11} strokeWidth={2.5} className="shrink-0" />
                   Budget Bulanan
                 </p>
 
-                {/* Progress bars — 2 columns if both exist, 1 column if solo */}
+                {/* Progress bars: 2 columns if both exist, 1 column if solo */}
                 <div className={`grid ${personalMonthlyBudget > 0 && familySupportMonthlyBudget > 0 ? 'grid-cols-2 gap-4' : 'grid-cols-1'} min-h-[72px]`}>
 
                   {/* Left/Only: Personal Budget */}
@@ -800,7 +798,7 @@ const DashboardPage: React.FC = () => {
         />
       </div>
 
-      {/* ── TRANSFER Widget (only when transfers exist) ───── */}
+      {/* Transfer widget (only when transfers exist) */}
       {transferExpenses.length > 0 && (
         <Card className="border-[#555555] bg-[#242424]" style={{ boxShadow: dashboardDarkShadow }}>
           <CardBody>
@@ -812,7 +810,7 @@ const DashboardPage: React.FC = () => {
                 <p className="text-2xl font-black">{fmt(transferTotal)}</p>
                 <p className="text-xs font-medium text-[#F5F0E8]/50 mt-0.5">
                   {transferExpenses.length} transaksi
-                  {uniqueDestinations.length > 0 && ` · ${uniqueDestinations.join(', ')}`}
+                  {uniqueDestinations.length > 0 && ` - ${uniqueDestinations.join(', ')}`}
                 </p>
               </div>
             </div>
@@ -820,10 +818,10 @@ const DashboardPage: React.FC = () => {
         </Card>
       )}
 
-      {/* ── Top 3 Categories ───────────────────────────────── */}
+      {/* Top 3 Categories */}
       {topCategories.length > 0 && (
         <div>
-          <p className="text-xs font-black uppercase tracking-wider mb-3 text-brutal-black/60">
+          <p className="text-xs font-black uppercase tracking-wider mb-2 text-brutal-black/60">
             Top Kategori Terboros
           </p>
           <div className="space-y-2">
@@ -837,7 +835,7 @@ const DashboardPage: React.FC = () => {
               >
                 <Card className="!shadow-[4px_4px_0_0_#000] p-3 transition-all duration-150 group-hover:-translate-y-0.5 group-hover:!shadow-[4px_6px_0_0_#000] group-active:translate-y-[4px] group-active:translate-x-[4px] group-active:!shadow-none">
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl w-9 shrink-0 text-center">{cat?.emoji ?? '🛍️'}</span>
+                    <span className="text-2xl w-9 shrink-0 text-center">{cat?.emoji ?? '\u{1F6CD}\uFE0F'}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-bold truncate">{cat?.label ?? slug}</span>
@@ -856,9 +854,9 @@ const DashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* ── Recent Transactions ────────────────────────────── */}
+      {/* Recent Transactions */}
       <div>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-2">
           <p className="text-xs font-black uppercase tracking-wider text-brutal-black/60">
             Transaksi Terakhir
           </p>
@@ -866,7 +864,7 @@ const DashboardPage: React.FC = () => {
             to="/history"
             className="text-xs font-black uppercase tracking-wider text-brutal-black flex items-center gap-1 hover:underline"
           >
-            Lihat Semua →
+            Lihat Semua {'\u25b8'}
           </Link>
         </div>
 
@@ -882,26 +880,18 @@ const DashboardPage: React.FC = () => {
           <div className="space-y-2">
             {recentExpenses.map((e) => {
               const cat = categories.find((c) => c.slug === e.category);
-              const badgeVariant = e.type === 'NEED' ? 'need' : e.type === 'WANT' ? 'want' : 'transfer';
               return (
                 <Card key={e.id} className="!shadow-[4px_4px_0_0_#000]">
-                  <div className="flex items-center gap-3 p-3">
-                    <span className="text-2xl w-9 shrink-0 text-center">
-                      {e.type === 'TRANSFER' ? '💸' : (cat?.emoji ?? '🛍️')}
+                  <div className="flex items-center gap-2.5 px-3 py-1.5">
+                    <span className="text-xl w-8 shrink-0 text-center">
+                      {e.type === 'TRANSFER' ? '\u{1F4B8}' : (cat?.emoji ?? '\u{1F6CD}\uFE0F')}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold truncate leading-tight">{e.name}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <Badge variant={badgeVariant} size="sm">{e.type}</Badge>
-                        {e.type === 'TRANSFER' && e.destination && (
-                          <span className="text-[10px] text-brutal-black/50 font-medium">→ {e.destination}</span>
-                        )}
-                        <span className="text-[10px] text-brutal-black/50 font-medium">
-                          {friendlyDate(e.date)}
-                        </span>
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-bold truncate leading-tight">{e.name}</p>
                       </div>
                     </div>
-                    <p className="text-sm font-black shrink-0">{fmt(toDisplay(e))}</p>
+                    <p className="text-[13px] font-black shrink-0">{fmt(toDisplay(e))}</p>
                   </div>
                 </Card>
               );

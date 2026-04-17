@@ -24,8 +24,8 @@ const VARIANT_CLASSES: Record<BadgeVariant, string> = {
 };
 
 const SIZE_CLASSES: Record<BadgeSize, string> = {
-  sm: 'px-1.5 py-0 text-[9px] border-2',
-  md: 'px-2 py-0.5 text-xs border-2',
+  sm: 'px-0.5 py-0 text-[9px] leading-[13px] border-2',
+  md: 'px-1.5 py-0.5 text-xs leading-4 border-2',
 };
 
 const Badge: React.FC<BadgeProps> = ({
@@ -36,7 +36,7 @@ const Badge: React.FC<BadgeProps> = ({
 }) => (
   <span
     className={cn(
-      'inline-flex items-center font-black uppercase tracking-wider leading-5',
+      'inline-flex items-center font-black uppercase tracking-wider',
       VARIANT_CLASSES[variant],
       SIZE_CLASSES[size],
       className

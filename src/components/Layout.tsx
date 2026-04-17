@@ -62,21 +62,53 @@ const Layout: React.FC = () => {
   );
 
   // ── True Scroll Restoration ──────────────────────────────
+  const mainContentRef = useRef<HTMLElement | null>(null);
   const scrollPositions = useRef<Record<string, number>>({});
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
-  const locationRef = useRef(location.pathname);
+  const isPinchGestureRef = useRef(false);
+  const lastPathRef = useRef(location.pathname);
+  const activeScrollPathRef = useRef(location.pathname);
+  const restoreFrameRef = useRef<number | null>(null);
+  const isRestoringScrollRef = useRef(false);
+
+  if (lastPathRef.current !== location.pathname) {
+    isRestoringScrollRef.current = true;
+    lastPathRef.current = location.pathname;
+  }
 
   React.useEffect(() => {
-    locationRef.current = location.pathname;
-  }, [location.pathname]);
+    return () => {
+      if (restoreFrameRef.current !== null) {
+        cancelAnimationFrame(restoreFrameRef.current);
+      }
+    };
+  }, []);
 
-  React.useEffect(() => {
-    const mainEl = document.getElementById('main-content');
-    if (mainEl) {
-      requestAnimationFrame(() => {
-        mainEl.scrollTo(0, scrollPositions.current[location.pathname] || 0);
-      });
+  React.useLayoutEffect(() => {
+    const mainEl = mainContentRef.current;
+    if (!mainEl) return;
+
+    if (restoreFrameRef.current !== null) {
+      cancelAnimationFrame(restoreFrameRef.current);
     }
+
+    const nextScrollTop = scrollPositions.current[location.pathname] ?? 0;
+    isRestoringScrollRef.current = true;
+    mainEl.scrollTop = nextScrollTop;
+
+    restoreFrameRef.current = requestAnimationFrame(() => {
+      if (mainContentRef.current) {
+        mainContentRef.current.scrollTop = nextScrollTop;
+      }
+      restoreFrameRef.current = requestAnimationFrame(() => {
+        if (mainContentRef.current) {
+          mainContentRef.current.scrollTop = nextScrollTop;
+        }
+        activeScrollPathRef.current = location.pathname;
+        isRestoringScrollRef.current = false;
+        restoreFrameRef.current = null;
+      });
+    });
   }, [location.pathname]);
 
 
@@ -132,9 +164,31 @@ const Layout: React.FC = () => {
   const activeIndex = ALL_ITEMS.findIndex((i) =>
     i.end ? location.pathname === i.to : location.pathname.startsWith(i.to)
   );
+  const previousActiveIndexRef = useRef<number | null>(null);
+  const pageTransitionClass =
+    previousActiveIndexRef.current === null
+    || previousActiveIndexRef.current === -1
+    || activeIndex === -1
+    || previousActiveIndexRef.current === activeIndex
+      ? 'page-fade-in'
+      : activeIndex > previousActiveIndexRef.current
+        ? 'page-slide-in-from-right'
+        : 'page-slide-in-from-left';
+  const isRouteActive = (to: string, end: boolean) => (
+    end ? location.pathname === to : location.pathname.startsWith(to)
+  );
+  const preventIfAlreadyActive = (isActive: boolean) => (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (isActive) {
+      e.preventDefault();
+    }
+  };
 
   const isBottomSheetActive = () =>
     document.body.dataset.bottomSheetOpen === 'true';
+
+  React.useEffect(() => {
+    previousActiveIndexRef.current = activeIndex;
+  }, [activeIndex]);
 
   return (
     <div className="flex h-dvh overflow-hidden" style={{ backgroundColor: '#1A1A1A' }}>
@@ -207,6 +261,7 @@ const Layout: React.FC = () => {
               to={to}
               end={end}
               title={label}
+              onClick={preventIfAlreadyActive(isRouteActive(to, end))}
               className={({ isActive }) =>
                 cn('sidebar-item', isActive && 'active', isMinimized && 'justify-center !px-0')
               }
@@ -235,27 +290,46 @@ const Layout: React.FC = () => {
       */}
       <main
         id="main-content"
+        ref={mainContentRef}
         className="flex-1 min-w-0 overflow-y-auto"
         onScroll={(e) => {
-          if (locationRef.current === location.pathname) {
-            scrollPositions.current[location.pathname] = e.currentTarget.scrollTop;
-          }
+          if (isRestoringScrollRef.current) return;
+          scrollPositions.current[activeScrollPathRef.current] = e.currentTarget.scrollTop;
         }}
         onTouchStart={(e) => {
           if (isBottomSheetActive()) {
             touchStartRef.current = null;
+            isPinchGestureRef.current = false;
             return;
           }
           if ((e.target as HTMLElement).closest('[data-no-swipe="true"]')) return;
+          if (e.touches.length > 1) {
+            touchStartRef.current = null;
+            isPinchGestureRef.current = true;
+            return;
+          }
+          isPinchGestureRef.current = false;
           const touch = e.touches[0];
           touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+        }}
+        onTouchMove={(e) => {
+          if (e.touches.length > 1) {
+            touchStartRef.current = null;
+            isPinchGestureRef.current = true;
+          }
         }}
         onTouchEnd={(e) => {
           if (isBottomSheetActive()) {
             touchStartRef.current = null;
+            isPinchGestureRef.current = false;
             return;
           }
           if ((e.target as HTMLElement).closest('[data-no-swipe="true"]')) return;
+          if (isPinchGestureRef.current) {
+            touchStartRef.current = null;
+            isPinchGestureRef.current = false;
+            return;
+          }
           if (!touchStartRef.current) return;
           
           const deltaX = e.changedTouches[0].clientX - touchStartRef.current.x;
@@ -276,7 +350,9 @@ const Layout: React.FC = () => {
           }
         }}
       >
-        <Outlet />
+        <div key={location.pathname} className={pageTransitionClass}>
+          <Outlet />
+        </div>
         {/* Spacer so mobile content clears the bottom nav/FAB without leaving a large empty tail */}
         <div
           className="md:hidden"
@@ -341,13 +417,14 @@ const Layout: React.FC = () => {
           {/* Nav items with FAB-width spacer in the middle */}
           <div className="relative z-10 flex w-full items-center">
             {/* Left 2 items */}
-            {ALL_ITEMS.slice(0, 2).map(({ label, to, icon: Icon, end }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={end}
-                className={({ isActive }) => cn('nav-item flex-1', isActive && 'active')}
-              >
+             {ALL_ITEMS.slice(0, 2).map(({ label, to, icon: Icon, end }) => (
+               <NavLink
+                 key={to}
+                 to={to}
+                 end={end}
+                 onClick={preventIfAlreadyActive(isRouteActive(to, end))}
+                 className={({ isActive }) => cn('nav-item flex-1', isActive && 'active')}
+               >
                 {({ isActive }) => (
                   <>
                     <Icon
@@ -369,13 +446,14 @@ const Layout: React.FC = () => {
             <div aria-hidden="true" style={{ width: '60px', flexShrink: 0 }} />
 
             {/* Right 2 items */}
-            {ALL_ITEMS.slice(2).map(({ label, to, icon: Icon, end }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={end}
-                className={({ isActive }) => cn('nav-item flex-1', isActive && 'active')}
-              >
+             {ALL_ITEMS.slice(2).map(({ label, to, icon: Icon, end }) => (
+               <NavLink
+                 key={to}
+                 to={to}
+                 end={end}
+                 onClick={preventIfAlreadyActive(isRouteActive(to, end))}
+                 className={({ isActive }) => cn('nav-item flex-1', isActive && 'active')}
+               >
                 {({ isActive }) => (
                   <>
                     <Icon

@@ -761,6 +761,7 @@ const HistoryPage: React.FC = () => {
     { value: 'WANT', label: 'Want', color: '#F472B6' },
     { value: 'TRANSFER', label: 'Transfer', color: '#FB923C' },
   ];
+  const activeTypeFilterColor = TYPE_FILTERS.find((item) => item.value === typeFilter)?.color ?? '#F5F0E8';
   const insightActionColorMap: Record<InsightIntent, string> = {
     combined: '#F5F0E8',
     breakdown: '#B8F55A',
@@ -813,7 +814,7 @@ const HistoryPage: React.FC = () => {
               <button
                 key={f.value}
                 onClick={() => setTypeFilter(f.value)}
-                className="shrink-0 flex items-center justify-center gap-1.5 px-3 py-1.5 border-2 font-black uppercase text-xs tracking-wider transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5"
+                className="shrink-0 flex items-center justify-center gap-1.5 px-2.5 py-1 border-2 font-black uppercase text-xs tracking-wider transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5"
                 style={{
                   borderColor: isActive ? f.color : '#555555',
                   color: isActive ? f.color : '#A09890',
@@ -875,7 +876,7 @@ const HistoryPage: React.FC = () => {
                 <button
                   key={cat.slug}
                   onClick={() => toggleCat(cat.slug)}
-                  className={`shrink-0 flex items-center gap-1 px-2.5 py-1 text-xs font-bold border-[3px] transition-all duration-150 min-h-[32px]`}
+                  className={`shrink-0 flex items-center gap-1 px-2 py-0.5 text-xs font-bold border-[3px] transition-all duration-150 min-h-[28px]`}
                   style={catFilter.has(cat.slug)
                     ? { borderColor: '#F5F0E8', backgroundColor: '#F5F0E8', color: '#1A1A1A' }
                     : { borderColor: '#3A3A3A', backgroundColor: '#2A2820', color: '#F5F0E8' }
@@ -890,21 +891,21 @@ const HistoryPage: React.FC = () => {
         </div>
 
         {/* Search */}
-        <div className="px-3 py-2.5 relative sm:px-4">
-          <Search size={16} strokeWidth={2.5} className="absolute left-6 top-1/2 -translate-y-1/2 text-brutal-black/40 pointer-events-none sm:left-7" />
+        <div className="px-3 py-2 relative sm:px-4">
+          <Search size={15} strokeWidth={2.5} className="absolute left-6 top-1/2 -translate-y-1/2 text-brutal-black/40 pointer-events-none sm:left-7" />
           <input
             type="search"
             placeholder="Cari pengeluaran..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="neo-input pl-9 pr-11 placeholder:text-[13px]"
+            className="neo-input h-[42px] pl-9 pr-10 placeholder:text-[13px]"
             style={{ fontSize: '16px' }}
             aria-label="Cari transaksi"
           />
           <button
             type="button"
             onClick={() => setSearchScope((current) => current === 'month' ? 'all' : 'month')}
-            className="absolute right-5 top-1/2 -translate-y-1/2 h-[30px] min-w-[30px] px-1.5 rounded-full flex items-center justify-center transition-all duration-150 sm:right-6"
+            className="absolute right-5 top-1/2 -translate-y-1/2 h-[28px] min-w-[28px] px-1.5 rounded-full flex items-center justify-center transition-all duration-150 sm:right-6"
             style={{
               backgroundColor: searchScope === 'all' ? 'rgba(245,240,232,0.16)' : 'rgba(245,240,232,0.08)',
               color: searchScope === 'all' ? '#F5F0E8' : 'rgba(245,240,232,0.75)',
@@ -916,7 +917,7 @@ const HistoryPage: React.FC = () => {
             aria-pressed={searchScope === 'all'}
             title={searchScope === 'all' ? 'Semua transaksi' : 'Bulan aktif'}
           >
-            {searchScope === 'all' ? <History size={14} strokeWidth={2.5} /> : <CalendarDays size={14} strokeWidth={2.5} />}
+            {searchScope === 'all' ? <History size={13} strokeWidth={2.5} /> : <CalendarDays size={13} strokeWidth={2.5} />}
           </button>
         </div>
       </div>
@@ -924,34 +925,34 @@ const HistoryPage: React.FC = () => {
       {/* ── Expense list ──────────────────────────────────── */}
       <div className="flex-1 section-pad">
         {!isAllHistoryMode && (
-          <div className="neo-card mb-4 overflow-hidden">
+          <div
+            className="neo-card mb-4 overflow-hidden"
+            style={{ boxShadow: `3px 3px 0px 0px ${activeTypeFilterColor}` }}
+          >
             <button
               type="button"
               onClick={() => setIsQuickInsightExpanded((value) => !value)}
-              className="w-full flex items-start justify-between gap-2.5 px-4 py-2.5 text-left transition-colors duration-150 hover:bg-brutal-bone/5"
+              className="w-full flex items-start justify-between gap-2 px-3.5 py-2 text-left transition-colors duration-150 hover:bg-brutal-bone/5"
               aria-expanded={isQuickInsightExpanded}
             >
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center">
                   <p className="text-[11px] font-black uppercase tracking-[0.18em] text-brutal-black/55">
                     Insight Cepat
                   </p>
-                  <div className="shrink-0 px-1.5 py-0.5 border-2 border-[#555555] text-[9px] font-black uppercase leading-none">
-                    {filterLabel}
-                  </div>
                 </div>
               </div>
               <ChevronDown
                 size={16}
                 strokeWidth={2.5}
-                className="shrink-0 mt-0.5 text-brutal-black/55 transition-transform duration-200"
+                className="shrink-0 mt-px text-brutal-black/55 transition-transform duration-200"
                 style={{ transform: isQuickInsightExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
               />
             </button>
 
             {isQuickInsightExpanded && (
-              <div className="border-t-2 border-[#3A3A3A] px-4 py-2.5">
-                <p className="text-[13px] font-bold leading-5">
+              <div className="border-t-2 border-[#3A3A3A] px-3.5 py-2">
+                <p className="text-[13px] font-bold leading-[1.35]">
                   {quickInsightLine}
                 </p>
               </div>
@@ -1022,7 +1023,7 @@ const HistoryPage: React.FC = () => {
                               tabIndex={0}
                               onClick={() => setActiveExpense(e.id)}
                               onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setActiveExpense(e.id); } }}
-                              className="w-full flex items-center gap-3 p-3 text-left transition-all duration-150 cursor-pointer"
+                              className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-all duration-150 cursor-pointer"
                               style={{ color: '#F5F0E8' }}
                               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(245,240,232,0.05)')}
                               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
@@ -1039,10 +1040,10 @@ const HistoryPage: React.FC = () => {
                                     </span>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-1.5 mt-0.5 min-w-0 flex-nowrap">
+                                <div className="flex items-center gap-1.5 mt-1.5 min-w-0 flex-nowrap">
                                   <Badge variant={badgeVariant} size="sm" className="shrink-0">{e.type}</Badge>
                                   {e.type === 'TRANSFER' && e.destination ? (
-                                    <span className="shrink-0 text-[10px] text-brutal-black/50 font-medium truncate max-w-[96px]">→ {e.destination}</span>
+                                    <span className="shrink-0 text-[10px] text-brutal-black/50 font-medium truncate max-w-[96px]">{'\u25b8'} {e.destination}</span>
                                   ) : null}
                                   {e.note && (
                                     <span className="min-w-0 flex-1 text-[10px] text-brutal-black/40 italic truncate">

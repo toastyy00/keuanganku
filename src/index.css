@@ -164,23 +164,16 @@
   }
 
   .nav-item-icon {
-    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
+      transition: color 0.2s ease;
+    }
 
-  .nav-item.active .nav-item-icon {
-    transform: scale(1.15) translateY(-2px);
-  }
+    .nav-item-label {
+      transition: color 0.2s ease;
+    }
 
-  .nav-item-label {
-    transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-    opacity: 0.78;
-    transform: translateY(-1.5px) scale(0.95);
-  }
-
-  .nav-item.active .nav-item-label {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+    .nav-item.active .nav-item-label {
+      opacity: 1;
+    }
 
   /* Sidebar nav item (desktop) */
   .sidebar-item {
@@ -330,6 +323,17 @@
   /* Page transition — triggered by key={pathname} re-mount */
   .page-fade-in {
     animation: pageFadeIn 150ms ease forwards;
+    will-change: opacity, transform;
+  }
+
+  .page-slide-in-from-right {
+    animation: pageSlideInFromRight 170ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    will-change: opacity, transform;
+  }
+
+  .page-slide-in-from-left {
+    animation: pageSlideInFromLeft 170ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    will-change: opacity, transform;
   }
 
   @keyframes pageFadeIn {
@@ -341,6 +345,43 @@
     to {
       opacity: 1;
       transform: translateY(0);
+    }
+  }
+
+  @keyframes pageSlideInFromRight {
+    from {
+      opacity: 0;
+      transform: translateX(10px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes pageSlideInFromLeft {
+    from {
+      opacity: 0;
+      transform: translateX(-10px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .page-fade-in {
+      animation: none;
+      will-change: auto;
+    }
+
+    .page-slide-in-from-right,
+    .page-slide-in-from-left {
+      animation: none;
+      will-change: auto;
     }
   }
 

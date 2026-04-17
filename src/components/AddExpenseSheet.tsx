@@ -246,7 +246,7 @@ const AddExpenseSheet: React.FC = () => {
           <label className="text-sm font-bold uppercase tracking-wider text-brutal-black/80">
             Tipe Transaksi
           </label>
-          <div className="flex gap-2">
+          <div className="flex gap-2.5">
             {[
               { id: 'NEED', label: 'Need', color: '#5B9CF6' }, // Blue
               { id: 'WANT', label: 'Want', color: '#F472B6' }, // Pink
@@ -258,7 +258,7 @@ const AddExpenseSheet: React.FC = () => {
                   key={item.id}
                   type="button"
                   onClick={() => handleTypeChange(item.id as ExpenseType)}
-                  className="flex-1 flex items-center justify-center py-2 px-0.5 border-2 font-black uppercase text-[13px] transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5"
+                  className="flex-1 flex items-center justify-center py-2 px-0.5 border-2 font-black uppercase text-sm transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5"
                   style={{
                     borderColor: isActive ? item.color : '#555555',
                     color: isActive ? item.color : '#A09890',
@@ -266,7 +266,9 @@ const AddExpenseSheet: React.FC = () => {
                     backgroundColor: isActive ? '#1A1A1A' : 'transparent',
                   }}
                 >
-                  {item.label}
+                  <span className="inline-block min-w-[54px] text-center leading-none">
+                    {item.label}
+                  </span>
                 </button>
               );
             })}

@@ -53,11 +53,11 @@ const Toggle: React.FC<ToggleProps> = ({
         role="radiogroup"
         aria-label="Expense type"
         className={cn(
-          'relative flex border-2 border-[#555555] h-11',
+          'relative flex gap-1 h-11',
           disabled && 'opacity-50 pointer-events-none'
         )}
       >
-        {visibleOptions.map((opt, i) => (
+        {visibleOptions.map((opt) => (
           <button
             key={opt.value}
             id={`${uid}-${opt.value.toLowerCase()}`}
@@ -67,14 +67,14 @@ const Toggle: React.FC<ToggleProps> = ({
             onClick={() => onChange(opt.value)}
             disabled={disabled}
             className={cn(
-              'flex-1 flex items-center justify-center gap-1.5',
-              'text-xs font-black uppercase tracking-wider',
+              'flex-1 flex items-center justify-center gap-1.5 border-2',
+              'text-[13px] font-black uppercase tracking-wider',
               'transition-all duration-150',
-              i < visibleOptions.length - 1 && 'border-r-2 border-[#555555]',
               value === opt.value
                 ? opt.activeClass
                 : 'bg-brutal-yellow-light text-brutal-black hover:bg-brutal-black/10'
             )}
+            style={{ borderColor: '#555555' }}
           >
             <span
               className={cn(
@@ -82,7 +82,9 @@ const Toggle: React.FC<ToggleProps> = ({
                 value === opt.value && 'bg-current'
               )}
             />
-            {opt.label}
+            <span className="inline-block min-w-[54px] text-center leading-none">
+              {opt.label}
+            </span>
           </button>
         ))}
       </div>
