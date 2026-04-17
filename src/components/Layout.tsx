@@ -277,10 +277,10 @@ const Layout: React.FC = () => {
         }}
       >
         <Outlet />
-        {/* Spacer so mobile content is not hidden behind bottom floating nav */}
+        {/* Spacer so mobile content clears the bottom nav/FAB without leaving a large empty tail */}
         <div
           className="md:hidden"
-          style={{ height: 'calc(104px + env(safe-area-inset-bottom, 0px))' }}
+          style={{ height: 'calc(76px + env(safe-area-inset-bottom, 0px))' }}
           aria-hidden="true"
         />
       </main>

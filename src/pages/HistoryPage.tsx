@@ -922,7 +922,7 @@ const HistoryPage: React.FC = () => {
       </div>
 
       {/* ── Expense list ──────────────────────────────────── */}
-      <div className="flex-1 section-pad pb-24">
+      <div className="flex-1 section-pad">
         {!isAllHistoryMode && (
           <div className="neo-card mb-4 overflow-hidden">
             <button

@@ -228,7 +228,7 @@ const SettingsPage: React.FC = () => {
 
   return (
     <>
-      <div className="section-pad max-w-2xl mx-auto space-y-4 pb-8">
+    <div className="section-pad max-w-2xl mx-auto space-y-4">
         <h1 className="text-2xl font-black uppercase tracking-tight">Settings</h1>
 
         {/* ── AKUN ──────────────────────────────────────── */}
