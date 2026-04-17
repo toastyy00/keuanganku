@@ -31,12 +31,20 @@ interface ExpenseStoreState {
   // ── Persistence ───────────────────────────────────────────
   /** True when IDB persist hydration has completed */
   _hasHydrated: boolean;
+  /** True after the current app session completes its first successful load */
+  hasLoadedOnce: boolean;
+  /** Timestamp of the last successful load in this app session */
+  lastLoadedAt: number | null;
+}
+
+interface LoadExpensesOptions {
+  force?: boolean;
 }
 
 interface ExpenseStoreActions {
   // ── Core actions ──────────────────────────────────────────
   /** Loads all data (expenses, categories, recurring) from the active repository */
-  loadExpenses: () => Promise<void>;
+  loadExpenses: (options?: LoadExpensesOptions) => Promise<void>;
 
   // ── Expense CRUD ──────────────────────────────────────────
   addExpense: (
@@ -75,6 +83,7 @@ type ExpenseStore = ExpenseStoreState & ExpenseStoreActions;
 
 // In-flight promise guard — prevents concurrent loadExpenses() calls
 let _loadInflight: Promise<void> | null = null;
+const LOAD_EXPENSES_STALE_MS = 3 * 60_000;
 
 export const useExpenseStore = create<ExpenseStore>()(
   persist(
@@ -87,14 +96,26 @@ export const useExpenseStore = create<ExpenseStore>()(
       isLoading: false,
       error: null,
       _hasHydrated: false,
+      hasLoadedOnce: false,
+      lastLoadedAt: null,
 
       setHasHydrated: (state) => set({ _hasHydrated: state }),
 
       // ── Load all data (deduped — concurrent calls share one promise) ──
-      loadExpenses: async () => {
+      loadExpenses: async (options) => {
         // Dedup guard: if already loading, return the in-flight promise
         const existing = _loadInflight;
         if (existing) return existing;
+
+        const force = options?.force ?? false;
+        const { hasLoadedOnce, lastLoadedAt } = get();
+        const isFresh = hasLoadedOnce
+          && lastLoadedAt !== null
+          && Date.now() - lastLoadedAt < LOAD_EXPENSES_STALE_MS;
+
+        if (!force && isFresh) {
+          return;
+        }
 
         const run = async () => {
           set({ isLoading: true, error: null });
@@ -106,7 +127,13 @@ export const useExpenseStore = create<ExpenseStore>()(
               getCategoryRepository().getAll(),
               getRecurringRepository().getAll(),
             ]);
-            set({ expenses, categories, recurringTemplates });
+            set({
+              expenses,
+              categories,
+              recurringTemplates,
+              hasLoadedOnce: true,
+              lastLoadedAt: Date.now(),
+            });
           } catch (err) {
             const msg = err instanceof Error ? err.message : 'Failed to load data';
             set({ error: msg });
@@ -264,8 +291,8 @@ export const useExpenseStore = create<ExpenseStore>()(
       name: 'keuanganku-expense-store',
       storage: createJSONStorage(() => idbZustandStorage),
       // Only persist settings — data comes from repository on loadExpenses()
-      // Persist data as a warm cache for instant render (Stale-While-Revalidate).
-      // loadExpenses() will silently fetch fresh data from repository on mount.
+      // Persist data as a warm cache for instant render (stale-while-revalidate).
+      // Freshness stays in-memory so re-opening the app still revalidates once.
       partialize: (state) => ({
         currency: state.currency,
         categories: state.categories,

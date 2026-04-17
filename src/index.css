@@ -20,6 +20,7 @@
     color-scheme: dark;
     /* We are light-ONLY in terms of auto-inversion, but actual theme IS dark */
     forced-color-adjust: none;
+    scrollbar-gutter: stable;
   }
 
   body {
@@ -84,7 +85,7 @@
     box-shadow: 0 0 0 2px #B8F55A;
   }
 
-  /* Scrollbar styling — dark concrete */
+  /* Scrollbar styling — green */
   ::-webkit-scrollbar {
     width: 2px;
     height: 0px;
@@ -95,13 +96,18 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #F5F0E8;
+    background: #B8F55A;
     border-radius: 2px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #B8F55A;
+    background: #F5F0E8;
     /* Berubah jadi kuning aksen saat disentuh */
+  }
+
+  * {
+    scrollbar-color: #B8F55A transparent;
+    scrollbar-width: thin;
   }
 }
 
@@ -295,6 +301,10 @@
 
 @layer utilities {
 
+  .overflow-y-auto {
+    scrollbar-gutter: stable;
+  }
+
   /* Utility: ensure full-height on modern mobile (with dvh fallback) */
   .min-h-dvh {
     min-height: 100vh;
@@ -381,8 +391,15 @@
   }
 
   @keyframes popRotate {
-    0% { transform: scale(0.4) rotate(-90deg); opacity: 0; }
-    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    0% {
+      transform: scale(0.4) rotate(-90deg);
+      opacity: 0;
+    }
+
+    100% {
+      transform: scale(1) rotate(0deg);
+      opacity: 1;
+    }
   }
 
   .animate-pop-rotate {

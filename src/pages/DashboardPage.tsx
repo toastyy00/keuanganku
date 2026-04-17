@@ -261,7 +261,7 @@ let _cachedRateInfo: RateResult = { rate: 16000, isFallback: true };
 const DashboardPage: React.FC = () => {
   useEffect(() => { document.title = 'Dashboard - KeuanganKu'; return () => { document.title = 'Keuanganku'; }; }, []);
 
-  const { expenses, categories, isLoading, loadExpenses } =
+  const { expenses, categories, isLoading } =
     useExpenseStore();
   const { activeYear: year, activeMonth: month, resetToCurrentMonth, prevMonth, nextMonth } = useUIStore();
   const { personalMonthlyBudget, familySupportMonthlyBudget } = useSettingsStore();
@@ -338,7 +338,6 @@ const DashboardPage: React.FC = () => {
 
   // Load data + exchange rate on mount
   useEffect(() => {
-    loadExpenses();
     getExchangeRate().then((res) => {
       _cachedRateInfo = res;
       setRateInfo(res);

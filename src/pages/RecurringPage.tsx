@@ -196,7 +196,7 @@ const RecurringPage: React.FC = () => {
     return () => { document.title = 'Keuanganku'; };
   }, []);
 
-  const { recurringTemplates, categories, currency, deleteRecurring, updateRecurring, loadExpenses } =
+  const { recurringTemplates, categories, currency, deleteRecurring, updateRecurring } =
     useExpenseStore();
   const { openAddSheet, isRecurringSheetOpen, closeRecurringSheet } = useUIStore();
 
@@ -212,8 +212,6 @@ const RecurringPage: React.FC = () => {
       closeRecurringSheet(); // reset signal
     }
   }, [isRecurringSheetOpen, closeRecurringSheet]);
-
-  useEffect(() => { loadExpenses(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDelete = async (id: string) => {
     haptic();
@@ -261,24 +259,24 @@ const RecurringPage: React.FC = () => {
           return (
             <Card key={t.id} className={!t.active ? 'opacity-60' : ''}>
               {isDeletingThis ? (
-                <div className="p-4 bg-red-500">
-                  <p className="font-black text-white uppercase text-sm mb-3">Hapus "{t.name}"?</p>
+                <div className="p-3 bg-red-500">
+                  <p className="font-black text-white uppercase text-xs mb-2.5">Hapus "{t.name}"?</p>
                   <div className="flex gap-2">
-                    <button onClick={() => handleDelete(t.id)} className="flex-1 py-2.5 bg-white text-red-500 font-black text-xs uppercase border-2 border-white min-h-[44px]">
+                    <button onClick={() => handleDelete(t.id)} className="flex-1 py-2 bg-white text-red-500 font-black text-[11px] uppercase border-2 border-white min-h-[40px]">
                       Ya, Hapus
                     </button>
-                    <button onClick={() => setDeletingId(null)} className="flex-1 py-2.5 bg-red-500 text-white font-black text-xs uppercase border-2 border-white min-h-[44px]">
+                    <button onClick={() => setDeletingId(null)} className="flex-1 py-2 bg-red-500 text-white font-black text-[11px] uppercase border-2 border-white min-h-[40px]">
                       Batal
                     </button>
                   </div>
                 </div>
               ) : (
-                <CardBody>
-                  <div className="flex items-start gap-3">
+                <CardBody className="px-3 py-2.5">
+                  <div className="flex items-start gap-2.5">
                     <span className="text-3xl mt-0.5 shrink-0">{cat?.emoji ?? '🛍️'}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-black text-base leading-tight">{t.name}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="font-black text-[15px] leading-tight">{t.name}</p>
                         <Badge variant={badgeVariant} size="sm">{t.type}</Badge>
                         {t.schedule_detail && (
                           <Badge variant="neutral" size="sm" className="!bg-[#2A2820] !text-[#F5F0E8] border-[#B8F55A]">
@@ -287,8 +285,8 @@ const RecurringPage: React.FC = () => {
                         )}
                         {!t.active && <Badge variant="neutral" size="sm" className="!bg-brutal-black/20">Nonaktif</Badge>}
                       </div>
-                      <p className="text-xl font-black mt-1">{formatCurrency(t.amount, t.currency ?? currency)}</p>
-                      <div className="flex items-center gap-1.5 mt-1">
+                      <p className="text-lg font-black mt-0.5">{formatCurrency(t.amount, t.currency ?? currency)}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
                         {t.last_logged ? (
                           <span className="flex items-center gap-1 text-[10px] text-brutal-bone-dim font-medium">
                             <CalendarClock size={10} /> Terakhir: {friendlyDate(t.last_logged)}
@@ -297,38 +295,38 @@ const RecurringPage: React.FC = () => {
                           <span className="text-[10px] text-brutal-bone-dim font-medium italic">Belum pernah dicatat</span>
                         )}
                       </div>
-                      {t.note && <p className="text-xs text-brutal-bone-dim mt-1 italic">{t.note}</p>}
+                      {t.note && <p className="text-[11px] text-brutal-bone-dim mt-0.5 italic">{t.note}</p>}
                     </div>
                   </div>
-                  <div className="flex gap-2 mt-3 border-t-2 border-[#555555] pt-3">
+                  <div className="flex gap-1.5 mt-2.5 border-t-2 border-[#555555] pt-2.5">
                     <button
                       onClick={() => handleQuickLog(t)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 neo-btn neo-btn-primary font-black text-xs min-h-[44px]"
+                      className="flex-1 flex items-center justify-center gap-1 py-2 neo-btn neo-btn-primary font-black text-[11px] min-h-[40px]"
                     >
-                      <Zap size={14} strokeWidth={2.5} /> Catat
+                      <Zap size={13} strokeWidth={2.5} /> Catat
                     </button>
                     <button
                       onClick={() => { setEditing(t); setSheetOpen(true); }}
-                      className="flex-1 flex items-center justify-center py-2 neo-btn neo-btn-secondary font-black text-xs min-h-[44px]"
+                      className="flex-1 flex items-center justify-center py-2 neo-btn neo-btn-secondary font-black text-[11px] min-h-[40px]"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => handleToggleActive(t)}
-                      className="p-2 border-2 border-[#555555] hover:bg-brutal-bone/10 transition-all duration-150 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                      className="p-2 border-2 border-[#555555] hover:bg-brutal-bone/10 transition-all duration-150 min-w-[40px] min-h-[40px] flex items-center justify-center"
                       title={t.active ? 'Nonaktifkan' : 'Aktifkan'}
                     >
                       {t.active
-                        ? <ToggleRight size={20} strokeWidth={2.5} />
-                        : <ToggleLeft size={20} strokeWidth={2.5} className="opacity-40" />
+                        ? <ToggleRight size={18} strokeWidth={2.5} />
+                        : <ToggleLeft size={18} strokeWidth={2.5} className="opacity-40" />
                       }
                     </button>
                     <button
                       onClick={() => { haptic(); setDeletingId(t.id); }}
-                      className="p-2 neo-btn-destructive transition-all duration-150 min-w-[44px] min-h-[44px] flex items-center justify-center border-2"
+                      className="p-2 neo-btn-destructive transition-all duration-150 min-w-[40px] min-h-[40px] flex items-center justify-center border-2"
                       aria-label="Hapus"
                     >
-                      <Trash2 size={16} strokeWidth={2.5} />
+                      <Trash2 size={15} strokeWidth={2.5} />
                     </button>
                   </div>
                 </CardBody>

@@ -177,7 +177,7 @@ const SettingsPage: React.FC = () => {
       await importJSON(importConfirm);
       setImportMsg('✓ Import berhasil. Memuat ulang data...');
       setImportConfirm(null);
-      await loadExpenses();
+      await loadExpenses({ force: true });
       haptic();
     } catch (err) {
       setImportMsg(`✗ ${err instanceof Error ? err.message : 'Import gagal'}`);

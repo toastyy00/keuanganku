@@ -257,7 +257,7 @@ const HistoryPage: React.FC = () => {
     return () => { document.title = 'KeuanganKu'; };
   }, []);
 
-  const { expenses, categories, currency, deleteExpense, loadExpenses } = useExpenseStore();
+  const { expenses, categories, currency, deleteExpense } = useExpenseStore();
   const { setActiveExpense, isHistoryInsightOpen, openHistoryInsight, closeHistoryInsight } = useUIStore();
   const {
     aiProvider,
@@ -294,7 +294,6 @@ const HistoryPage: React.FC = () => {
   const [isQuickInsightExpanded, setIsQuickInsightExpanded] = useState(false);
 
   useEffect(() => {
-    loadExpenses();
     getExchangeRate().then((res) => setRateInfo(res));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -929,15 +928,15 @@ const HistoryPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsQuickInsightExpanded((value) => !value)}
-              className="w-full flex items-start justify-between gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-brutal-bone/5"
+              className="w-full flex items-start justify-between gap-2.5 px-4 py-2.5 text-left transition-colors duration-150 hover:bg-brutal-bone/5"
               aria-expanded={isQuickInsightExpanded}
             >
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <p className="text-[11px] font-black uppercase tracking-[0.18em] text-brutal-black/55">
                     Insight Cepat
                   </p>
-                  <div className="shrink-0 px-2 py-0.5 border-2 border-[#555555] text-[10px] font-black uppercase leading-none">
+                  <div className="shrink-0 px-1.5 py-0.5 border-2 border-[#555555] text-[9px] font-black uppercase leading-none">
                     {filterLabel}
                   </div>
                 </div>
@@ -951,8 +950,8 @@ const HistoryPage: React.FC = () => {
             </button>
 
             {isQuickInsightExpanded && (
-              <div className="border-t-2 border-[#3A3A3A] px-4 py-3">
-                <p className="text-sm font-bold leading-6">
+              <div className="border-t-2 border-[#3A3A3A] px-4 py-2.5">
+                <p className="text-[13px] font-bold leading-5">
                   {quickInsightLine}
                 </p>
               </div>
@@ -1032,18 +1031,21 @@ const HistoryPage: React.FC = () => {
                                 {e.type === 'TRANSFER' ? '💸' : (cat?.emoji ?? '🛍️')}
                               </span>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-bold truncate leading-tight">{e.name}</p>
-                                <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                                  <Badge variant={badgeVariant} size="sm">{e.type}</Badge>
-                                  {e.type === 'TRANSFER' && e.destination ? (
-                                    <span className="text-[10px] text-brutal-black/50 font-medium">→ {e.destination}</span>
-                                  ) : (
-                                    <Badge variant="neutral" size="sm">
-                                      {cat?.emoji} {cat?.label ?? e.category}
-                                    </Badge>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <p className="text-sm font-bold truncate leading-tight">{e.name}</p>
+                                  {e.type !== 'TRANSFER' && (
+                                    <span className="shrink-0 text-[10px] font-bold text-brutal-black/45 truncate">
+                                      · {cat?.label ?? e.category}
+                                    </span>
                                   )}
+                                </div>
+                                <div className="flex items-center gap-1.5 mt-0.5 min-w-0 flex-nowrap">
+                                  <Badge variant={badgeVariant} size="sm" className="shrink-0">{e.type}</Badge>
+                                  {e.type === 'TRANSFER' && e.destination ? (
+                                    <span className="shrink-0 text-[10px] text-brutal-black/50 font-medium truncate max-w-[96px]">→ {e.destination}</span>
+                                  ) : null}
                                   {e.note && (
-                                    <span className="text-[10px] text-brutal-black/40 italic truncate max-w-[100px]">
+                                    <span className="min-w-0 flex-1 text-[10px] text-brutal-black/40 italic truncate">
                                       {e.note}
                                     </span>
                                   )}

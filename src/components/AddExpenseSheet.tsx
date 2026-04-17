@@ -113,7 +113,7 @@ const AddExpenseSheet: React.FC = () => {
       setCategory(prefillData.category ?? categories[0]?.slug ?? '');
       setType(prefillData.type ?? 'NEED');
       setDestination('');
-      setNote('');
+      setNote(prefillData.note ?? '');
     } else {
       setName('');
       reset();
@@ -199,8 +199,8 @@ const AddExpenseSheet: React.FC = () => {
       destination: type === 'TRANSFER' ? destination.trim() : undefined,
       date,
       note: note.trim() || undefined,
-      is_recurring: editingExpense?.is_recurring ?? false,
-      recurring_id: editingExpense?.recurring_id,
+      is_recurring: editingExpense?.is_recurring ?? prefillData?.is_recurring ?? false,
+      recurring_id: editingExpense?.recurring_id ?? prefillData?.recurring_id,
     };
 
     try {

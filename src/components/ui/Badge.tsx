@@ -16,9 +16,9 @@ interface BadgeProps {
 }
 
 const VARIANT_CLASSES: Record<BadgeVariant, string> = {
-  need:     'bg-blue-500 text-white border-[#555555]',
-  want:     'bg-pink-500 text-white border-[#555555]',
-  transfer: 'bg-orange-400 text-brutal-black border-[#555555]',
+  need:     'bg-blue-500 text-white border-blue-500',
+  want:     'bg-pink-500 text-white border-pink-500',
+  transfer: 'bg-orange-400 text-brutal-black border-orange-400',
   neutral:  'bg-brutal-yellow-light text-brutal-black border-[#555555]',
   category: 'bg-brutal-black text-brutal-yellow border-[#555555]',
 };

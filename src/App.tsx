@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect } from 'react';
+import React, { Suspense, lazy, useEffect, useRef } from 'react';
 import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { AddExpenseSheet } from './components/AddExpenseSheet';
@@ -55,10 +55,12 @@ const AppLoadingScreen: React.FC = () => (
 // ============================================================
 
 const AppInner: React.FC = () => {
-  const { isInitializing, session, loadSession } = useAuthStore();
+  const { isInitializing, session, user, loadSession } = useAuthStore();
   const loadExpenses = useExpenseStore((s) => s.loadExpenses);
   const _hasHydrated = useExpenseStore((s) => s._hasHydrated);
   const demoMode = isDemoMode();
+  const userId = user?.id ?? null;
+  const previousUserIdRef = useRef<string | null | undefined>(undefined);
 
   // 1. Resolve auth session on mount (must happen before render)
   useEffect(() => {
@@ -75,9 +77,34 @@ const AppInner: React.FC = () => {
   // 2. Load data whenever auth state settles AND Zustand hydration is done
   useEffect(() => {
     if (!isInitializing && _hasHydrated) {
-      loadExpenses();
+      const shouldForce = previousUserIdRef.current !== undefined
+        && previousUserIdRef.current !== userId;
+      previousUserIdRef.current = userId;
+      void loadExpenses(shouldForce ? { force: true } : undefined);
     }
-  }, [isInitializing, session, _hasHydrated]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isInitializing, userId, _hasHydrated]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Revalidate when the app becomes active again, but only if the cache is stale.
+  useEffect(() => {
+    if (isInitializing || !_hasHydrated) return;
+
+    const revalidate = () => { void loadExpenses(); };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        revalidate();
+      }
+    };
+
+    window.addEventListener('online', revalidate);
+    window.addEventListener('focus', revalidate);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('online', revalidate);
+      window.removeEventListener('focus', revalidate);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [isInitializing, _hasHydrated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Block render until we know auth state AND cache is hydrated
   // This prevents a flash of login for authenticated users AND prevents
@@ -147,7 +174,7 @@ const App: React.FC = () => {
       : undefined;
 
   return (
-    <Router 
+    <Router
       basename={basename}
       future={{
         v7_startTransition: true,
