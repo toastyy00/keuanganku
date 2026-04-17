@@ -348,7 +348,7 @@ export function buildCombinedInsight(params: HistoryInsightParams): HistoryInsig
   const fundingTransferPattern = hasFundingTransferPattern(scopedExpenses);
 
   const spendingExpenses = scopedExpenses.filter((e) => e.type !== 'TRANSFER');
-  
+
   // If we are looking at ALL and have family support, isolate personal expenses
   // for largest expense & repeated items analysis to avoid redundancy.
   const evaluationExpenses = (filterLabel === 'Semua' && familySupportTotal > 0)
@@ -494,13 +494,13 @@ export function buildCombinedInsight(params: HistoryInsightParams): HistoryInsig
     // Personal Need/Want ratio (excl family) — contextual evaluation
     filterLabel === 'Semua' && familySupportTotal > 0 && personalSpendingTotal > 0
       ? (() => {
-          const budgetUsed = personalBudget > 0 ? Math.round((personalTotal / personalBudget) * 100) : 0;
-          const nearBudget = personalBudget > 0 && budgetUsed > 75;
-          if (personalWantsPct > 60 && nearBudget) {
-            return `⚠️ Rasio Want pribadi ${personalWantsPct}% dan budget tinggal ${100 - budgetUsed}%. Kebutuhan: ${formatCurrency(personalNeedsTotal, currency)}, keinginan: ${formatCurrency(personalWantsTotal, currency)}.`;
-          }
-          return `Rasio pribadi: Need ${personalNeedsPct}% (${formatCurrency(personalNeedsTotal, currency)}) · Want ${personalWantsPct}% (${formatCurrency(personalWantsTotal, currency)}).`;
-        })()
+        const budgetUsed = personalBudget > 0 ? Math.round((personalTotal / personalBudget) * 100) : 0;
+        const nearBudget = personalBudget > 0 && budgetUsed > 75;
+        if (personalWantsPct > 60 && nearBudget) {
+          return `⚠️ Rasio Want pribadi ${personalWantsPct}% dan budget tinggal ${100 - budgetUsed}%. Kebutuhan: ${formatCurrency(personalNeedsTotal, currency)}, keinginan: ${formatCurrency(personalWantsTotal, currency)}.`;
+        }
+        return `Rasio pribadi: Need ${personalNeedsPct}% (${formatCurrency(personalNeedsTotal, currency)}) · Want ${personalWantsPct}% (${formatCurrency(personalWantsTotal, currency)}).`;
+      })()
       : null,
     // Top personal categories (excl family) — key improvement
     filterLabel === 'Semua' && familySupportTotal > 0 && topCategory
@@ -575,12 +575,12 @@ export function buildCombinedInsight(params: HistoryInsightParams): HistoryInsig
     // Repeated item action — smarter about NEED vs WANT
     topRepeated && filterLabel !== 'TRANSFER'
       ? (() => {
-          const repeatedExpense = evaluationExpenses.find(e => e.name.trim().toLowerCase() === topRepeated.name.trim().toLowerCase());
-          const isNeed = repeatedExpense?.type === 'NEED';
-          return isNeed
-            ? `"${topRepeated.name}" muncul ${topRepeated.count}× (total ${formatCurrency(topRepeated.total, currency)}) — ini kebutuhan rutin, pastikan sudah masuk recurring agar tidak terlewat.`
-            : `"${topRepeated.name}" muncul ${topRepeated.count}× (total ${formatCurrency(topRepeated.total, currency)}) — pertimbangkan batas bulanan untuk pos ini.`;
-        })()
+        const repeatedExpense = evaluationExpenses.find(e => e.name.trim().toLowerCase() === topRepeated.name.trim().toLowerCase());
+        const isNeed = repeatedExpense?.type === 'NEED';
+        return isNeed
+          ? `"${topRepeated.name}" muncul ${topRepeated.count}× (total ${formatCurrency(topRepeated.total, currency)}) — ini kebutuhan rutin, pastikan sudah masuk recurring agar tidak terlewat.`
+          : `"${topRepeated.name}" muncul ${topRepeated.count}× (total ${formatCurrency(topRepeated.total, currency)}) — pertimbangkan batas bulanan untuk pos ini.`;
+      })()
       : null,
     // Largest expense action
     largestExpense && largestShare >= 30 && filterLabel !== 'TRANSFER'
@@ -607,7 +607,7 @@ export function buildCombinedInsight(params: HistoryInsightParams): HistoryInsig
   ];
 
   return {
-    title: `Ringkasan & analisis ${filterLabel === 'Semua' ? '' : `${filterLabel.toLowerCase()} `}${scopeLabel}`.trim(),
+    title: `Review ${filterLabel === 'Semua' ? '' : `${filterLabel.toLowerCase()} `}${scopeLabel}`.trim(),
     summary: summaryParts.join(' '),
     highlights: highlights.filter((h): h is string => h !== null && h !== undefined && h !== ''),
     actions: actions.filter((a): a is string => a !== null && a !== undefined && a !== ''),

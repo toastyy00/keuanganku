@@ -12,6 +12,8 @@ import {
   Bot,
   CalendarRange,
   Layers,
+  CalendarDays,
+  History,
 } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { BottomSheet } from '../components/ui/BottomSheet';
@@ -50,6 +52,7 @@ import type { ExpenseType, Expense } from '../types';
 
 type TypeFilter = 'ALL' | ExpenseType;
 type InsightIntent = 'combined' | 'deep_analysis' | 'breakdown';
+type SearchScope = 'month' | 'all';
 
 export interface BreakdownItem {
   expense: Expense;
@@ -82,6 +85,8 @@ interface HistoryUIState {
   setCatFilter: (cats: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
   search: string;
   setSearch: (s: string) => void;
+  searchScope: SearchScope;
+  setSearchScope: (scope: SearchScope | ((prev: SearchScope) => SearchScope)) => void;
   insightScope: InsightScope;
   setInsightScope: (s: InsightScope | ((prev: InsightScope) => InsightScope)) => void;
 }
@@ -95,6 +100,10 @@ const useHistoryUIStore = create<HistoryUIState>((set) => ({
   })),
   search: '',
   setSearch: (search) => set({ search }),
+  searchScope: 'month',
+  setSearchScope: (searchScope) => set((state) => ({
+    searchScope: typeof searchScope === 'function' ? searchScope(state.searchScope) : searchScope
+  })),
   insightScope: { type: 'pick_month', label: '' },
   setInsightScope: (insightScope) => set((state) => ({
     insightScope: typeof insightScope === 'function' ? insightScope(state.insightScope) : insightScope
@@ -110,9 +119,9 @@ function longDate(isoDate: string): string {
 }
 
 const QUICK_PROMPTS: Array<{ intent: InsightIntent; label: string; icon: React.ReactNode }> = [
-  { intent: 'combined', label: 'Ringkas & Analisis', icon: <Sparkles size={14} strokeWidth={2.5} /> },
-  { intent: 'breakdown', label: 'Breakdown', icon: <Layers size={14} strokeWidth={2.5} /> },
-  { intent: 'deep_analysis', label: 'Analisis AI', icon: <Bot size={14} strokeWidth={2.5} /> },
+  { intent: 'combined', label: 'Review', icon: <Sparkles size={16} strokeWidth={2.5} /> },
+  { intent: 'breakdown', label: 'Breakdown', icon: <Layers size={16} strokeWidth={2.5} /> },
+  { intent: 'deep_analysis', label: 'Analisis AI', icon: <Bot size={16} strokeWidth={2.5} /> },
 ];
 
 const SCOPE_OPTIONS: Array<{ type: InsightScopeType; label: string; color: string }> = [
@@ -261,7 +270,18 @@ const HistoryPage: React.FC = () => {
   const activeAiKey = aiProvider === 'openai' ? openaiKey : openrouterKey;
 
   const { activeYear: viewYear, activeMonth: viewMonth, prevMonth, nextMonth } = useUIStore();
-  const { typeFilter, setTypeFilter, catFilter, setCatFilter, search, setSearch, insightScope, setInsightScope } = useHistoryUIStore();
+  const {
+    typeFilter,
+    setTypeFilter,
+    catFilter,
+    setCatFilter,
+    search,
+    setSearch,
+    searchScope,
+    setSearchScope,
+    insightScope,
+    setInsightScope
+  } = useHistoryUIStore();
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [catFilterOpen, setCatFilterOpen] = useState(false);
@@ -298,6 +318,10 @@ const HistoryPage: React.FC = () => {
   const monthLabelStr = new Intl.DateTimeFormat('id-ID', {
     month: 'long', year: 'numeric',
   }).format(new Date(viewYear, viewMonth - 1, 1));
+  const normalizedSearch = search.trim().toLowerCase();
+  const isAllHistoryMode = searchScope === 'all';
+  const isAllHistorySearchActive = isAllHistoryMode && normalizedSearch.length > 0;
+  const historyHeaderLabel = isAllHistoryMode ? 'Semua Transaksi' : monthLabelStr;
   const previousMonthDate = useMemo(() => new Date(viewYear, viewMonth - 2, 1), [viewYear, viewMonth]);
   const previousMonthPrefix = `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}`;
   const lastSyncedPickMonthRef = useRef<{ year: number; month: number } | null>(null);
@@ -339,18 +363,19 @@ const HistoryPage: React.FC = () => {
 
   // Filtered
   const filtered = useMemo(() => {
+    if (isAllHistoryMode && !normalizedSearch) return [];
+
     return expenses.filter((e) => {
-      if (!e.date.startsWith(monthPrefix)) return false;
+      if (!isAllHistorySearchActive && !e.date.startsWith(monthPrefix)) return false;
       if (typeFilter !== 'ALL' && e.type !== typeFilter) return false;
       if (catFilter.size > 0 && !catFilter.has(e.category)) return false;
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        const matchDest = (e.destination ?? '').toLowerCase().includes(q);
-        if (!e.name.toLowerCase().includes(q) && !(e.note ?? '').toLowerCase().includes(q) && !matchDest) return false;
+      if (normalizedSearch) {
+        const matchDest = (e.destination ?? '').toLowerCase().includes(normalizedSearch);
+        if (!e.name.toLowerCase().includes(normalizedSearch) && !(e.note ?? '').toLowerCase().includes(normalizedSearch) && !matchDest) return false;
       }
       return true;
     });
-  }, [expenses, monthPrefix, typeFilter, catFilter, search]);
+  }, [expenses, monthPrefix, typeFilter, catFilter, normalizedSearch, isAllHistoryMode, isAllHistorySearchActive]);
 
   const grouped = useMemo(() => groupExpensesByDate(filtered), [filtered]);
   const dateKeys = Object.keys(grouped);
@@ -464,8 +489,8 @@ const HistoryPage: React.FC = () => {
     personalBudget: personalMonthlyBudget,
   }), [filterLabel, currency, scopedMonthExpenses, scopedTotal, topCategories, personalTopCategories, previousScopedTotal, familySupportTotal, personalTotal, personalNeedsTotal, personalWantsTotal, personalMonthlyBudget]);
   useEffect(() => {
-    setAssistantMessages([introMessage(resolvedScopeLabel)]);
     setAssistantError(null);
+    setAssistantMessages((prev) => prev.length === 0 ? [introMessage(resolvedScopeLabel)] : prev);
   }, [resolvedScopeLabel]);
 
   const runInsight = useCallback(async (
@@ -476,7 +501,7 @@ const HistoryPage: React.FC = () => {
     setAssistantError(null);
     setAssistantMessages((prev) => [
       ...prev,
-      { id: uid('user'), role: 'user', variant: 'prompt', content: `${promptLabel} — ${resolvedScopeLabel}` },
+      { id: uid('user'), role: 'user', variant: 'prompt', content: `${promptLabel}: ${resolvedScopeLabel}` },
     ]);
 
     if (!hasSelectedScopeData) {
@@ -753,13 +778,15 @@ const HistoryPage: React.FC = () => {
         <div className="flex items-center justify-between px-3 py-2.5 border-b-4 sm:px-4 sm:py-3" style={{ borderColor: '#3A3A3A' }}>
           <button
             onClick={prevMonth}
+            disabled={isAllHistoryMode}
             className="neo-btn neo-btn-primary p-2 min-w-[40px] min-h-[40px] sm:min-w-[44px] sm:min-h-[44px] flex items-center justify-center"
+            style={isAllHistoryMode ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
             aria-label="Bulan sebelumnya"
           >
             <ChevronLeft size={18} strokeWidth={2.5} />
           </button>
           <div className="text-center flex-1 mx-2">
-            <p className="text-sm font-black uppercase tracking-wide leading-tight">{monthLabelStr}</p>
+            <p className="text-sm font-black uppercase tracking-wide leading-tight">{historyHeaderLabel}</p>
             <p className="text-[11px] font-bold text-brutal-black/50 mt-0.5">
               {filtered.length} transaksi
               <span className="hidden xs:inline"> · {formatCurrency(monthTotal, currency)}</span>
@@ -770,7 +797,9 @@ const HistoryPage: React.FC = () => {
           </div>
           <button
             onClick={nextMonth}
+            disabled={isAllHistoryMode}
             className="neo-btn neo-btn-primary p-2 min-w-[40px] min-h-[40px] sm:min-w-[44px] sm:min-h-[44px] flex items-center justify-center"
+            style={isAllHistoryMode ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
             aria-label="Bulan berikutnya"
           >
             <ChevronRight size={18} strokeWidth={2.5} />
@@ -866,58 +895,81 @@ const HistoryPage: React.FC = () => {
           <Search size={16} strokeWidth={2.5} className="absolute left-6 top-1/2 -translate-y-1/2 text-brutal-black/40 pointer-events-none sm:left-7" />
           <input
             type="search"
-            placeholder="Cari transaksi..."
+            placeholder="Cari pengeluaran..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="neo-input pl-9"
+            className="neo-input pl-9 pr-11 placeholder:text-[13px]"
             style={{ fontSize: '16px' }}
             aria-label="Cari transaksi"
           />
+          <button
+            type="button"
+            onClick={() => setSearchScope((current) => current === 'month' ? 'all' : 'month')}
+            className="absolute right-5 top-1/2 -translate-y-1/2 h-[30px] min-w-[30px] px-1.5 rounded-full flex items-center justify-center transition-all duration-150 sm:right-6"
+            style={{
+              backgroundColor: searchScope === 'all' ? 'rgba(245,240,232,0.16)' : 'rgba(245,240,232,0.08)',
+              color: searchScope === 'all' ? '#F5F0E8' : 'rgba(245,240,232,0.75)',
+              boxShadow: searchScope === 'all'
+                ? 'inset 0 0 0 1px rgba(245,240,232,0.08)'
+                : 'inset 0 0 0 1px rgba(245,240,232,0.04)',
+            }}
+            aria-label={searchScope === 'all' ? 'Mode pencarian semua transaksi' : 'Mode pencarian bulan aktif'}
+            aria-pressed={searchScope === 'all'}
+            title={searchScope === 'all' ? 'Semua transaksi' : 'Bulan aktif'}
+          >
+            {searchScope === 'all' ? <History size={14} strokeWidth={2.5} /> : <CalendarDays size={14} strokeWidth={2.5} />}
+          </button>
         </div>
       </div>
 
       {/* ── Expense list ──────────────────────────────────── */}
       <div className="flex-1 section-pad pb-24">
-        <div className="neo-card mb-4 overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setIsQuickInsightExpanded((value) => !value)}
-            className="w-full flex items-start justify-between gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-brutal-bone/5"
-            aria-expanded={isQuickInsightExpanded}
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-brutal-black/55">
-                  Insight Cepat
-                </p>
-                <div className="shrink-0 px-2 py-0.5 border-2 border-[#555555] text-[10px] font-black uppercase leading-none">
-                  {filterLabel}
+        {!isAllHistoryMode && (
+          <div className="neo-card mb-4 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setIsQuickInsightExpanded((value) => !value)}
+              className="w-full flex items-start justify-between gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-brutal-bone/5"
+              aria-expanded={isQuickInsightExpanded}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-brutal-black/55">
+                    Insight Cepat
+                  </p>
+                  <div className="shrink-0 px-2 py-0.5 border-2 border-[#555555] text-[10px] font-black uppercase leading-none">
+                    {filterLabel}
+                  </div>
                 </div>
               </div>
-            </div>
-            <ChevronDown
-              size={16}
-              strokeWidth={2.5}
-              className="shrink-0 mt-0.5 text-brutal-black/55 transition-transform duration-200"
-              style={{ transform: isQuickInsightExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
-            />
-          </button>
+              <ChevronDown
+                size={16}
+                strokeWidth={2.5}
+                className="shrink-0 mt-0.5 text-brutal-black/55 transition-transform duration-200"
+                style={{ transform: isQuickInsightExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+              />
+            </button>
 
-          {isQuickInsightExpanded && (
-            <div className="border-t-2 border-[#3A3A3A] px-4 py-3">
-              <p className="text-sm font-bold leading-6">
-                {quickInsightLine}
-              </p>
-            </div>
-          )}
-        </div>
+            {isQuickInsightExpanded && (
+              <div className="border-t-2 border-[#3A3A3A] px-4 py-3">
+                <p className="text-sm font-bold leading-6">
+                  {quickInsightLine}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {dateKeys.length === 0 ? (
           <div className="neo-card p-8 text-center mt-4">
             <PackageOpen size={40} strokeWidth={1.5} className="mx-auto mb-3 text-brutal-black/30" />
             <p className="font-black uppercase text-brutal-black/50">Tidak ada transaksi</p>
             <p className="text-sm text-brutal-black/40 font-medium mt-1">
-              {search ? 'Coba kata kunci lain' : 'Tidak ada transaksi yang cocok dengan filter ini.'}
+              {isAllHistoryMode && !normalizedSearch
+                ? 'Ketik kata kunci untuk mencari di semua transaksi.'
+                : search
+                  ? 'Coba kata kunci lain'
+                  : 'Tidak ada transaksi yang cocok dengan filter ini.'}
             </p>
           </div>
         ) : (
@@ -1125,7 +1177,7 @@ const HistoryPage: React.FC = () => {
                     </div>
                   ) : (
                     <div
-                      className={`max-w-[88%] border-2 p-3 ${message.role === 'user'
+                      className={`max-w-[88%] p-3 ${message.role === 'user'
                         ? 'bg-[#B8F55A] text-[#1A1A1A] border-[#F5F0E8] font-bold'
                         : 'bg-[#181818] text-[#F5F0E8] border-[#3A3A3A]'
                         }`}
