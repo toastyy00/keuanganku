@@ -251,6 +251,15 @@ const SettingsPage: React.FC = () => {
               Keluar
             </button>
           </div>
+          <div className="mt-4 pt-4 border-t-2 border-[#3A3A3A] flex justify-between items-center gap-4 flex-wrap">
+            <div className="min-w-0">
+              <p className="text-sm font-bold truncate">Persetujuan Admin</p>
+              <p className="text-[10px] font-medium text-brutal-bone-dim mt-0.5">Review akses akun pengguna baru</p>
+            </div>
+            <Button variant="secondary" onClick={() => { haptic(); navigate('/approval'); }}>
+              Buka Akses
+            </Button>
+          </div>
         </Section>
 
         <Section title="Currency" icon={DollarSign} defaultOpen={false}>

@@ -269,6 +269,57 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+CREATE OR REPLACE FUNCTION public.reject_user(target_user_id UUID)
+RETURNS void AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE public.profiles.id = auth.uid() AND public.profiles.is_admin = true
+  ) THEN
+    RAISE EXCEPTION 'Access denied. You are not an admin.';
+  END IF;
+
+  -- Protect against deleting other admins (just in case)
+  IF EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE public.profiles.id = target_user_id AND public.profiles.is_admin = true
+  ) THEN
+    RAISE EXCEPTION 'Cannot delete another admin.';
+  END IF;
+
+  -- Delete from auth.users (cascades to profiles, categories, expenses, etc.)
+  DELETE FROM auth.users WHERE id = target_user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.get_approved_users()
+RETURNS TABLE (
+  id UUID,
+  email TEXT,
+  display_name TEXT,
+  is_admin BOOLEAN
+) AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE public.profiles.id = auth.uid() AND public.profiles.is_admin = true
+  ) THEN
+    RAISE EXCEPTION 'Access denied. You are not an admin.';
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    u.id,
+    u.email::TEXT,
+    (u.raw_user_meta_data->>'display_name')::TEXT as display_name,
+    COALESCE(p.is_admin, FALSE) as is_admin
+  FROM auth.users u
+  LEFT JOIN public.profiles p ON p.id = u.id
+  WHERE (u.raw_user_meta_data->>'is_approved')::boolean = true
+     OR u.raw_user_meta_data->>'is_approved' = 'true';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- ============================================================
 --  COMMENTS
 -- ============================================================

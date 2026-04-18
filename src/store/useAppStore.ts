@@ -43,6 +43,10 @@ interface UIState {
   prevMonth: () => void;
   nextMonth: () => void;
   resetToCurrentMonth: () => void;
+
+  // ── Sankey diagram persistent highlight ───────────────
+  sankeyHighlightedCat: string | null;
+  setSankeyHighlightedCat: (slug: string | null) => void;
 }
 
 const now = new Date();
@@ -94,4 +98,8 @@ export const useUIStore = create<UIState>((set, get) => ({
     const n = new Date();
     set({ activeYear: n.getFullYear(), activeMonth: n.getMonth() + 1 });
   },
+
+  // ── Sankey highlight ─────────────────────────────────
+  sankeyHighlightedCat: null,
+  setSankeyHighlightedCat: (slug) => set({ sankeyHighlightedCat: slug }),
 }));

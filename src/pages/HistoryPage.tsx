@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { create } from 'zustand';
+import { SankeyChart } from '../components/ui/SankeyChart';
 import {
   Search,
   ChevronLeft,
@@ -89,6 +90,8 @@ interface HistoryUIState {
   setSearchScope: (scope: SearchScope | ((prev: SearchScope) => SearchScope)) => void;
   insightScope: InsightScope;
   setInsightScope: (s: InsightScope | ((prev: InsightScope) => InsightScope)) => void;
+  viewMode: 'list' | 'flow';
+  setViewMode: (mode: 'list' | 'flow') => void;
 }
 
 const useHistoryUIStore = create<HistoryUIState>((set) => ({
@@ -108,6 +111,8 @@ const useHistoryUIStore = create<HistoryUIState>((set) => ({
   setInsightScope: (insightScope) => set((state) => ({
     insightScope: typeof insightScope === 'function' ? insightScope(state.insightScope) : insightScope
   })),
+  viewMode: 'list',
+  setViewMode: (viewMode) => set({ viewMode }),
 }));
 
 function haptic() { if ('vibrate' in navigator) navigator.vibrate(10); }
@@ -269,7 +274,7 @@ const HistoryPage: React.FC = () => {
   } = useSettingsStore();
   const activeAiKey = aiProvider === 'openai' ? openaiKey : openrouterKey;
 
-  const { activeYear: viewYear, activeMonth: viewMonth, prevMonth, nextMonth } = useUIStore();
+  const { activeYear: viewYear, activeMonth: viewMonth, prevMonth, nextMonth, setSankeyHighlightedCat } = useUIStore();
   const {
     typeFilter,
     setTypeFilter,
@@ -280,8 +285,12 @@ const HistoryPage: React.FC = () => {
     searchScope,
     setSearchScope,
     insightScope,
-    setInsightScope
+    setInsightScope,
+    viewMode,
+    setViewMode,
   } = useHistoryUIStore();
+
+  // viewMode is persistent in useHistoryUIStore, so no reset effect is needed here.
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [catFilterOpen, setCatFilterOpen] = useState(false);
@@ -298,15 +307,30 @@ const HistoryPage: React.FC = () => {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const location = useLocation();
-  useEffect(() => {
-    if (location.state?.categorySlug) {
+  useLayoutEffect(() => {
+    if (location.state?.categorySlug && location.state?.fromSankey) {
+      // Coming from Dashboard Sankey double-click: apply category filter
       setTypeFilter('ALL');
       setSearch('');
       setCatFilter(new Set([location.state.categorySlug]));
-      // Clean up the state so it doesn't persist on refresh
-      window.history.replaceState({}, document.title);
+    } else if (location.state?.categorySlug && location.state?.fromDashboardTop) {
+      // Coming from Top Kategori Terboros click: go to Flow view and highlight category
+      setViewMode('flow');
+      setSankeyHighlightedCat(location.state.categorySlug);
+      setSearch('');
+      setCatFilter(new Set());
+    } else if (location.state?.fromDashboardCashout) {
+      setTypeFilter('TRANSFER');
+      setViewMode('list');
+      setSearch('');
+      setCatFilter(new Set());
+    } else if (!location.state?.categorySlug) {
+      // Normal navigation: preserve typeFilter, only reset search & catFilter
+      setSearch('');
+      setCatFilter(new Set());
     }
-  }, [location.state, setTypeFilter, setSearch, setCatFilter]);
+    window.history.replaceState({}, document.title);
+  }, [location.state, setTypeFilter, setSearch, setCatFilter, setViewMode, setSankeyHighlightedCat]);
 
   const toDisplay = useCallback(
     (exp: Expense) => convertAmount(exp.amount, exp.currency, currency, rateInfo.rate),
@@ -375,6 +399,23 @@ const HistoryPage: React.FC = () => {
       return true;
     });
   }, [expenses, monthPrefix, typeFilter, catFilter, normalizedSearch, isAllHistoryMode, isAllHistorySearchActive]);
+
+  const availableCategories = useMemo(() => {
+    // We want expenses that match the current month/search scope and typeFilter,
+    // ignoring the catFilter so the user can still select/unselect available options.
+    const baseExpenses = expenses.filter((e) => {
+      if (!isAllHistorySearchActive && !e.date.startsWith(monthPrefix)) return false;
+      if (typeFilter !== 'ALL' && e.type !== typeFilter) return false;
+      if (normalizedSearch) {
+        const matchDest = (e.destination ?? '').toLowerCase().includes(normalizedSearch);
+        if (!e.name.toLowerCase().includes(normalizedSearch) && !(e.note ?? '').toLowerCase().includes(normalizedSearch) && !matchDest) return false;
+      }
+      return true;
+    });
+
+    const usedSlugs = new Set(baseExpenses.map(e => e.category).filter(c => c !== ''));
+    return categories.filter(c => usedSlugs.has(c.slug));
+  }, [expenses, monthPrefix, typeFilter, normalizedSearch, isAllHistorySearchActive]);
 
   const grouped = useMemo(() => groupExpensesByDate(filtered), [filtered]);
   const dateKeys = Object.keys(grouped);
@@ -807,13 +848,14 @@ const HistoryPage: React.FC = () => {
         </div>
 
         {/* Type filter chips */}
+        {/* Type filter chips + FLOW button */}
         <div className="flex gap-2 px-3 pt-2.5 pb-2 border-b-2 overflow-x-auto sm:px-4" style={{ borderColor: '#3A3A3A' }}>
           {TYPE_FILTERS.map((f) => {
-            const isActive = typeFilter === f.value;
+            const isActive = typeFilter === f.value && viewMode === 'list';
             return (
               <button
                 key={f.value}
-                onClick={() => setTypeFilter(f.value)}
+                onClick={() => { setTypeFilter(f.value); setViewMode('list'); }}
                 className="shrink-0 flex items-center justify-center gap-1.5 px-2.5 py-1 border-2 font-black uppercase text-xs tracking-wider transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5"
                 style={{
                   borderColor: isActive ? f.color : '#555555',
@@ -826,254 +868,306 @@ const HistoryPage: React.FC = () => {
               </button>
             );
           })}
+          <button
+            onClick={() => setViewMode(viewMode === 'flow' ? 'list' : 'flow')}
+            className="shrink-0 flex items-center justify-center gap-1.5 px-2.5 py-1 border-2 font-black uppercase text-xs tracking-wider transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5"
+            style={{
+              borderColor: viewMode === 'flow' ? '#F87171' : '#555555',
+              color: viewMode === 'flow' ? '#F87171' : '#A09890',
+              boxShadow: viewMode === 'flow' ? '3px 3px 0px 0px #F87171' : 'none',
+              backgroundColor: viewMode === 'flow' ? '#1A1A1A' : 'transparent',
+            }}
+          >
+            Flow
+          </button>
         </div>
 
-        {/* Category filter — collapsible section */}
-        <div className="border-b-4" style={{ borderColor: '#3A3A3A' }}>
-          {/* Header row with toggle */}
-          <button
-            type="button"
-            onClick={() => setCatFilterOpen((v) => !v)}
-            className="w-full flex items-center justify-between px-3 py-2 sm:px-4 transition-colors duration-150"
-            style={{ backgroundColor: 'transparent' }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(245,240,232,0.05)')}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-            aria-expanded={catFilterOpen}
-          >
-            <span className="text-[10px] font-black uppercase tracking-wider text-brutal-black/60">
-              Filter Kategori
-              {catFilter.size > 0 && (
-                <span className="ml-1.5 px-1.5 py-0.5 text-brutal-yellow text-[9px] font-black">
-                  {catFilter.size} dipilih
-                </span>
-              )}
-            </span>
-            <div className="flex items-center gap-1.5">
-              {catFilter.size > 0 && (
-                <span
-                  role="button"
-                  tabIndex={0}
-                  onClick={(ev) => { ev.stopPropagation(); setCatFilter(new Set()); }}
-                  onKeyDown={(ev) => { if (ev.key === 'Enter') { ev.stopPropagation(); setCatFilter(new Set()); } }}
-                  className="text-[10px] font-bold text-red-500 underline"
-                >
-                  Reset
-                </span>
-              )}
-              <ChevronDown
-                size={14}
-                strokeWidth={2.5}
-                className="text-brutal-black/50 transition-transform duration-200"
-                style={{ transform: catFilterOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
-              />
-            </div>
-          </button>
-
-          {/* Expandable pills */}
-          {catFilterOpen && (
-            <div className="flex flex-wrap gap-1.5 px-3 pb-2.5 pt-1 sm:px-4">
-              {categories.map((cat) => (
+        {/* Category filter + Search — only shown in list mode */}
+        {viewMode === 'list' && (
+          <>
+            {/* Category Filter Drawer */}
+            {availableCategories.length > 0 && (
+              <div className="border-b-4" style={{ borderColor: '#3A3A3A' }}>
                 <button
-                  key={cat.slug}
-                  onClick={() => toggleCat(cat.slug)}
-                  className={`shrink-0 flex items-center gap-1 px-2 py-0.5 text-xs font-bold border-[3px] transition-all duration-150 min-h-[28px]`}
-                  style={catFilter.has(cat.slug)
-                    ? { borderColor: '#F5F0E8', backgroundColor: '#F5F0E8', color: '#1A1A1A' }
-                    : { borderColor: '#3A3A3A', backgroundColor: '#2A2820', color: '#F5F0E8' }
-                  }
+                  type="button"
+                  onClick={() => setCatFilterOpen((v) => !v)}
+                  className="w-full flex items-center justify-between px-3 py-2 sm:px-4 transition-colors duration-150"
+                  style={{ backgroundColor: 'transparent' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(245,240,232,0.05)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  aria-expanded={catFilterOpen}
                 >
-                  <span>{cat.emoji}</span>
-                  <span>{cat.label}</span>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-brutal-black/60">
+                    Filter Kategori
+                    {catFilter.size > 0 && (
+                      <span className="ml-1.5 px-1.5 py-0.5 text-brutal-yellow text-[9px] font-black">
+                        {catFilter.size} dipilih
+                      </span>
+                    )}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {catFilter.size > 0 && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(ev) => { ev.stopPropagation(); setCatFilter(new Set()); }}
+                        onKeyDown={(ev) => { if (ev.key === 'Enter') { ev.stopPropagation(); setCatFilter(new Set()); } }}
+                        className="text-[10px] font-bold text-red-500 underline"
+                      >
+                        Reset
+                      </span>
+                    )}
+                    <ChevronDown
+                      size={14}
+                      strokeWidth={2.5}
+                      className="text-brutal-black/50 transition-transform duration-200"
+                      style={{ transform: catFilterOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                    />
+                  </div>
                 </button>
-              ))}
+                {catFilterOpen && (
+                  <div className="flex flex-wrap gap-1.5 px-3 pb-2.5 pt-1 sm:px-4">
+                    {availableCategories.map((cat) => (
+                      <button
+                        key={cat.slug}
+                        onClick={() => toggleCat(cat.slug)}
+                        className="shrink-0 flex items-center gap-1 px-2 py-0.5 text-xs font-bold border-[3px] transition-all duration-150 min-h-[28px]"
+                        style={catFilter.has(cat.slug)
+                          ? { borderColor: '#F5F0E8', backgroundColor: '#F5F0E8', color: '#1A1A1A' }
+                          : { borderColor: '#3A3A3A', backgroundColor: '#2A2820', color: '#F5F0E8' }
+                        }
+                      >
+                        <span>{cat.emoji}</span>
+                        <span>{cat.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="px-3 py-2 relative sm:px-4">
+              <Search size={15} strokeWidth={2.5} className="absolute left-6 top-1/2 -translate-y-1/2 text-brutal-black/40 pointer-events-none sm:left-7" />
+              <input
+                type="search"
+                placeholder="Cari pengeluaran..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="neo-input h-[42px] pl-9 pr-10 placeholder:text-[13px]"
+                style={{ fontSize: '16px' }}
+                aria-label="Cari transaksi"
+              />
+              <button
+                type="button"
+                onClick={() => setSearchScope((current) => current === 'month' ? 'all' : 'month')}
+                className="absolute right-5 top-1/2 -translate-y-1/2 h-[28px] min-w-[28px] px-1.5 rounded-full flex items-center justify-center transition-all duration-150 sm:right-6"
+                style={{
+                  backgroundColor: searchScope === 'all' ? 'rgba(245,240,232,0.16)' : 'rgba(245,240,232,0.08)',
+                  color: searchScope === 'all' ? '#F5F0E8' : 'rgba(245,240,232,0.75)',
+                  boxShadow: searchScope === 'all'
+                    ? 'inset 0 0 0 1px rgba(245,240,232,0.08)'
+                    : 'inset 0 0 0 1px rgba(245,240,232,0.04)',
+                }}
+                aria-label={searchScope === 'all' ? 'Mode pencarian semua transaksi' : 'Mode pencarian bulan aktif'}
+                aria-pressed={searchScope === 'all'}
+                title={searchScope === 'all' ? 'Semua transaksi' : 'Bulan aktif'}
+              >
+                {searchScope === 'all' ? <History size={13} strokeWidth={2.5} /> : <CalendarDays size={13} strokeWidth={2.5} />}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ── Flow view (Sankey diagram) ──────────────────── */}
+      {viewMode === 'flow' && (
+        <div className="section-pad">
+          <style dangerouslySetInnerHTML={{
+            __html: `
+            /* Hide scrollbar for Chrome, Safari and Opera */
+            ::-webkit-scrollbar {
+              display: none;
+            }
+            /* Hide scrollbar for IE, Edge and Firefox */
+            * {
+              -ms-overflow-style: none;  /* IE and Edge */
+              scrollbar-width: none;  /* Firefox */
+            }
+          `}} />
+          <div className="flex justify-between items-center mb-3 px-1">
+            <p className="text-[10px] font-black uppercase tracking-widest text-brutal-black/40">
+              Pengeluaran
+            </p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-brutal-black/40">
+              Kategori
+            </p>
+          </div>
+          <SankeyChart
+            expenses={spendingMonthExpenses.filter(e => e.category !== 'keluarga')}
+            height={Math.max(560, new Set(spendingMonthExpenses.filter(e => e.category !== 'keluarga').map(e => e.category)).size * 80)}
+            onCatDoubleClick={(slug) => {
+              setCatFilter(new Set([slug]));
+              setTypeFilter('ALL');
+              setViewMode('list');
+            }}
+          />
+        </div>
+      )}
+
+      {/* ── Expense list ──────────────────────────────────── */}
+      {viewMode === 'list' && (
+        <div className="flex-1 section-pad">
+          {!isAllHistoryMode && (
+            <div
+              className="neo-card mb-4 overflow-hidden"
+              style={{ boxShadow: `3px 3px 0px 0px ${activeTypeFilterColor}` }}
+            >
+              <button
+                type="button"
+                onClick={() => setIsQuickInsightExpanded((value) => !value)}
+                className="w-full flex items-start justify-between gap-2 px-3.5 py-2 text-left transition-colors duration-150 hover:bg-brutal-bone/5"
+                aria-expanded={isQuickInsightExpanded}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center">
+                    <p className="text-[11px] font-black uppercase tracking-[0.18em] text-brutal-black/55">
+                      Insight Cepat
+                    </p>
+                  </div>
+                </div>
+                <ChevronDown
+                  size={16}
+                  strokeWidth={2.5}
+                  className="shrink-0 mt-px text-brutal-black/55 transition-transform duration-200"
+                  style={{ transform: isQuickInsightExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                />
+              </button>
+
+              {isQuickInsightExpanded && (
+                <div className="border-t-2 border-[#3A3A3A] px-3.5 py-2">
+                  <p className="text-[13px] font-bold leading-[1.35]">
+                    {quickInsightLine}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {dateKeys.length === 0 ? (
+            <div className="neo-card p-8 text-center mt-4">
+              <PackageOpen size={40} strokeWidth={1.5} className="mx-auto mb-3 text-brutal-black/30" />
+              <p className="font-black uppercase text-brutal-black/50">Tidak ada pengeluaran</p>
+              <p className="text-sm text-brutal-black/40 font-medium mt-1">
+                {isAllHistoryMode && !normalizedSearch
+                  ? 'Ketik kata kunci untuk mencari di semua transaksi.'
+                  : search
+                    ? 'Coba kata kunci lain'
+                    : 'Tidak ada pengeluaran yang cocok dengan filter ini.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {dateKeys.map((dateKey) => {
+                const dayExpenses = grouped[dateKey];
+                const dayTotal = dayExpenses
+                  .filter((e) => typeFilter === 'TRANSFER' ? true : e.type !== 'TRANSFER')
+                  .reduce((s, e) => s + toDisplay(e), 0);
+
+                return (
+                  <div key={dateKey}>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-black uppercase text-brutal-black/60 capitalize">
+                        {longDate(dateKey)}
+                      </p>
+                      <p className="text-xs font-black text-brutal-black/60">
+                        {formatCurrency(dayTotal, currency)}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      {dayExpenses.map((e) => {
+                        const cat = categories.find((c) => c.slug === e.category);
+                        const isDeleting = deletingId === e.id;
+                        const badgeVariant = e.type === 'NEED' ? 'need' : e.type === 'WANT' ? 'want' : 'transfer';
+
+                        return (
+                          <div key={e.id} className="neo-card overflow-hidden !shadow-[5px_5px_0_0_#000000]">
+                            {isDeleting ? (
+                              <div className="flex items-center gap-3 p-3 bg-red-500">
+                                <p className="flex-1 text-sm font-bold text-white uppercase">
+                                  Hapus "{e.name}"?
+                                </p>
+                                <button
+                                  onClick={() => handleDelete(e.id)}
+                                  className="px-3 py-1.5 bg-white text-red-500 border-2 border-white font-black text-xs uppercase min-h-[36px]"
+                                >
+                                  Hapus
+                                </button>
+                                <button
+                                  onClick={() => setDeletingId(null)}
+                                  className="px-3 py-1.5 bg-red-500 text-white border-2 border-white font-black text-xs uppercase min-h-[36px]"
+                                >
+                                  Batal
+                                </button>
+                              </div>
+                            ) : (
+                              <div
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => setActiveExpense(e.id)}
+                                onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setActiveExpense(e.id); } }}
+                                className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-all duration-150 cursor-pointer"
+                                style={{ color: '#F5F0E8' }}
+                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(245,240,232,0.05)')}
+                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                              >
+                                <span className="text-2xl w-9 shrink-0 text-center">
+                                  {e.type === 'TRANSFER' ? '💸' : (cat?.emoji ?? '🛍️')}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <p className="text-sm font-bold truncate leading-tight">{e.name}</p>
+                                    {e.type !== 'TRANSFER' && (
+                                      <span className="shrink-0 text-[10px] font-bold text-brutal-black/45 truncate">
+                                        · {cat?.label ?? e.category}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 mt-1.5 min-w-0 flex-nowrap">
+                                    <Badge variant={badgeVariant} size="sm" className="shrink-0">{e.type}</Badge>
+                                    {e.type === 'TRANSFER' && e.destination ? (
+                                      <span className="shrink-0 text-[10px] text-brutal-black/50 font-medium truncate max-w-[96px]">{'\u25b8'} {e.destination}</span>
+                                    ) : null}
+                                    {e.note && (
+                                      <span className="min-w-0 flex-1 text-[10px] text-brutal-black/40 italic truncate">
+                                        {e.note}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <p className="text-sm font-black">{formatCurrency(e.amount, e.currency)}</p>
+                                  <button
+                                    onClick={(ev) => { ev.stopPropagation(); haptic(); setDeletingId(e.id); }}
+                                    className="p-2 text-brutal-black/40 hover:text-red-500 hover:bg-red-50 transition-colors duration-150 min-w-[36px] min-h-[36px] flex items-center justify-center cursor-pointer"
+                                    aria-label={`Hapus ${e.name}`}
+                                  >
+                                    <Trash2 size={16} strokeWidth={2.5} />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
-
-        {/* Search */}
-        <div className="px-3 py-2 relative sm:px-4">
-          <Search size={15} strokeWidth={2.5} className="absolute left-6 top-1/2 -translate-y-1/2 text-brutal-black/40 pointer-events-none sm:left-7" />
-          <input
-            type="search"
-            placeholder="Cari pengeluaran..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="neo-input h-[42px] pl-9 pr-10 placeholder:text-[13px]"
-            style={{ fontSize: '16px' }}
-            aria-label="Cari transaksi"
-          />
-          <button
-            type="button"
-            onClick={() => setSearchScope((current) => current === 'month' ? 'all' : 'month')}
-            className="absolute right-5 top-1/2 -translate-y-1/2 h-[28px] min-w-[28px] px-1.5 rounded-full flex items-center justify-center transition-all duration-150 sm:right-6"
-            style={{
-              backgroundColor: searchScope === 'all' ? 'rgba(245,240,232,0.16)' : 'rgba(245,240,232,0.08)',
-              color: searchScope === 'all' ? '#F5F0E8' : 'rgba(245,240,232,0.75)',
-              boxShadow: searchScope === 'all'
-                ? 'inset 0 0 0 1px rgba(245,240,232,0.08)'
-                : 'inset 0 0 0 1px rgba(245,240,232,0.04)',
-            }}
-            aria-label={searchScope === 'all' ? 'Mode pencarian semua transaksi' : 'Mode pencarian bulan aktif'}
-            aria-pressed={searchScope === 'all'}
-            title={searchScope === 'all' ? 'Semua transaksi' : 'Bulan aktif'}
-          >
-            {searchScope === 'all' ? <History size={13} strokeWidth={2.5} /> : <CalendarDays size={13} strokeWidth={2.5} />}
-          </button>
-        </div>
-      </div>
-
-      {/* ── Expense list ──────────────────────────────────── */}
-      <div className="flex-1 section-pad">
-        {!isAllHistoryMode && (
-          <div
-            className="neo-card mb-4 overflow-hidden"
-            style={{ boxShadow: `3px 3px 0px 0px ${activeTypeFilterColor}` }}
-          >
-            <button
-              type="button"
-              onClick={() => setIsQuickInsightExpanded((value) => !value)}
-              className="w-full flex items-start justify-between gap-2 px-3.5 py-2 text-left transition-colors duration-150 hover:bg-brutal-bone/5"
-              aria-expanded={isQuickInsightExpanded}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center">
-                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-brutal-black/55">
-                    Insight Cepat
-                  </p>
-                </div>
-              </div>
-              <ChevronDown
-                size={16}
-                strokeWidth={2.5}
-                className="shrink-0 mt-px text-brutal-black/55 transition-transform duration-200"
-                style={{ transform: isQuickInsightExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
-              />
-            </button>
-
-            {isQuickInsightExpanded && (
-              <div className="border-t-2 border-[#3A3A3A] px-3.5 py-2">
-                <p className="text-[13px] font-bold leading-[1.35]">
-                  {quickInsightLine}
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {dateKeys.length === 0 ? (
-          <div className="neo-card p-8 text-center mt-4">
-            <PackageOpen size={40} strokeWidth={1.5} className="mx-auto mb-3 text-brutal-black/30" />
-            <p className="font-black uppercase text-brutal-black/50">Tidak ada transaksi</p>
-            <p className="text-sm text-brutal-black/40 font-medium mt-1">
-              {isAllHistoryMode && !normalizedSearch
-                ? 'Ketik kata kunci untuk mencari di semua transaksi.'
-                : search
-                  ? 'Coba kata kunci lain'
-                  : 'Tidak ada transaksi yang cocok dengan filter ini.'}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-5">
-            {dateKeys.map((dateKey) => {
-              const dayExpenses = grouped[dateKey];
-              const dayTotal = dayExpenses
-                .filter((e) => typeFilter === 'TRANSFER' ? true : e.type !== 'TRANSFER')
-                .reduce((s, e) => s + toDisplay(e), 0);
-
-              return (
-                <div key={dateKey}>
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-black uppercase text-brutal-black/60 capitalize">
-                      {longDate(dateKey)}
-                    </p>
-                    <p className="text-xs font-black text-brutal-black/60">
-                      {formatCurrency(dayTotal, currency)}
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    {dayExpenses.map((e) => {
-                      const cat = categories.find((c) => c.slug === e.category);
-                      const isDeleting = deletingId === e.id;
-                      const badgeVariant = e.type === 'NEED' ? 'need' : e.type === 'WANT' ? 'want' : 'transfer';
-
-                      return (
-                        <div key={e.id} className="neo-card overflow-hidden !shadow-[5px_5px_0_0_#000000]">
-                          {isDeleting ? (
-                            <div className="flex items-center gap-3 p-3 bg-red-500">
-                              <p className="flex-1 text-sm font-bold text-white uppercase">
-                                Hapus "{e.name}"?
-                              </p>
-                              <button
-                                onClick={() => handleDelete(e.id)}
-                                className="px-3 py-1.5 bg-white text-red-500 border-2 border-white font-black text-xs uppercase min-h-[36px]"
-                              >
-                                Hapus
-                              </button>
-                              <button
-                                onClick={() => setDeletingId(null)}
-                                className="px-3 py-1.5 bg-red-500 text-white border-2 border-white font-black text-xs uppercase min-h-[36px]"
-                              >
-                                Batal
-                              </button>
-                            </div>
-                          ) : (
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => setActiveExpense(e.id)}
-                              onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setActiveExpense(e.id); } }}
-                              className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-all duration-150 cursor-pointer"
-                              style={{ color: '#F5F0E8' }}
-                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(245,240,232,0.05)')}
-                              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                            >
-                              <span className="text-2xl w-9 shrink-0 text-center">
-                                {e.type === 'TRANSFER' ? '💸' : (cat?.emoji ?? '🛍️')}
-                              </span>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                  <p className="text-sm font-bold truncate leading-tight">{e.name}</p>
-                                  {e.type !== 'TRANSFER' && (
-                                    <span className="shrink-0 text-[10px] font-bold text-brutal-black/45 truncate">
-                                      · {cat?.label ?? e.category}
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1.5 mt-1.5 min-w-0 flex-nowrap">
-                                  <Badge variant={badgeVariant} size="sm" className="shrink-0">{e.type}</Badge>
-                                  {e.type === 'TRANSFER' && e.destination ? (
-                                    <span className="shrink-0 text-[10px] text-brutal-black/50 font-medium truncate max-w-[96px]">{'\u25b8'} {e.destination}</span>
-                                  ) : null}
-                                  {e.note && (
-                                    <span className="min-w-0 flex-1 text-[10px] text-brutal-black/40 italic truncate">
-                                      {e.note}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <p className="text-sm font-black">{formatCurrency(e.amount, e.currency)}</p>
-                                <button
-                                  onClick={(ev) => { ev.stopPropagation(); haptic(); setDeletingId(e.id); }}
-                                  className="p-2 text-brutal-black/40 hover:text-red-500 hover:bg-red-50 transition-colors duration-150 min-w-[36px] min-h-[36px] flex items-center justify-center cursor-pointer"
-                                  aria-label={`Hapus ${e.name}`}
-                                >
-                                  <Trash2 size={16} strokeWidth={2.5} />
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      )}
 
 
       <BottomSheet

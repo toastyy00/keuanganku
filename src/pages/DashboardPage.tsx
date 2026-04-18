@@ -800,22 +800,28 @@ const DashboardPage: React.FC = () => {
 
       {/* Transfer widget (only when transfers exist) */}
       {transferExpenses.length > 0 && (
-        <Card className="border-[#555555] bg-[#242424]" style={{ boxShadow: dashboardDarkShadow }}>
-          <CardBody>
-            <div className="flex items-start gap-3">
-              <div>
-                <p className="text-xs font-black uppercase tracking-wider mb-1 text-brutal-black/60">
-                  Cashout
-                </p>
-                <p className="text-2xl font-black">{fmt(transferTotal)}</p>
-                <p className="text-xs font-medium text-[#F5F0E8]/50 mt-0.5">
-                  {transferExpenses.length} transaksi
-                  {uniqueDestinations.length > 0 && ` - ${uniqueDestinations.join(', ')}`}
-                </p>
+        <Link
+          to="/history"
+          state={{ fromDashboardCashout: true }}
+          className="block group select-none"
+        >
+          <Card className="border-[#555555] bg-[#242424] transition-all duration-150 group-hover:-translate-y-0.5 group-hover:!shadow-[4px_6px_0_0_#000] group-active:translate-y-[4px] group-active:translate-x-[4px] group-active:!shadow-none" style={{ boxShadow: dashboardDarkShadow }}>
+            <CardBody>
+              <div className="flex items-start gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wider mb-1 text-brutal-black/60">
+                    Cashout
+                  </p>
+                  <p className="text-2xl font-black">{fmt(transferTotal)}</p>
+                  <p className="text-xs font-medium text-[#F5F0E8]/50 mt-0.5">
+                    {transferExpenses.length} transaksi
+                    {uniqueDestinations.length > 0 && ` - ${uniqueDestinations.join(', ')}`}
+                  </p>
+                </div>
               </div>
-            </div>
-          </CardBody>
-        </Card>
+            </CardBody>
+          </Card>
+        </Link>
       )}
 
       {/* Top 3 Categories */}
@@ -829,7 +835,7 @@ const DashboardPage: React.FC = () => {
               <Link
                 key={slug}
                 to="/history"
-                state={{ categorySlug: slug }}
+                state={{ categorySlug: slug, fromDashboardTop: true }}
                 className="block group select-none"
                 aria-label={`Lihat semua pengeluaran ${cat?.label ?? slug}`}
               >

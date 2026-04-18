@@ -165,13 +165,15 @@ const Layout: React.FC = () => {
     i.end ? location.pathname === i.to : location.pathname.startsWith(i.to)
   );
   const previousActiveIndexRef = useRef<number | null>(null);
+  // eslint-disable-next-line react-hooks/refs
+  const prev = previousActiveIndexRef.current;
   const pageTransitionClass =
-    previousActiveIndexRef.current === null
-    || previousActiveIndexRef.current === -1
+    prev === null
+    || prev === -1
     || activeIndex === -1
-    || previousActiveIndexRef.current === activeIndex
+    || prev === activeIndex
       ? 'page-fade-in'
-      : activeIndex > previousActiveIndexRef.current
+      : activeIndex > prev
         ? 'page-slide-in-from-right'
         : 'page-slide-in-from-left';
   const isRouteActive = (to: string, end: boolean) => (
@@ -189,6 +191,7 @@ const Layout: React.FC = () => {
   React.useEffect(() => {
     previousActiveIndexRef.current = activeIndex;
   }, [activeIndex]);
+
 
   return (
     <div className="flex h-dvh overflow-hidden" style={{ backgroundColor: '#1A1A1A' }}>
