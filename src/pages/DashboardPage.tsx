@@ -50,7 +50,7 @@ function SwipeCarousel({
   const isDragging = useRef(false);
   const [dragging, setDragging] = useState(false);
   const [hintPx, setHintPx] = useState(0);
-  const hintTimeouts = useRef<{ t1?: NodeJS.Timeout; t2?: NodeJS.Timeout }>({});
+  const hintTimeouts = useRef<{ t1?: ReturnType<typeof setTimeout>; t2?: ReturnType<typeof setTimeout> }>({});
 
   useEffect(() => {
     if (disableHint || slides.length <= 1 || hasSeenSwipeHint()) return;
