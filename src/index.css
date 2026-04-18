@@ -164,16 +164,16 @@
   }
 
   .nav-item-icon {
-      transition: color 0.2s ease;
-    }
+    transition: color 0.2s ease;
+  }
 
-    .nav-item-label {
-      transition: color 0.2s ease;
-    }
+  .nav-item-label {
+    transition: color 0.2s ease;
+  }
 
-    .nav-item.active .nav-item-label {
-      opacity: 1;
-    }
+  .nav-item.active .nav-item-label {
+    opacity: 1;
+  }
 
   /* Sidebar nav item (desktop) */
   .sidebar-item {
