@@ -858,7 +858,7 @@ const DashboardPage: React.FC = () => {
       <div>
         <div className="flex items-center justify-between mb-2">
           <p className="text-xs font-black uppercase tracking-wider text-brutal-black/60">
-            Transaksi Terakhir
+            Pengeluaran Terakhir
           </p>
           <Link
             to="/history"

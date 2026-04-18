@@ -35,6 +35,11 @@ const AddExpenseSheet: React.FC = () => {
     ? expenses.find((e) => e.id === activeExpenseId) ?? null
     : null;
   const isEditMode = editingExpense !== null;
+  const titleRef = useRef('Tambah Pengeluaran');
+
+  if (isAddSheetOpen) {
+    titleRef.current = isEditMode ? 'Edit Pengeluaran' : 'Tambah Pengeluaran';
+  }
 
   // ── Per-entry currency (independent of global setting) ────
   const [entryCurrency, setEntryCurrency] = useState<Currency>(defaultCurrency);
@@ -230,7 +235,7 @@ const AddExpenseSheet: React.FC = () => {
     <BottomSheet
       isOpen={isAddSheetOpen}
       onClose={closeAddSheet}
-      title={isEditMode ? 'Edit Pengeluaran' : 'Tambah Pengeluaran'}
+      title={titleRef.current}
     >
       <div className="flex flex-col gap-4">
         {/* Root error */}

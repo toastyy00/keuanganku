@@ -1,4 +1,5 @@
 import React, { useEffect, useCallback, useState, useRef, useId } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -342,7 +343,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
   // ── Render ───────────────────────────────────────────────
   if (!isRendered) return null;
 
-  return (
+  const sheetMarkup = (
     <>
       {/* Backdrop */}
       <div
@@ -418,6 +419,12 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
       </div>
     </>
   );
+
+  if (typeof document === 'undefined') {
+    return sheetMarkup;
+  }
+
+  return createPortal(sheetMarkup, document.body);
 };
 
 export { BottomSheet };

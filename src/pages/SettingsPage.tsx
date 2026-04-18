@@ -228,7 +228,7 @@ const SettingsPage: React.FC = () => {
 
   return (
     <>
-    <div className="section-pad max-w-2xl mx-auto space-y-4">
+      <div className="section-pad max-w-2xl mx-auto space-y-4">
         <h1 className="text-2xl font-black uppercase tracking-tight">Settings</h1>
 
         {/* ── AKUN ──────────────────────────────────────── */}
@@ -292,7 +292,7 @@ const SettingsPage: React.FC = () => {
               label={`Budget Pribadi (${currency})`}
               type="text"
               inputMode="numeric"
-              placeholder={currency === 'IDR' ? '2000000' : '125'}
+              placeholder={currency === 'IDR' ? '0' : '125'}
               value={personalMonthlyBudget ? String(personalMonthlyBudget) : ''}
               onChange={(e) => handleBudgetChange(setPersonalMonthlyBudget, e.target.value)}
               hint="Contoh: kebutuhan + wants pribadimu per bulan."
@@ -302,7 +302,7 @@ const SettingsPage: React.FC = () => {
               label={`Budget Keluarga (${currency})`}
               type="text"
               inputMode="numeric"
-              placeholder={currency === 'IDR' ? '1500000' : '95'}
+              placeholder={currency === 'IDR' ? '0' : '95'}
               value={familySupportMonthlyBudget ? String(familySupportMonthlyBudget) : ''}
               onChange={(e) => handleBudgetChange(setFamilySupportMonthlyBudget, e.target.value)}
               hint="Contoh: bantuan rutin untuk orang tua atau keluarga."
