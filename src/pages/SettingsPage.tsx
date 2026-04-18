@@ -47,7 +47,7 @@ function Section({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <Card>
+    <Card style={{ boxShadow: '3px 3px 0px 0px #746C62' }}>
       {/* Clickable header — click to toggle */}
       <button
         type="button"

@@ -4,6 +4,7 @@ import { BottomSheet } from '../components/ui/BottomSheet';
 import { Button } from '../components/ui/Button';
 import { Input, Textarea } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
+import { CategoryPicker } from '../components/ui/CategoryPicker';
 import { Toggle } from '../components/ui/Toggle';
 import { Card, CardBody } from '../components/ui/Card';
 import { useExpenseStore } from '../store/useExpenseStore';
@@ -146,17 +147,12 @@ const AddRecurringSheet: React.FC<AddRecurringSheetProps> = ({ isOpen, onClose, 
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold uppercase tracking-wider">Kategori</label>
-          <select
+          <CategoryPicker
+            label="Kategori"
             value={form.category}
-            onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-            className="neo-input"
-            style={{ fontSize: '16px' }}
-          >
-            {categories.map((cat) => (
-              <option key={cat.slug} value={cat.slug}>{cat.emoji} {cat.label}</option>
-            ))}
-          </select>
+            onChange={(slug) => setForm((f) => ({ ...f, category: slug }))}
+            categories={categories}
+          />
         </div>
 
         <Input
@@ -257,7 +253,11 @@ const RecurringPage: React.FC = () => {
           const badgeVariant = t.type === 'NEED' ? 'need' : t.type === 'WANT' ? 'want' : 'transfer';
 
           return (
-            <Card key={t.id} className={!t.active ? 'opacity-60' : ''}>
+            <Card
+              key={t.id}
+              className={!t.active ? 'opacity-60' : ''}
+              style={{ boxShadow: '3px 3px 0px 0px #746C62' }}
+            >
               {isDeletingThis ? (
                 <div className="p-3 bg-red-500">
                   <p className="font-black text-white uppercase text-xs mb-2.5">Hapus "{t.name}"?</p>
@@ -271,11 +271,11 @@ const RecurringPage: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <CardBody className="px-3 py-2.5">
-                  <div className="flex items-start gap-2.5">
+                <CardBody className="px-2.5 py-1">
+                  <div className="flex items-start gap-2">
                     <span className="text-3xl mt-0.5 shrink-0">{cat?.emoji ?? '🛍️'}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
+                      <div className="flex items-center gap-1 flex-wrap">
                         <p className="font-black text-[15px] leading-tight">{t.name}</p>
                         <Badge variant={badgeVariant} size="sm">{t.type}</Badge>
                         {t.schedule_detail && (
@@ -285,48 +285,53 @@ const RecurringPage: React.FC = () => {
                         )}
                         {!t.active && <Badge variant="neutral" size="sm" className="!bg-brutal-black/20">Nonaktif</Badge>}
                       </div>
-                      <p className="text-lg font-black mt-0.5">{formatCurrency(t.amount, t.currency ?? currency)}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
+                      <p className="text-lg font-black mt-px">{formatCurrency(t.amount, t.currency ?? currency)}</p>
+                      <div className="flex items-center gap-1 mt-px min-w-0 text-[10px] text-brutal-bone-dim font-medium">
                         {t.last_logged ? (
-                          <span className="flex items-center gap-1 text-[10px] text-brutal-bone-dim font-medium">
+                          <span className="flex items-center gap-1 shrink-0">
                             <CalendarClock size={10} /> Terakhir: {friendlyDate(t.last_logged)}
                           </span>
                         ) : (
-                          <span className="text-[10px] text-brutal-bone-dim font-medium italic">Belum pernah dicatat</span>
+                          <span className="shrink-0 italic">Belum pernah dicatat</span>
+                        )}
+                        {t.note && (
+                          <>
+                            <span className="shrink-0 text-brutal-bone-dim/60">|</span>
+                            <span className="truncate italic">{t.note}</span>
+                          </>
                         )}
                       </div>
-                      {t.note && <p className="text-[11px] text-brutal-bone-dim mt-0.5 italic">{t.note}</p>}
                     </div>
                   </div>
-                  <div className="flex gap-1.5 mt-2.5 border-t-2 border-[#555555] pt-2.5">
+                  <div className="flex gap-1 mt-1 border-t-2 border-[#555555] pt-1">
                     <button
                       onClick={() => handleQuickLog(t)}
-                      className="flex-1 flex items-center justify-center gap-1 py-2 neo-btn neo-btn-primary font-black text-[11px] min-h-[40px]"
+                      className="flex-1 flex items-center justify-center gap-1 py-1 neo-btn neo-btn-primary font-black text-[10px] min-h-[32px]"
                     >
-                      <Zap size={13} strokeWidth={2.5} /> Catat
+                      <Zap size={12} strokeWidth={2.5} /> Catat
                     </button>
                     <button
                       onClick={() => { setEditing(t); setSheetOpen(true); }}
-                      className="flex-1 flex items-center justify-center py-2 neo-btn neo-btn-secondary font-black text-[11px] min-h-[40px]"
+                      className="flex-1 flex items-center justify-center py-1 neo-btn neo-btn-secondary font-black text-[10px] min-h-[32px]"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => handleToggleActive(t)}
-                      className="p-2 border-2 border-[#555555] hover:bg-brutal-bone/10 transition-all duration-150 min-w-[40px] min-h-[40px] flex items-center justify-center"
+                      className="p-1 border-2 border-[#555555] hover:bg-brutal-bone/10 transition-all duration-150 min-w-[32px] min-h-[32px] flex items-center justify-center"
                       title={t.active ? 'Nonaktifkan' : 'Aktifkan'}
                     >
                       {t.active
-                        ? <ToggleRight size={18} strokeWidth={2.5} />
-                        : <ToggleLeft size={18} strokeWidth={2.5} className="opacity-40" />
+                        ? <ToggleRight size={16} strokeWidth={2.5} />
+                        : <ToggleLeft size={16} strokeWidth={2.5} className="opacity-40" />
                       }
                     </button>
                     <button
                       onClick={() => { haptic(); setDeletingId(t.id); }}
-                      className="p-2 neo-btn-destructive transition-all duration-150 min-w-[40px] min-h-[40px] flex items-center justify-center border-2"
+                      className="p-1 neo-btn-destructive transition-all duration-150 min-w-[32px] min-h-[32px] flex items-center justify-center border-2"
                       aria-label="Hapus"
                     >
-                      <Trash2 size={15} strokeWidth={2.5} />
+                      <Trash2 size={14} strokeWidth={2.5} />
                     </button>
                   </div>
                 </CardBody>

@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Sparkles, Loader2, AlertCircle } from 'lucide-react';
+import { AlertCircle, CalendarDays } from 'lucide-react';
 import { BottomSheet } from './ui/BottomSheet';
 import { Button } from './ui/Button';
 import { Input, Textarea } from './ui/Input';
+import { CategoryPicker } from './ui/CategoryPicker';
 import { useUIStore } from '../store/useAppStore';
 import { useExpenseStore } from '../store/useExpenseStore';
-import { useSettingsStore } from '../store/useSettingsStore';
 import { useCurrencyInput } from '../hooks/useCurrencyInput';
-import { suggestCategory } from '../lib/ai';
 import { getExchangeRate } from '../lib/exchangeRate';
 import { todayISO } from '../lib/utils';
 import type { Currency, ExpenseType } from '../types';
@@ -26,10 +25,6 @@ const AddExpenseSheet: React.FC = () => {
   const { isAddSheetOpen, activeExpenseId, prefillData, closeAddSheet } = useUIStore();
   const { expenses, categories, currency: defaultCurrency, addExpense, updateExpense, isLoading, updateRecurring, recurringTemplates } =
     useExpenseStore();
-  const settings = useSettingsStore();
-  const activeAiKey = settings.aiProvider === 'openai'
-    ? settings.openaiKey
-    : settings.openrouterKey;
 
   const editingExpense = activeExpenseId
     ? expenses.find((e) => e.id === activeExpenseId) ?? null
@@ -65,8 +60,8 @@ const AddExpenseSheet: React.FC = () => {
   const [destination, setDestination] = useState('');
   const [note, setNote] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState('');
+  const dateInputRef = useRef<HTMLInputElement>(null);
+  const [isDateFieldFocused, setIsDateFieldFocused] = useState(false);
 
   // ── Handle pending conversion after currency switch ────────
   useEffect(() => {
@@ -95,7 +90,6 @@ const AddExpenseSheet: React.FC = () => {
     initializedOpenRef.current = true;
 
     setErrors({});
-    setAiError('');
 
     const initialCurrency = editingExpense?.currency ?? defaultCurrency;
     setEntryCurrency(initialCurrency);
@@ -152,30 +146,22 @@ const AddExpenseSheet: React.FC = () => {
     setEntryCurrency(newCurrency);
   }, [entryCurrency, rawValue]);
 
-  // ── AI category suggest ────────────────────────────────────
-  const handleAiSuggest = async () => {
-    if (!name.trim()) { setAiError('Masukkan nama item terlebih dahulu'); return; }
-    if (!activeAiKey) { setAiError('Tambahkan API Key provider yang aktif di Settings'); return; }
-    setAiLoading(true);
-    setAiError('');
-    try {
-      const slug = await suggestCategory(name, categories, {
-        provider: settings.aiProvider,
-        apiKey: activeAiKey,
-        openrouterModel: settings.openrouterModel,
-      });
-      if (slug && categories.some((c) => c.slug === slug)) {
-        setCategory(slug);
-        haptic();
-      } else {
-        setAiError('Tidak ada kecocokan — pilih manual');
-      }
-    } catch {
-      setAiError('Permintaan AI gagal');
-    } finally {
-      setAiLoading(false);
+  const openDatePicker = useCallback(() => {
+    const input = dateInputRef.current;
+    if (!input) return;
+
+    setIsDateFieldFocused(true);
+    input.focus({ preventScroll: true });
+
+    const pickerInput = input as HTMLInputElement & { showPicker?: () => void };
+    if (typeof pickerInput.showPicker === 'function') {
+      pickerInput.showPicker();
+      return;
     }
-  };
+
+    input.click();
+  }, []);
+
 
   // ── Validation ─────────────────────────────────────────────
   const validate = (): boolean => {
@@ -230,6 +216,14 @@ const AddExpenseSheet: React.FC = () => {
   // ── Render ─────────────────────────────────────────────────
   const symbol = entryCurrency === 'IDR' ? 'Rp' : '$';
   const isTransfer = type === 'TRANSFER';
+  const formattedDate = date
+    ? new Intl.DateTimeFormat('id-ID', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }).format(new Date(`${date}T00:00:00`))
+    : '';
 
   return (
     <BottomSheet
@@ -249,7 +243,7 @@ const AddExpenseSheet: React.FC = () => {
         {/* Tipe Transaksi Chips */}
         <div className="flex flex-col gap-1.5 pt-1">
           <label className="text-sm font-bold uppercase tracking-wider text-brutal-black/80">
-            Tipe Transaksi
+            Jenis Pengeluaran
           </label>
           <div className="flex gap-2.5">
             {[
@@ -334,14 +328,38 @@ const AddExpenseSheet: React.FC = () => {
         </div>
 
         {/* Date */}
-        <Input
-          label="Tanggal"
-          id="expense-date"
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          style={{ fontSize: '16px' }}
-        />
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="expense-date" className="text-xs font-bold uppercase tracking-wider">
+            Tanggal
+          </label>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={openDatePicker}
+              className={`neo-input min-h-[44px] w-full px-3 py-2.5 pr-10 flex items-center text-left font-bold text-brutal-black transition-all duration-150 ${isDateFieldFocused ? '!border-brutal-yellow !shadow-[3px_3px_0px_0px_#7ABF3A]' : ''
+                }`}
+              aria-label={`Tanggal: ${formattedDate}`}
+            >
+              {formattedDate}
+            </button>
+            <input
+              ref={dateInputRef}
+              id="expense-date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              onFocus={() => setIsDateFieldFocused(true)}
+              onBlur={() => setIsDateFieldFocused(false)}
+              className="absolute h-px w-px opacity-0 pointer-events-none"
+              style={{ fontSize: '16px' }}
+              aria-label="Tanggal"
+              tabIndex={-1}
+            />
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-brutal-black/60">
+              <CalendarDays size={16} strokeWidth={2.5} aria-hidden="true" />
+            </div>
+          </div>
+        </div>
 
         {/* TRANSFER: Tujuan field instead of Category */}
         {isTransfer ? (
@@ -358,36 +376,14 @@ const AddExpenseSheet: React.FC = () => {
           /* Category + AI suggest */
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold uppercase tracking-wider">Kategori</label>
-            <div className="flex gap-2">
-              <select
-                id="expense-category"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="neo-input flex-1 appearance-none"
-                style={{ fontSize: '16px' }}
-              >
-                {categories.map((cat) => (
-                  <option key={cat.slug} value={cat.slug}>
-                    {cat.emoji} {cat.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={handleAiSuggest}
-                disabled={aiLoading}
-                title="AI Suggest Category"
-                className="neo-btn neo-btn-secondary px-3 shrink-0 min-w-[44px] min-h-[44px]"
-                aria-label="Sarankan kategori dengan AI"
-              >
-                {aiLoading
-                  ? <Loader2 size={16} strokeWidth={2.5} className="animate-spin" />
-                  : <Sparkles size={16} strokeWidth={2.5} />}
-              </button>
-            </div>
-            {aiError && (
-              <p className="text-xs font-bold text-red-500 uppercase tracking-wider">{aiError}</p>
-            )}
+            <CategoryPicker
+              label=""
+              value={category}
+              onChange={setCategory}
+              categories={categories}
+              panelClassName="sm:max-h-[260px]"
+              buttonClassName="!min-h-[44px]"
+            />
           </div>
         )}
 

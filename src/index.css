@@ -109,6 +109,20 @@
     scrollbar-color: #B8F55A transparent;
     scrollbar-width: thin;
   }
+
+  .date-input::-webkit-calendar-picker-indicator {
+    opacity: 0;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+  }
+
+  .date-input::-webkit-clear-button,
+  .date-input::-webkit-inner-spin-button {
+    display: none;
+  }
 }
 
 @layer components {
