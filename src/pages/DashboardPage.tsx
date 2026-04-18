@@ -50,23 +50,29 @@ function SwipeCarousel({
   const isDragging = useRef(false);
   const [dragging, setDragging] = useState(false);
   const [hintPx, setHintPx] = useState(0);
+  const hintTimeouts = useRef<{ t1?: NodeJS.Timeout; t2?: NodeJS.Timeout }>({});
 
   useEffect(() => {
     if (disableHint || slides.length <= 1 || hasSeenSwipeHint()) return;
 
     // Set to true after delay to avoid React 18 Strict Mode double-mount cancellation
-    const t1 = setTimeout(() => {
+    hintTimeouts.current.t1 = setTimeout(() => {
       markSwipeHintSeen();
       setHintPx(-30);
     }, 2000);
-    const t2 = setTimeout(() => setHintPx(0), 2600);
+    hintTimeouts.current.t2 = setTimeout(() => setHintPx(0), 2600);
 
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    return () => {
+      clearTimeout(hintTimeouts.current.t1);
+      clearTimeout(hintTimeouts.current.t2);
+    };
   }, [slides.length]);
 
   const accent = accentColors?.[active] ?? '#B8F55A';
 
   const markHintSeen = () => {
+    clearTimeout(hintTimeouts.current.t1);
+    clearTimeout(hintTimeouts.current.t2);
     markSwipeHintSeen();
     setHintPx(0);
   };

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Expense } from '../../types';
 import { useUIStore } from '../../store/useAppStore';
@@ -189,8 +189,20 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
     return { flows: f, rightNodes: rNodes, defaultTop1: top1Slug };
   }, [expenses]);
 
-  // ── Highlight: persistent via global store, falls back to top-1 ───────────
-  const highlightedCat = sankeyHighlightedCat ?? defaultTop1;
+  // ── Highlight: stabilized local ref to prevent null→value flash ────────────
+  // On first render, `sankeyHighlightedCat` from the global store may be null
+  // (cleared between navigations). We compute the effective value synchronously
+  // using a ref so the very first paint already shows the correct highlight,
+  // eliminating the one-frame flicker on first click.
+  const resolvedHighlightRef = useRef<string | null>(sankeyHighlightedCat ?? defaultTop1);
+
+  // Keep ref in sync whenever the global store changes (user clicks) or data changes
+  useLayoutEffect(() => {
+    const next = sankeyHighlightedCat ?? defaultTop1;
+    resolvedHighlightRef.current = next;
+  }, [sankeyHighlightedCat, defaultTop1]);
+
+  const highlightedCat = sankeyHighlightedCat ?? resolvedHighlightRef.current ?? defaultTop1;
 
   const handleCatClick = (slug: string) => {
     setSankeyHighlightedCat(slug);

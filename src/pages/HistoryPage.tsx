@@ -274,7 +274,7 @@ const HistoryPage: React.FC = () => {
   } = useSettingsStore();
   const activeAiKey = aiProvider === 'openai' ? openaiKey : openrouterKey;
 
-  const { activeYear: viewYear, activeMonth: viewMonth, prevMonth, nextMonth, setSankeyHighlightedCat } = useUIStore();
+  const { activeYear: viewYear, activeMonth: viewMonth, prevMonth, nextMonth, sankeyHighlightedCat, setSankeyHighlightedCat } = useUIStore();
   const {
     typeFilter,
     setTypeFilter,
@@ -326,8 +326,10 @@ const HistoryPage: React.FC = () => {
       setCatFilter(new Set());
     } else if (!location.state?.categorySlug) {
       // Normal navigation: preserve typeFilter, only reset search & catFilter
+      // Also reset the highlighted cat so the chart ref initialises fresh (prevents first-click flicker)
       setSearch('');
       setCatFilter(new Set());
+      setSankeyHighlightedCat(null);
     }
     window.history.replaceState({}, document.title);
   }, [location.state, setTypeFilter, setSearch, setCatFilter, setViewMode, setSankeyHighlightedCat]);
@@ -384,6 +386,16 @@ const HistoryPage: React.FC = () => {
     lastSyncedPickMonthRef.current = { year: viewYear, month: viewMonth };
   }, [viewYear, viewMonth, setInsightScope]);
 
+  // Hide scrollbar when in flow view to prevent layout shifts/flickering
+  useEffect(() => {
+    if (viewMode === 'flow') {
+      document.body.classList.add('flow-mode-active');
+    } else {
+      document.body.classList.remove('flow-mode-active');
+    }
+    return () => document.body.classList.remove('flow-mode-active');
+  }, [viewMode]);
+
   // Filtered
   const filtered = useMemo(() => {
     if (isAllHistoryMode && !normalizedSearch) return [];
@@ -426,6 +438,56 @@ const HistoryPage: React.FC = () => {
   const spendingMonthExpenses = useMemo(
     () => monthExpenses.filter((e) => e.type !== 'TRANSFER'),
     [monthExpenses]
+  );
+  const flowExpenses = useMemo(
+    () => spendingMonthExpenses.filter((e) => e.category !== 'keluarga'),
+    [spendingMonthExpenses]
+  );
+  const flowActiveCatStats = useMemo(() => {
+    if (flowExpenses.length === 0) return { count: 0, total: 0 };
+    
+    // Calculate defaultTop1 matching SankeyChart logic
+    const catStats = new Map<string, { rawAmount: number, count: number }>();
+    flowExpenses.forEach(e => {
+      const s = catStats.get(e.category) ?? { rawAmount: 0, count: 0 };
+      s.rawAmount += e.amount;
+      s.count += 1;
+      catStats.set(e.category, s);
+    });
+    
+    const sortedCats = Array.from(catStats.entries())
+      .map(([slug, s]) => ({ slug, ...s }))
+      .sort((a, b) => b.rawAmount - a.rawAmount || b.count - a.count);
+    
+    const defaultTop1 = sortedCats[0]?.slug ?? null;
+    const activeCat = sankeyHighlightedCat ?? defaultTop1;
+    
+    const activeTxns = flowExpenses.filter(e => e.category === activeCat);
+    return {
+      count: activeTxns.length,
+      total: activeTxns.reduce((s, e) => s + e.amount, 0) // raw amount is fine before currency conversion here if it matches toDisplay logic for base currency, wait, toDisplay uses rate.
+    };
+  }, [flowExpenses, sankeyHighlightedCat]);
+
+  // Convert total using the same toDisplay logic so currency matches
+  const flowCatTotal = useMemo(
+    () => flowExpenses
+      .filter(e => e.category === (sankeyHighlightedCat ?? (() => {
+        // Fallback calculation just for the toDisplay conversion
+        const catStats = new Map<string, { rawAmount: number, count: number }>();
+        flowExpenses.forEach(x => {
+          const s = catStats.get(x.category) ?? { rawAmount: 0, count: 0 };
+          s.rawAmount += x.amount;
+          s.count += 1;
+          catStats.set(x.category, s);
+        });
+        const sortedCats = Array.from(catStats.entries())
+          .map(([slug, s]) => ({ slug, ...s }))
+          .sort((a, b) => b.rawAmount - a.rawAmount || b.count - a.count);
+        return sortedCats[0]?.slug ?? null;
+      })()))
+      .reduce((s, e) => s + toDisplay(e), 0),
+    [flowExpenses, sankeyHighlightedCat, toDisplay]
   );
   const previousMonthExpenses = useMemo(
     () => expenses.filter((e) => e.date.startsWith(previousMonthPrefix) && e.type !== 'TRANSFER'),
@@ -828,13 +890,27 @@ const HistoryPage: React.FC = () => {
           </button>
           <div className="text-center flex-1 mx-2">
             <p className="text-sm font-black uppercase tracking-wide leading-tight">{historyHeaderLabel}</p>
-            <p className="text-[11px] font-bold text-brutal-black/50 mt-0.5">
-              {filtered.length} transaksi
-              <span className="hidden xs:inline"> · {formatCurrency(monthTotal, currency)}</span>
-            </p>
-            <p className="text-[11px] font-bold text-brutal-black/50 xs:hidden">
-              {formatCurrency(monthTotal, currency)}
-            </p>
+            {viewMode === 'flow' ? (
+              <>
+                <p className="text-[11px] font-bold text-brutal-black/50 mt-0.5">
+                  {flowActiveCatStats.count} transaksi
+                  <span className="hidden xs:inline"> · {formatCurrency(flowCatTotal, currency)}</span>
+                </p>
+                <p className="text-[11px] font-bold text-brutal-black/50 xs:hidden">
+                  {formatCurrency(flowCatTotal, currency)}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[11px] font-bold text-brutal-black/50 mt-0.5">
+                  {filtered.length} transaksi
+                  <span className="hidden xs:inline"> · {formatCurrency(monthTotal, currency)}</span>
+                </p>
+                <p className="text-[11px] font-bold text-brutal-black/50 xs:hidden">
+                  {formatCurrency(monthTotal, currency)}
+                </p>
+              </>
+            )}
           </div>
           <button
             onClick={nextMonth}
@@ -855,7 +931,13 @@ const HistoryPage: React.FC = () => {
             return (
               <button
                 key={f.value}
-                onClick={() => { setTypeFilter(f.value); setViewMode('list'); }}
+                onClick={() => {
+                  setTypeFilter(f.value);
+                  setViewMode('list');
+                  if (f.value === 'TRANSFER') {
+                    setCatFilter(new Set());
+                  }
+                }}
                 className="shrink-0 flex items-center justify-center gap-1.5 px-2.5 py-1 border-2 font-black uppercase text-xs tracking-wider transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5"
                 style={{
                   borderColor: isActive ? f.color : '#555555',
@@ -981,20 +1063,8 @@ const HistoryPage: React.FC = () => {
 
       {/* ── Flow view (Sankey diagram) ──────────────────── */}
       {viewMode === 'flow' && (
-        <div className="section-pad">
-          <style dangerouslySetInnerHTML={{
-            __html: `
-            /* Hide scrollbar for Chrome, Safari and Opera */
-            ::-webkit-scrollbar {
-              display: none;
-            }
-            /* Hide scrollbar for IE, Edge and Firefox */
-            * {
-              -ms-overflow-style: none;  /* IE and Edge */
-              scrollbar-width: none;  /* Firefox */
-            }
-          `}} />
-          <div className="flex justify-between items-center mb-3 px-1">
+        <div className="py-5 md:py-6 px-2 md:px-4">
+          <div className="flex justify-between items-center mb-3 px-1 md:px-2">
             <p className="text-[10px] font-black uppercase tracking-widest text-brutal-black/40">
               Pengeluaran
             </p>
@@ -1003,8 +1073,8 @@ const HistoryPage: React.FC = () => {
             </p>
           </div>
           <SankeyChart
-            expenses={spendingMonthExpenses.filter(e => e.category !== 'keluarga')}
-            height={Math.max(560, new Set(spendingMonthExpenses.filter(e => e.category !== 'keluarga').map(e => e.category)).size * 80)}
+            expenses={flowExpenses}
+            height={Math.max(560, new Set(flowExpenses.map(e => e.category)).size * 80)}
             onCatDoubleClick={(slug) => {
               setCatFilter(new Set([slug]));
               setTypeFilter('ALL');
