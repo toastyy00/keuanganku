@@ -88,6 +88,13 @@ const Layout: React.FC = () => {
     const mainEl = mainContentRef.current;
     if (!mainEl) return;
 
+    // /history manages its own scroll container — skip Layout scroll restoration
+    if (location.pathname === '/history') {
+      activeScrollPathRef.current = location.pathname;
+      isRestoringScrollRef.current = false;
+      return;
+    }
+
     if (restoreFrameRef.current !== null) {
       cancelAnimationFrame(restoreFrameRef.current);
     }
@@ -294,9 +301,10 @@ const Layout: React.FC = () => {
       <main
         id="main-content"
         ref={mainContentRef}
-        className="flex-1 min-w-0 overflow-y-auto"
+        className={`flex-1 min-w-0 ${location.pathname === '/history' ? 'overflow-hidden' : 'overflow-y-auto'}`}
         onScroll={(e) => {
           if (isRestoringScrollRef.current) return;
+          if (location.pathname === '/history') return; // history manages its own scroll
           scrollPositions.current[activeScrollPathRef.current] = e.currentTarget.scrollTop;
         }}
         onTouchStart={(e) => {
@@ -353,15 +361,17 @@ const Layout: React.FC = () => {
           }
         }}
       >
-        <div key={location.pathname} className={pageTransitionClass}>
+        <div key={location.pathname} className={location.pathname === '/history' ? `${pageTransitionClass} h-full` : pageTransitionClass}>
           <Outlet />
         </div>
-        {/* Spacer so mobile content clears the bottom nav/FAB without leaving a large empty tail */}
-        <div
-          className="md:hidden"
-          style={{ height: 'calc(76px + env(safe-area-inset-bottom, 0px))' }}
-          aria-hidden="true"
-        />
+        {/* Spacer so mobile content clears the bottom nav/FAB — not needed for /history which manages its own */}
+        {location.pathname !== '/history' && (
+          <div
+            className="md:hidden"
+            style={{ height: 'calc(76px + env(safe-area-inset-bottom, 0px))' }}
+            aria-hidden="true"
+          />
+        )}
       </main>
 
       {/* ── Desktop FAB ── */}

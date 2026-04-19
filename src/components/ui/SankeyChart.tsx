@@ -2,6 +2,8 @@ import React, { useMemo, useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Expense } from '../../types';
 import { useUIStore } from '../../store/useAppStore';
+import { useExpenseStore } from '../../store/useExpenseStore';
+import { formatCurrency } from '../../lib/utils';
 
 interface SankeyChartProps {
   expenses: Expense[];
@@ -74,6 +76,8 @@ function allocateHeights<T>(
 export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCatDoubleClick }) => {
   const navigate = useNavigate();
   const { sankeyHighlightedCat, setSankeyHighlightedCat } = useUIStore();
+  const { currency } = useExpenseStore();
+  const [clickedLeftId, setClickedLeftId] = React.useState<string | null>(null);
 
   // ── Layout constants ──────────────────────────────────────────────────────
   const CH = height ?? 220;  // Chart height (px)
@@ -169,6 +173,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
       rightY: number; rightH: number;
       categorySlug: string;
       name: string;
+      amount: number;
     }[] = [];
 
     sortedTxns.forEach((exp, i) => {
@@ -180,7 +185,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
       const rightH = (fs / catFlowTotal) * catH;
 
       const targetY = catCursorY.get(exp.category) ?? 0;
-      f.push({ id: exp.id, leftY: curLY, leftH, rightY: targetY, rightH, categorySlug: exp.category, name: exp.name });
+      f.push({ id: exp.id, leftY: curLY, leftH, rightY: targetY, rightH, categorySlug: exp.category, name: exp.name, amount: exp.amount });
 
       curLY += leftH + GAP;
       catCursorY.set(exp.category, targetY + rightH);
@@ -206,6 +211,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
 
   const handleCatClick = (slug: string) => {
     setSankeyHighlightedCat(slug);
+    setClickedLeftId(null);
   };
 
   const handleCatDoubleClick = (slug: string) => {
@@ -387,17 +393,33 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
           <div
             key={fl.id}
             className={[
-              'absolute flex items-center px-1.5 rounded bg-[#64242F] text-[#FF9A62]',
+              'absolute flex items-center px-1.5 rounded text-[#FF9A62]',
               'text-[9px] font-black tracking-wider uppercase',
-              'pointer-events-none whitespace-nowrap overflow-hidden text-ellipsis',
+              'pointer-events-auto cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis',
               'transition-all duration-200 shadow-md',
+              clickedLeftId === fl.id ? 'bg-[#4A1721] z-10' : 'bg-[#64242F]'
             ].join(' ')}
-            style={{ left: 0, top: `${fl.labelTop}px`, height: `${LEFT_LABEL_H}px`, maxWidth: '40%' }}
+            style={{ left: 0, top: `${fl.labelTop}px`, height: `${LEFT_LABEL_H}px`, maxWidth: clickedLeftId === fl.id ? '80%' : '40%' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setClickedLeftId(prev => prev === fl.id ? null : fl.id);
+            }}
           >
             {fl.name}
+            {clickedLeftId === fl.id && (
+              <span className="ml-1.5 opacity-90 text-[#B8F55A]">
+                {formatCurrency(fl.amount, currency)}
+              </span>
+            )}
           </div>
         ))}
       </div>
+      
+      {/* Background click handler to clear left label selection */}
+      <div 
+        className="absolute inset-0 z-[-1]" 
+        onClick={() => setClickedLeftId(null)} 
+      />
     </div>
   );
 };

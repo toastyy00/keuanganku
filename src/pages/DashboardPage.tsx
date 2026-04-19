@@ -893,6 +893,7 @@ const DashboardPage: React.FC = () => {
           </p>
           <Link
             to="/history"
+            state={{ fromDashboardViewAll: true }}
             className="text-xs font-black uppercase tracking-wider text-brutal-black flex items-center gap-1 hover:underline"
           >
             Lihat Semua {'\u25b8'}

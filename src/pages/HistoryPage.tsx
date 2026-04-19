@@ -324,6 +324,13 @@ const HistoryPage: React.FC = () => {
       setViewMode('list');
       setSearch('');
       setCatFilter(new Set());
+    } else if (location.state?.fromDashboardViewAll) {
+      setTypeFilter('ALL');
+      setViewMode('list');
+      setSearchScope('month');
+      setSearch('');
+      setCatFilter(new Set());
+      setSankeyHighlightedCat(null);
     } else if (!location.state?.categorySlug) {
       // Normal navigation: preserve typeFilter, only reset search & catFilter
       // Also reset the highlighted cat so the chart ref initialises fresh (prevents first-click flicker)
@@ -855,9 +862,9 @@ const HistoryPage: React.FC = () => {
 
 
   return (
-    <div className="flex flex-col min-h-full max-w-2xl mx-auto w-full">
+    <div className="flex flex-col h-full max-w-2xl mx-auto w-full">
       {/* ── Sticky filter bar ─────────────────────────────── */}
-      <div className="sticky top-0 z-20 border-b-2" style={{ backgroundColor: '#1A1A1A', borderColor: '#F5F0E8' }}>
+      <div className="sticky top-0 z-20 border-b-2 flex-shrink-0" style={{ backgroundColor: '#1A1A1A', borderColor: '#F5F0E8' }}>
         {/* Month navigator */}
         <div className="flex items-center justify-between px-3 py-2.5 border-b-4 sm:px-4 sm:py-3" style={{ borderColor: '#3A3A3A' }}>
           <button
@@ -1042,6 +1049,9 @@ const HistoryPage: React.FC = () => {
         )}
       </div>
 
+      {/* ── Scrollable content area (scrollbar starts here, below sticky header) ── */}
+      <div className="flex-1 overflow-y-auto">
+
       {/* ── Flow view (Sankey diagram) ──────────────────── */}
       {viewMode === 'flow' && (
         <div className="py-5 md:py-6 px-2 md:px-4">
@@ -1219,7 +1229,14 @@ const HistoryPage: React.FC = () => {
           )}
         </div>
       )}
+      {/* Mobile bottom nav spacer — keeps content clear of the fixed bottom nav/FAB */}
+      <div
+        className="md:hidden flex-shrink-0"
+        style={{ height: 'calc(76px + env(safe-area-inset-bottom, 0px))' }}
+        aria-hidden="true"
+      />
 
+      </div>{/* end scrollable content */}
 
       <BottomSheet
         isOpen={assistantOpen}
