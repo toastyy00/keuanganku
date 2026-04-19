@@ -387,12 +387,12 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
           <div
             key={fl.id}
             className={[
-              'absolute flex items-center pl-0.5 pr-1.5 rounded-r bg-[#64242F] text-[#FF9A62]',
+              'absolute flex items-center px-1.5 rounded bg-[#64242F] text-[#FF9A62]',
               'text-[9px] font-black tracking-wider uppercase',
               'pointer-events-none whitespace-nowrap overflow-hidden text-ellipsis',
               'transition-all duration-200 shadow-md',
             ].join(' ')}
-            style={{ left: `${((leftX + ENDCAP_W) / CW) * 100}%`, top: `${fl.labelTop}px`, height: `${LEFT_LABEL_H}px`, maxWidth: '35%' }}
+            style={{ left: 0, top: `${fl.labelTop}px`, height: `${LEFT_LABEL_H}px`, maxWidth: '40%' }}
           >
             {fl.name}
           </div>

@@ -52,30 +52,49 @@ function SwipeCarousel({
   const [hintPx, setHintPx] = useState(0);
   const hintTimeouts = useRef<{ t1?: ReturnType<typeof setTimeout>; t2?: ReturnType<typeof setTimeout> }>({});
 
+  const markHintSeen = useCallback(() => {
+    clearTimeout(hintTimeouts.current.t1);
+    clearTimeout(hintTimeouts.current.t2);
+    markSwipeHintSeen();
+    setHintPx(0);
+  }, []);
+
   useEffect(() => {
     if (disableHint || slides.length <= 1 || hasSeenSwipeHint()) return;
+
+    const cleanupListeners = () => {
+      window.removeEventListener('touchstart', handleInteraction);
+      window.removeEventListener('mousedown', handleInteraction);
+      window.removeEventListener('wheel', handleInteraction);
+      window.removeEventListener('keydown', handleInteraction);
+    };
+
+    const handleInteraction = () => {
+      markHintSeen();
+      cleanupListeners();
+    };
+
+    window.addEventListener('touchstart', handleInteraction, { passive: true });
+    window.addEventListener('mousedown', handleInteraction, { passive: true });
+    window.addEventListener('wheel', handleInteraction, { passive: true });
+    window.addEventListener('keydown', handleInteraction, { passive: true });
 
     // Set to true after delay to avoid React 18 Strict Mode double-mount cancellation
     hintTimeouts.current.t1 = setTimeout(() => {
       markSwipeHintSeen();
       setHintPx(-30);
+      cleanupListeners(); // Don't need to listen once animation starts
     }, 2000);
     hintTimeouts.current.t2 = setTimeout(() => setHintPx(0), 2600);
 
     return () => {
       clearTimeout(hintTimeouts.current.t1);
       clearTimeout(hintTimeouts.current.t2);
+      cleanupListeners();
     };
-  }, [slides.length]);
+  }, [slides.length, markHintSeen]);
 
   const accent = accentColors?.[active] ?? '#B8F55A';
-
-  const markHintSeen = () => {
-    clearTimeout(hintTimeouts.current.t1);
-    clearTimeout(hintTimeouts.current.t2);
-    markSwipeHintSeen();
-    setHintPx(0);
-  };
 
   const goTo = (i: number) => {
     haptic();

@@ -440,8 +440,10 @@ const HistoryPage: React.FC = () => {
     [monthExpenses]
   );
   const flowExpenses = useMemo(
-    () => spendingMonthExpenses.filter((e) => e.category !== 'keluarga'),
-    [spendingMonthExpenses]
+    () => spendingMonthExpenses
+      .filter((e) => e.category !== 'keluarga')
+      .map((e) => ({ ...e, amount: toDisplay(e) })),
+    [spendingMonthExpenses, toDisplay]
   );
   const flowActiveCatStats = useMemo(() => {
     if (flowExpenses.length === 0) return { count: 0, total: 0 };
@@ -468,27 +470,6 @@ const HistoryPage: React.FC = () => {
       total: activeTxns.reduce((s, e) => s + e.amount, 0) // raw amount is fine before currency conversion here if it matches toDisplay logic for base currency, wait, toDisplay uses rate.
     };
   }, [flowExpenses, sankeyHighlightedCat]);
-
-  // Convert total using the same toDisplay logic so currency matches
-  const flowCatTotal = useMemo(
-    () => flowExpenses
-      .filter(e => e.category === (sankeyHighlightedCat ?? (() => {
-        // Fallback calculation just for the toDisplay conversion
-        const catStats = new Map<string, { rawAmount: number, count: number }>();
-        flowExpenses.forEach(x => {
-          const s = catStats.get(x.category) ?? { rawAmount: 0, count: 0 };
-          s.rawAmount += x.amount;
-          s.count += 1;
-          catStats.set(x.category, s);
-        });
-        const sortedCats = Array.from(catStats.entries())
-          .map(([slug, s]) => ({ slug, ...s }))
-          .sort((a, b) => b.rawAmount - a.rawAmount || b.count - a.count);
-        return sortedCats[0]?.slug ?? null;
-      })()))
-      .reduce((s, e) => s + toDisplay(e), 0),
-    [flowExpenses, sankeyHighlightedCat, toDisplay]
-  );
   const previousMonthExpenses = useMemo(
     () => expenses.filter((e) => e.date.startsWith(previousMonthPrefix) && e.type !== 'TRANSFER'),
     [expenses, previousMonthPrefix]
@@ -894,10 +875,10 @@ const HistoryPage: React.FC = () => {
               <>
                 <p className="text-[11px] font-bold text-brutal-black/50 mt-0.5">
                   {flowActiveCatStats.count} transaksi
-                  <span className="hidden xs:inline"> · {formatCurrency(flowCatTotal, currency)}</span>
+                  <span className="hidden xs:inline"> · {formatCurrency(flowActiveCatStats.total, currency)}</span>
                 </p>
                 <p className="text-[11px] font-bold text-brutal-black/50 xs:hidden">
-                  {formatCurrency(flowCatTotal, currency)}
+                  {formatCurrency(flowActiveCatStats.total, currency)}
                 </p>
               </>
             ) : (
