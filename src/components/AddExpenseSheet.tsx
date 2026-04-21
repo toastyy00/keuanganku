@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AlertCircle, CalendarDays } from 'lucide-react';
 import { BottomSheet } from './ui/BottomSheet';
 import { Button } from './ui/Button';
@@ -30,10 +30,17 @@ const AddExpenseSheet: React.FC = () => {
     ? expenses.find((e) => e.id === activeExpenseId) ?? null
     : null;
   const isEditMode = editingExpense !== null;
-  const sheetTitle = useMemo(
-    () => (isEditMode ? 'Edit Pengeluaran' : 'Tambah Pengeluaran'),
-    [isEditMode]
-  );
+  const [displayMode, setDisplayMode] = useState<'add' | 'edit'>(activeExpenseId ? 'edit' : 'add');
+  const isDisplayEditMode = displayMode === 'edit';
+  const sheetTitle = isDisplayEditMode ? 'Edit Pengeluaran' : 'Tambah Pengeluaran';
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!isAddSheetOpen) return;
+    // Keep header/action label stable during close animation.
+    setDisplayMode(activeExpenseId ? 'edit' : 'add');
+  }, [isAddSheetOpen, activeExpenseId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── Per-entry currency (independent of global setting) ────
   const [entryCurrency, setEntryCurrency] = useState<Currency>(defaultCurrency);
@@ -64,7 +71,6 @@ const AddExpenseSheet: React.FC = () => {
   const [isDateFieldFocused, setIsDateFieldFocused] = useState(false);
 
   // ── Handle pending conversion after currency switch ────────
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (prevCurrencyRef.current === entryCurrency) return;
     prevCurrencyRef.current = entryCurrency;
@@ -85,6 +91,7 @@ const AddExpenseSheet: React.FC = () => {
   // ── Reset on open ──────────────────────────────────────────
   const initializedOpenRef = useRef(false);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!isAddSheetOpen) {
       initializedOpenRef.current = false;
@@ -419,7 +426,7 @@ const AddExpenseSheet: React.FC = () => {
         <div className="flex gap-3 pt-2">
           <Button variant="secondary" fullWidth onClick={handleClose}>Batal</Button>
           <Button variant="primary" fullWidth onClick={handleSave} loading={isLoading}>
-            {isEditMode ? 'Simpan' : 'Tambah'}
+            {isDisplayEditMode ? 'Simpan' : 'Tambah'}
           </Button>
         </div>
       </div>

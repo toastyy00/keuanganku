@@ -1,3 +1,18 @@
+﻿-- ============================================================
+--  KEUANGANKU - Fresh Install (Combined 001 + 002)
+--
+--  Purpose:
+--  - One-file bootstrap for NEW self-host installations only.
+--  - This file combines:
+--      1) supabase/migrations/001_init.sql
+--      2) supabase/migrations/002_local_first_sync.sql
+--
+--  IMPORTANT:
+--  - Use this file ONLY for fresh installs.
+--  - Do not run together with 001/002 in the same database lifecycle.
+-- ============================================================
+
+-- ==================== BEGIN 001_init.sql ====================
 -- ============================================================
 --  KEUANGANKU - Supabase Database Migration
 --  001_init.sql (AUTH MODE - per-user data with RLS)
@@ -198,17 +213,17 @@ BEGIN
 
   -- Seed 11 default categories for this user
   INSERT INTO public.categories (slug, label, emoji, is_default, user_id) VALUES
-    ('tagihan',   'Tagihan',      '⚡',     TRUE, NEW.id),
-    ('keperluan', 'Keperluan',    '🛍️',     TRUE, NEW.id),
-    ('makan',     'Makan',        '🍜',     TRUE, NEW.id),
-    ('transport', 'Transportasi', '🚗',     TRUE, NEW.id),
-    ('health',    'Kesehatan',    '💊',     TRUE, NEW.id),
-    ('lifestyle', 'Lifestyle',    '👟',     TRUE, NEW.id),
-    ('gadget',    'Gadget',       '📱',     TRUE, NEW.id),
-    ('digital',   'Digital',      '💻',     TRUE, NEW.id),
-    ('sedekah',   'Sedekah',      '🤲',     TRUE, NEW.id),
-    ('hadiah',    'Hadiah',       '🎁',     TRUE, NEW.id),
-    ('keluarga',  'Keluarga',     '👨‍👩‍👧', TRUE, NEW.id);
+    ('tagihan',   'Tagihan',      'âš¡',     TRUE, NEW.id),
+    ('keperluan', 'Keperluan',    'ðŸ›ï¸',     TRUE, NEW.id),
+    ('makan',     'Makan',        'ðŸœ',     TRUE, NEW.id),
+    ('transport', 'Transportasi', 'ðŸš—',     TRUE, NEW.id),
+    ('health',    'Kesehatan',    'ðŸ’Š',     TRUE, NEW.id),
+    ('lifestyle', 'Lifestyle',    'ðŸ‘Ÿ',     TRUE, NEW.id),
+    ('gadget',    'Gadget',       'ðŸ“±',     TRUE, NEW.id),
+    ('digital',   'Digital',      'ðŸ’»',     TRUE, NEW.id),
+    ('sedekah',   'Sedekah',      'ðŸ¤²',     TRUE, NEW.id),
+    ('hadiah',    'Hadiah',       'ðŸŽ',     TRUE, NEW.id),
+    ('keluarga',  'Keluarga',     'ðŸ‘¨â€ðŸ‘©â€ðŸ‘§', TRUE, NEW.id);
 
   RETURN NEW;
 END;
@@ -329,3 +344,66 @@ COMMENT ON COLUMN public.profiles.is_admin IS 'Set to TRUE manually in dashboard
 COMMENT ON TABLE public.expenses           IS 'Expense entries scoped to auth.uid().';
 COMMENT ON TABLE public.recurring_templates IS 'Recurring expense templates scoped to auth.uid().';
 COMMENT ON TABLE public.categories         IS 'Expense categories scoped to auth.uid(). Seeded on register.';
+
+
+-- ==================== BEGIN 002_local_first_sync.sql ====================
+-- ============================================================
+--  KEUANGANKU - Local-first sync support
+--  002_local_first_sync.sql
+-- ============================================================
+
+-- Add soft-delete + update cursors for incremental sync
+ALTER TABLE public.expenses
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+ALTER TABLE public.categories
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+ALTER TABLE public.recurring_templates
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+-- Backfill expenses.updated_at from created_at for cleaner initial cursor
+UPDATE public.expenses
+SET updated_at = COALESCE(created_at, NOW())
+WHERE updated_at IS NULL;
+
+-- Shared trigger function: keep updated_at current on every UPDATE
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_expenses_set_updated_at ON public.expenses;
+CREATE TRIGGER trg_expenses_set_updated_at
+  BEFORE UPDATE ON public.expenses
+  FOR EACH ROW
+  EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_categories_set_updated_at ON public.categories;
+CREATE TRIGGER trg_categories_set_updated_at
+  BEFORE UPDATE ON public.categories
+  FOR EACH ROW
+  EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_recurring_set_updated_at ON public.recurring_templates;
+CREATE TRIGGER trg_recurring_set_updated_at
+  BEFORE UPDATE ON public.recurring_templates
+  FOR EACH ROW
+  EXECUTE FUNCTION public.set_updated_at();
+
+-- Sync-friendly indexes (per-user, newest change first)
+CREATE INDEX IF NOT EXISTS idx_expenses_user_updated
+  ON public.expenses (user_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_categories_user_updated
+  ON public.categories (user_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_recurring_user_updated
+  ON public.recurring_templates (user_id, updated_at DESC);
+
+
+

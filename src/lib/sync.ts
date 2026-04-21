@@ -1,11 +1,11 @@
 import type { Expense, Category, RecurringTemplate } from '../types';
 import { useAuthStore } from '../store/useAuthStore';
 import { v4 as uuidv4 } from 'uuid';
-import { getSupabaseClient } from './supabase';
+import { getSupabaseClientAsync } from './supabase';
 import { getLocalISODate } from './utils';
 import { writeIDB } from './idb-storage';
 import { getActiveDataScope, scopedDataKey } from './dataScope';
-import { syncWithSupabaseIfNeeded } from './sync-engine';
+import { resetSyncStateForScope, syncWithSupabaseIfNeeded } from './sync-engine';
 
 // ============================================================
 //  SYNC — Compatibility wrapper (delegates to local-first sync engine)
@@ -22,7 +22,7 @@ type ImportedRecurring = Partial<RecurringTemplate> & { user_id?: string; freque
 type ImportedExpense = Partial<Expense> & { user_id?: string };
 
 export async function syncToSupabase(): Promise<SyncResult> {
-  const result = await syncWithSupabaseIfNeeded();
+  const result = await syncWithSupabaseIfNeeded({ force: true });
 
   if (result.skipped) {
     return {
@@ -116,13 +116,19 @@ export async function importJSON(raw: string): Promise<BackupData> {
   const { session, user } = useAuthStore.getState();
 
   if (session && user) {
-    const client = getSupabaseClient();
+    const client = await getSupabaseClientAsync();
     if (!client) throw new Error('Supabase client tidak dapat diakses.');
+    await resetSyncStateForScope(user.id);
 
     // 1. Wipe existing data for this user
-    await client.from('expenses').delete().eq('user_id', user.id);
-    await client.from('recurring_templates').delete().eq('user_id', user.id);
-    await client.from('categories').delete().eq('user_id', user.id);
+    const { error: deleteExpensesError } = await client.from('expenses').delete().eq('user_id', user.id);
+    if (deleteExpensesError) throw new Error(`Gagal menghapus expense lama: ${deleteExpensesError.message}`);
+
+    const { error: deleteRecurringError } = await client.from('recurring_templates').delete().eq('user_id', user.id);
+    if (deleteRecurringError) throw new Error(`Gagal menghapus recurring lama: ${deleteRecurringError.message}`);
+
+    const { error: deleteCategoriesError } = await client.from('categories').delete().eq('user_id', user.id);
+    if (deleteCategoriesError) throw new Error(`Gagal menghapus kategori lama: ${deleteCategoriesError.message}`);
 
     // 2. Insert Categories
     if (Array.isArray(parsed.categories) && parsed.categories.length > 0) {
@@ -137,7 +143,10 @@ export async function importJSON(raw: string): Promise<BackupData> {
           is_default: false,
         }));
       if (catsToInsert.length > 0) {
-        await client.from('categories').upsert(catsToInsert, { onConflict: 'slug,user_id' });
+        const { error: upsertCategoriesError } = await client
+          .from('categories')
+          .upsert(catsToInsert, { onConflict: 'slug,user_id' });
+        if (upsertCategoriesError) throw new Error(`Gagal import kategori: ${upsertCategoriesError.message}`);
       }
     }
 
@@ -161,7 +170,10 @@ export async function importJSON(raw: string): Promise<BackupData> {
           user_id: user.id,
         }));
       if (recsToInsert.length > 0) {
-        await client.from('recurring_templates').insert(recsToInsert);
+        const { error: insertRecurringError } = await client
+          .from('recurring_templates')
+          .insert(recsToInsert);
+        if (insertRecurringError) throw new Error(`Gagal import recurring: ${insertRecurringError.message}`);
       }
     }
 
@@ -190,9 +202,14 @@ export async function importJSON(raw: string): Promise<BackupData> {
       // Split chunks to avoid PostgREST limits
       const chunkSize = 500;
       for (let i = 0; i < expsToInsert.length; i += chunkSize) {
-        await client.from('expenses').insert(expsToInsert.slice(i, i + chunkSize));
+        const { error: insertExpensesError } = await client
+          .from('expenses')
+          .insert(expsToInsert.slice(i, i + chunkSize));
+        if (insertExpensesError) throw new Error(`Gagal import expense: ${insertExpensesError.message}`);
       }
     }
+
+    await syncWithSupabaseIfNeeded({ force: true });
   } else {
     // Write to offline IndexedDB fallback
     const scope = getActiveDataScope();

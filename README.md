@@ -73,7 +73,7 @@ Notes:
 
 ### 4. Apply Supabase schema
 
-Run the SQL migrations in order from `supabase/migrations/` (`001_init.sql`, then `002_local_first_sync.sql`) in your Supabase SQL editor.
+Run `supabase/init.sql` in your Supabase SQL editor.
 
 ### 5. Start the app
 

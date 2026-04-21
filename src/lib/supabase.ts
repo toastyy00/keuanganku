@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { appConfig } from './appConfig';
 
 // ============================================================
@@ -8,15 +8,41 @@ import { appConfig } from './appConfig';
 
 const supabaseUrl = appConfig.supabaseUrl;
 const supabaseKey = appConfig.supabaseAnonKey;
+const hasCredentials = Boolean(supabaseUrl && supabaseKey);
 
 let _client: SupabaseClient | null = null;
+let _clientInitPromise: Promise<SupabaseClient | null> | null = null;
 
-if (supabaseUrl && supabaseKey) {
-  _client = createClient(supabaseUrl, supabaseKey);
+async function ensureSupabaseClient(): Promise<SupabaseClient | null> {
+  if (_client) return _client;
+  if (!hasCredentials) return null;
+  if (_clientInitPromise) return _clientInitPromise;
+
+  _clientInitPromise = import('@supabase/supabase-js')
+    .then(({ createClient }) => {
+      _client = createClient(supabaseUrl as string, supabaseKey as string);
+      return _client;
+    })
+    .catch(() => null)
+    .finally(() => {
+      _clientInitPromise = null;
+    });
+
+  return _clientInitPromise;
 }
 
-/** The shared Supabase client. Null if env vars are not set. */
-export const supabase = _client;
+/**
+ * Async getter for the shared Supabase client.
+ * Uses lazy-loading so the Supabase SDK is only downloaded when needed.
+ */
+export async function getSupabaseClientAsync(): Promise<SupabaseClient | null> {
+  return ensureSupabaseClient();
+}
+
+/** Warms up Supabase client in background (best-effort). */
+export async function preloadSupabaseClient(): Promise<void> {
+  await ensureSupabaseClient();
+}
 
 /** Returns the shared client (compat helper used by repository classes). */
 export function getSupabaseClient(): SupabaseClient | null {
@@ -25,13 +51,11 @@ export function getSupabaseClient(): SupabaseClient | null {
 
 /** True if VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are both set. */
 export function hasSupabaseCredentials(): boolean {
-  return _client !== null;
+  return hasCredentials;
 }
 
-/**
- * No-op kept for import compatibility.
- * Client is now eagerly initialized from env vars; clearing is not needed.
- */
+/** Clears the in-memory singleton (mainly useful for tests). */
 export function clearSupabaseClient(): void {
-  // intentional no-op
+  _client = null;
+  _clientInitPromise = null;
 }

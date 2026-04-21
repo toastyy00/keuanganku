@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Category, Expense, RecurringTemplate } from '../types';
-import { getSupabaseClient } from './supabase';
+import { getSupabaseClientAsync } from './supabase';
 import { GUEST_DATA_SCOPE, getActiveDataScope, scopedDataKey } from './dataScope';
 import { readIDB, readIDBValue, writeIDB, writeIDBValue } from './idb-storage';
 import { useAuthStore } from '../store/useAuthStore';
@@ -24,6 +24,11 @@ interface SyncMeta {
   cursorByEntity: Partial<Record<SyncEntity, string>>;
 }
 
+interface EntityCursor {
+  updatedAt: string;
+  tieBreaker: string;
+}
+
 export interface SyncResult {
   pushed: number;
   pulled: number;
@@ -40,8 +45,11 @@ const BASE_KEYS = {
   categories: 'categories',
   recurring: 'recurring',
 } as const;
+const PULL_PAGE_SIZE = 500;
+const SYNC_COOLDOWN_MS = 20_000;
 
 const syncInflightByScope = new Map<string, Promise<SyncResult>>();
+const syncLastRunAtByScope = new Map<string, number>();
 
 function queueStorageKey(scope: string): string {
   return scopedDataKey(QUEUE_KEY, scope);
@@ -99,6 +107,41 @@ async function readMeta(scope: string): Promise<SyncMeta> {
 
 async function writeMeta(scope: string, meta: SyncMeta): Promise<void> {
   await writeIDBValue(metaStorageKey(scope), meta);
+}
+
+function parseCursor(raw?: string): EntityCursor | undefined {
+  if (!raw) return undefined;
+  const sepIdx = raw.indexOf('|');
+  if (sepIdx < 0) {
+    return { updatedAt: raw, tieBreaker: '' };
+  }
+  return {
+    updatedAt: raw.slice(0, sepIdx),
+    tieBreaker: raw.slice(sepIdx + 1),
+  };
+}
+
+function serializeCursor(cursor?: EntityCursor): string | undefined {
+  if (!cursor) return undefined;
+  return `${cursor.updatedAt}|${cursor.tieBreaker}`;
+}
+
+function isFullSnapshotPull(cursorRaw?: string): boolean {
+  return !cursorRaw;
+}
+
+function applyCursorFilter<TQuery extends { gt: (column: string, value: string) => TQuery; or: (filters: string) => TQuery }>(
+  query: TQuery,
+  cursor: EntityCursor | undefined,
+  tieBreakerColumn: string,
+): TQuery {
+  if (!cursor) return query;
+  if (!cursor.tieBreaker) {
+    return query.gt('updated_at', cursor.updatedAt);
+  }
+  return query.or(
+    `updated_at.gt.${cursor.updatedAt},and(updated_at.eq.${cursor.updatedAt},${tieBreakerColumn}.gt.${cursor.tieBreaker})`
+  );
 }
 
 function normalizeExpense(record: Expense): Expense {
@@ -427,8 +470,76 @@ function recurringStorageKey(scope: string): string {
   return scopedDataKey(BASE_KEYS.recurring, scope);
 }
 
-function hasSameSnapshot(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+function areExpensesEqual(a: Expense, b: Expense): boolean {
+  return a.id === b.id
+    && a.name === b.name
+    && a.amount === b.amount
+    && a.currency === b.currency
+    && a.category === b.category
+    && a.type === b.type
+    && (a.destination ?? undefined) === (b.destination ?? undefined)
+    && a.date === b.date
+    && (a.note ?? undefined) === (b.note ?? undefined)
+    && a.is_recurring === b.is_recurring
+    && (a.recurring_id ?? undefined) === (b.recurring_id ?? undefined)
+    && a.created_at === b.created_at
+    && a.synced === b.synced;
+}
+
+function areCategoriesEqual(a: Category, b: Category): boolean {
+  return a.slug === b.slug
+    && a.label === b.label
+    && a.emoji === b.emoji
+    && a.is_default === b.is_default;
+}
+
+function areRecurringEqual(a: RecurringTemplate, b: RecurringTemplate): boolean {
+  return a.id === b.id
+    && a.name === b.name
+    && a.amount === b.amount
+    && a.currency === b.currency
+    && a.category === b.category
+    && a.type === b.type
+    && (a.schedule_detail ?? undefined) === (b.schedule_detail ?? undefined)
+    && (a.note ?? undefined) === (b.note ?? undefined)
+    && (a.last_logged ?? undefined) === (b.last_logged ?? undefined)
+    && a.active === b.active;
+}
+
+function hasSameExpenseList(local: Expense[], remote: Expense[]): boolean {
+  if (local.length !== remote.length) return false;
+  const localById = new Map(local.map((item) => [item.id, item]));
+  for (const remoteItem of remote) {
+    const localItem = localById.get(remoteItem.id);
+    if (!localItem || !areExpensesEqual(localItem, remoteItem)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function hasSameCategoryList(local: Category[], remote: Category[]): boolean {
+  if (local.length !== remote.length) return false;
+  const localBySlug = new Map(local.map((item) => [item.slug, item]));
+  for (const remoteItem of remote) {
+    const localItem = localBySlug.get(remoteItem.slug);
+    if (!localItem || !areCategoriesEqual(localItem, remoteItem)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function hasSameRecurringList(local: RecurringTemplate[], remote: RecurringTemplate[]): boolean {
+  if (local.length !== remote.length) return false;
+  const localById = new Map(local.map((item) => [item.id, item]));
+  for (const remoteItem of remote) {
+    const localItem = localById.get(remoteItem.id);
+    if (!localItem || !areRecurringEqual(localItem, remoteItem)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 async function pullExpenses(scope: string, client: SupabaseClient, cursor?: string): Promise<PullResult> {
@@ -437,134 +548,158 @@ async function pullExpenses(scope: string, client: SupabaseClient, cursor?: stri
     'note', 'is_recurring', 'recurring_id', 'created_at', 'synced', 'updated_at', 'deleted_at',
   ].join(',');
 
-  let query = client
-    .from('expenses')
-    .select(columns)
-    .order('updated_at', { ascending: true });
-  if (cursor) query = query.gt('updated_at', cursor);
-
-  const expenseResult = await query;
-  const data = expenseResult.data as unknown as RemoteExpenseRow[] | null;
-  const error = expenseResult.error;
-
-  if (error) {
-    if (isMissingColumnError(error, 'updated_at') || isMissingColumnError(error, 'deleted_at')) {
-      const fallback = await client
-        .from('expenses')
-        .select('id,name,amount,currency,category,type,destination,date,note,is_recurring,recurring_id,created_at,synced')
-        .order('date', { ascending: false })
-        .order('created_at', { ascending: false });
-
-      if (fallback.error) throw new Error(`Pull expenses gagal: ${fallback.error.message}`);
-
-      const remote = (fallback.data ?? []).map((row) => normalizeExpense(row as Expense));
-      const key = expenseStorageKey(scope);
-      const local = await readIDB<Expense>(key);
-      if (hasSameSnapshot(local, remote)) {
-        return { pulled: remote.length, changed: false, cursor };
-      }
-      await writeIDB(key, remote);
-      return { pulled: remote.length, changed: true, cursor };
-    }
-    throw new Error(`Pull expenses gagal: ${error.message}`);
-  }
-
-  const rows = data ?? [];
-  if (rows.length === 0) {
-    return { pulled: 0, changed: false, cursor };
-  }
-
   const key = expenseStorageKey(scope);
   const local = await readIDB<Expense>(key);
   const map = new Map(local.map((item) => [item.id, item]));
-
+  const initialCursor = parseCursor(cursor);
+  let currentCursor = initialCursor;
+  let pulled = 0;
   let changed = false;
-  for (const row of rows) {
-    if (row.deleted_at) {
-      if (map.delete(row.id)) changed = true;
-      continue;
+
+  while (true) {
+    let query = client
+      .from('expenses')
+      .select(columns)
+      .order('updated_at', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(PULL_PAGE_SIZE);
+
+    query = applyCursorFilter(query, currentCursor, 'id');
+
+    const expenseResult = await query;
+    const data = expenseResult.data as unknown as RemoteExpenseRow[] | null;
+    const error = expenseResult.error;
+
+    if (error) {
+      if (isMissingColumnError(error, 'updated_at') || isMissingColumnError(error, 'deleted_at')) {
+        const fallback = await client
+          .from('expenses')
+          .select('id,name,amount,currency,category,type,destination,date,note,is_recurring,recurring_id,created_at,synced')
+          .order('date', { ascending: false })
+          .order('created_at', { ascending: false });
+
+        if (fallback.error) throw new Error(`Pull expenses gagal: ${fallback.error.message}`);
+
+        const remote = (fallback.data ?? []).map((row) => normalizeExpense(row as Expense));
+        if (hasSameExpenseList(local, remote)) {
+          return { pulled: remote.length, changed: false, cursor };
+        }
+        await writeIDB(key, remote);
+        return { pulled: remote.length, changed: true, cursor };
+      }
+      throw new Error(`Pull expenses gagal: ${error.message}`);
     }
 
-    const nextValue = normalizeExpense(row);
-    const current = map.get(nextValue.id);
-    if (!current || !hasSameSnapshot(current, nextValue)) {
-      map.set(nextValue.id, nextValue);
-      changed = true;
+    const rows = data ?? [];
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      if (row.deleted_at) {
+        if (map.delete(row.id)) changed = true;
+      } else {
+        const nextValue = normalizeExpense(row);
+        const current = map.get(nextValue.id);
+        if (!current || !areExpensesEqual(current, nextValue)) {
+          map.set(nextValue.id, nextValue);
+          changed = true;
+        }
+      }
+      pulled += 1;
     }
+
+    const lastRow = rows[rows.length - 1];
+    if (!lastRow.updated_at || !lastRow.id) break;
+    currentCursor = { updatedAt: lastRow.updated_at, tieBreaker: lastRow.id };
+
+    if (rows.length < PULL_PAGE_SIZE) break;
   }
 
   if (changed) {
     await writeIDB(key, Array.from(map.values()));
+  } else if (pulled === 0 && isFullSnapshotPull(cursor) && local.length > 0) {
+    await writeIDB(key, []);
+    changed = true;
   }
 
-  const nextCursor = rows[rows.length - 1].updated_at ?? cursor;
-  return { pulled: rows.length, changed, cursor: nextCursor };
+  return { pulled, changed, cursor: serializeCursor(currentCursor) ?? cursor };
 }
 
 async function pullCategories(scope: string, client: SupabaseClient, cursor?: string): Promise<PullResult> {
   const columns = ['slug', 'label', 'emoji', 'is_default', 'updated_at', 'deleted_at'].join(',');
 
-  let query = client
-    .from('categories')
-    .select(columns)
-    .order('updated_at', { ascending: true });
-  if (cursor) query = query.gt('updated_at', cursor);
-
-  const categoryResult = await query;
-  const data = categoryResult.data as unknown as RemoteCategoryRow[] | null;
-  const error = categoryResult.error;
-
-  if (error) {
-    if (isMissingColumnError(error, 'updated_at') || isMissingColumnError(error, 'deleted_at')) {
-      const fallback = await client
-        .from('categories')
-        .select('slug,label,emoji,is_default')
-        .order('label', { ascending: true });
-
-      if (fallback.error) throw new Error(`Pull categories gagal: ${fallback.error.message}`);
-
-      const remote = (fallback.data ?? []).map((row) => normalizeCategory(row as Category));
-      const key = categoryStorageKey(scope);
-      const local = await readIDB<Category>(key);
-      if (hasSameSnapshot(local, remote)) {
-        return { pulled: remote.length, changed: false, cursor };
-      }
-      await writeIDB(key, remote);
-      return { pulled: remote.length, changed: true, cursor };
-    }
-    throw new Error(`Pull categories gagal: ${error.message}`);
-  }
-
-  const rows = data ?? [];
-  if (rows.length === 0) {
-    return { pulled: 0, changed: false, cursor };
-  }
-
   const key = categoryStorageKey(scope);
   const local = await readIDB<Category>(key);
   const map = new Map(local.map((item) => [item.slug, item]));
-
+  const initialCursor = parseCursor(cursor);
+  let currentCursor = initialCursor;
+  let pulled = 0;
   let changed = false;
-  for (const row of rows) {
-    if (row.deleted_at) {
-      if (map.delete(row.slug)) changed = true;
-      continue;
+
+  while (true) {
+    let query = client
+      .from('categories')
+      .select(columns)
+      .order('updated_at', { ascending: true })
+      .order('slug', { ascending: true })
+      .limit(PULL_PAGE_SIZE);
+
+    query = applyCursorFilter(query, currentCursor, 'slug');
+
+    const categoryResult = await query;
+    const data = categoryResult.data as unknown as RemoteCategoryRow[] | null;
+    const error = categoryResult.error;
+
+    if (error) {
+      if (isMissingColumnError(error, 'updated_at') || isMissingColumnError(error, 'deleted_at')) {
+        const fallback = await client
+          .from('categories')
+          .select('slug,label,emoji,is_default')
+          .order('label', { ascending: true });
+
+        if (fallback.error) throw new Error(`Pull categories gagal: ${fallback.error.message}`);
+
+        const remote = (fallback.data ?? []).map((row) => normalizeCategory(row as Category));
+        if (hasSameCategoryList(local, remote)) {
+          return { pulled: remote.length, changed: false, cursor };
+        }
+        await writeIDB(key, remote);
+        return { pulled: remote.length, changed: true, cursor };
+      }
+      throw new Error(`Pull categories gagal: ${error.message}`);
     }
 
-    const nextValue = normalizeCategory(row);
-    const current = map.get(nextValue.slug);
-    if (!current || !hasSameSnapshot(current, nextValue)) {
-      map.set(nextValue.slug, nextValue);
-      changed = true;
+    const rows = data ?? [];
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      if (row.deleted_at) {
+        if (map.delete(row.slug)) changed = true;
+      } else {
+        const nextValue = normalizeCategory(row);
+        const current = map.get(nextValue.slug);
+        if (!current || !areCategoriesEqual(current, nextValue)) {
+          map.set(nextValue.slug, nextValue);
+          changed = true;
+        }
+      }
+      pulled += 1;
     }
+
+    const lastRow = rows[rows.length - 1];
+    if (!lastRow.updated_at || !lastRow.slug) break;
+    currentCursor = { updatedAt: lastRow.updated_at, tieBreaker: lastRow.slug };
+
+    if (rows.length < PULL_PAGE_SIZE) break;
   }
 
   if (changed) {
     await writeIDB(key, Array.from(map.values()));
+  } else if (pulled === 0 && isFullSnapshotPull(cursor) && local.length > 0) {
+    await writeIDB(key, []);
+    changed = true;
   }
 
-  const nextCursor = rows[rows.length - 1].updated_at ?? cursor;
-  return { pulled: rows.length, changed, cursor: nextCursor };
+  return { pulled, changed, cursor: serializeCursor(currentCursor) ?? cursor };
 }
 
 async function pullRecurring(scope: string, client: SupabaseClient, cursor?: string): Promise<PullResult> {
@@ -573,67 +708,79 @@ async function pullRecurring(scope: string, client: SupabaseClient, cursor?: str
     'note', 'last_logged', 'active', 'updated_at', 'deleted_at',
   ].join(',');
 
-  let query = client
-    .from('recurring_templates')
-    .select(columns)
-    .order('updated_at', { ascending: true });
-  if (cursor) query = query.gt('updated_at', cursor);
-
-  const recurringResult = await query;
-  const data = recurringResult.data as unknown as RemoteRecurringRow[] | null;
-  const error = recurringResult.error;
-
-  if (error) {
-    if (isMissingColumnError(error, 'updated_at') || isMissingColumnError(error, 'deleted_at')) {
-      const fallback = await client
-        .from('recurring_templates')
-        .select('id,name,amount,currency,category,type,schedule_detail,note,last_logged,active')
-        .order('active', { ascending: false });
-
-      if (fallback.error) throw new Error(`Pull recurring gagal: ${fallback.error.message}`);
-
-      const remote = (fallback.data ?? []).map((row) => normalizeRecurring(row as RecurringTemplate));
-      const key = recurringStorageKey(scope);
-      const local = await readIDB<RecurringTemplate>(key);
-      if (hasSameSnapshot(local, remote)) {
-        return { pulled: remote.length, changed: false, cursor };
-      }
-      await writeIDB(key, remote);
-      return { pulled: remote.length, changed: true, cursor };
-    }
-    throw new Error(`Pull recurring gagal: ${error.message}`);
-  }
-
-  const rows = data ?? [];
-  if (rows.length === 0) {
-    return { pulled: 0, changed: false, cursor };
-  }
-
   const key = recurringStorageKey(scope);
   const local = await readIDB<RecurringTemplate>(key);
   const map = new Map(local.map((item) => [item.id, item]));
-
+  const initialCursor = parseCursor(cursor);
+  let currentCursor = initialCursor;
+  let pulled = 0;
   let changed = false;
-  for (const row of rows) {
-    if (row.deleted_at) {
-      if (map.delete(row.id)) changed = true;
-      continue;
+
+  while (true) {
+    let query = client
+      .from('recurring_templates')
+      .select(columns)
+      .order('updated_at', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(PULL_PAGE_SIZE);
+
+    query = applyCursorFilter(query, currentCursor, 'id');
+
+    const recurringResult = await query;
+    const data = recurringResult.data as unknown as RemoteRecurringRow[] | null;
+    const error = recurringResult.error;
+
+    if (error) {
+      if (isMissingColumnError(error, 'updated_at') || isMissingColumnError(error, 'deleted_at')) {
+        const fallback = await client
+          .from('recurring_templates')
+          .select('id,name,amount,currency,category,type,schedule_detail,note,last_logged,active')
+          .order('active', { ascending: false });
+
+        if (fallback.error) throw new Error(`Pull recurring gagal: ${fallback.error.message}`);
+
+        const remote = (fallback.data ?? []).map((row) => normalizeRecurring(row as RecurringTemplate));
+        if (hasSameRecurringList(local, remote)) {
+          return { pulled: remote.length, changed: false, cursor };
+        }
+        await writeIDB(key, remote);
+        return { pulled: remote.length, changed: true, cursor };
+      }
+      throw new Error(`Pull recurring gagal: ${error.message}`);
     }
 
-    const nextValue = normalizeRecurring(row);
-    const current = map.get(nextValue.id);
-    if (!current || !hasSameSnapshot(current, nextValue)) {
-      map.set(nextValue.id, nextValue);
-      changed = true;
+    const rows = data ?? [];
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      if (row.deleted_at) {
+        if (map.delete(row.id)) changed = true;
+      } else {
+        const nextValue = normalizeRecurring(row);
+        const current = map.get(nextValue.id);
+        if (!current || !areRecurringEqual(current, nextValue)) {
+          map.set(nextValue.id, nextValue);
+          changed = true;
+        }
+      }
+      pulled += 1;
     }
+
+    const lastRow = rows[rows.length - 1];
+    if (!lastRow.updated_at || !lastRow.id) break;
+    currentCursor = { updatedAt: lastRow.updated_at, tieBreaker: lastRow.id };
+
+    if (rows.length < PULL_PAGE_SIZE) break;
   }
 
   if (changed) {
     await writeIDB(key, Array.from(map.values()));
+  } else if (pulled === 0 && isFullSnapshotPull(cursor) && local.length > 0) {
+    await writeIDB(key, []);
+    changed = true;
   }
 
-  const nextCursor = rows[rows.length - 1].updated_at ?? cursor;
-  return { pulled: rows.length, changed, cursor: nextCursor };
+  return { pulled, changed, cursor: serializeCursor(currentCursor) ?? cursor };
 }
 
 async function pullFromRemote(scope: string, client: SupabaseClient): Promise<{ pulled: number; changed: boolean }> {
@@ -679,7 +826,17 @@ async function runSync(scope: string, client: SupabaseClient): Promise<SyncResul
   };
 }
 
-export async function syncWithSupabaseIfNeeded(): Promise<SyncResult> {
+export async function resetSyncStateForScope(scope: string): Promise<void> {
+  await Promise.all([
+    writeQueue(scope, []),
+    writeMeta(scope, { cursorByEntity: {} }),
+  ]);
+  syncInflightByScope.delete(scope);
+  syncLastRunAtByScope.delete(scope);
+}
+
+export async function syncWithSupabaseIfNeeded(options: { force?: boolean } = {}): Promise<SyncResult> {
+  const force = options.force ?? false;
   const scope = getActiveDataScope();
   if (scope === GUEST_DATA_SCOPE) {
     return { pushed: 0, pulled: 0, changed: false, queueRemaining: 0, skipped: true, reason: 'guest' };
@@ -694,7 +851,7 @@ export async function syncWithSupabaseIfNeeded(): Promise<SyncResult> {
     return { pushed: 0, pulled: 0, changed: false, queueRemaining: (await readQueue(scope)).length, skipped: true, reason: 'no_session' };
   }
 
-  const client = getSupabaseClient();
+  const client = await getSupabaseClientAsync();
   if (!client) {
     return { pushed: 0, pulled: 0, changed: false, queueRemaining: (await readQueue(scope)).length, skipped: true, reason: 'no_client' };
   }
@@ -702,7 +859,26 @@ export async function syncWithSupabaseIfNeeded(): Promise<SyncResult> {
   const existing = syncInflightByScope.get(scope);
   if (existing) return existing;
 
+  const queueRemaining = (await readQueue(scope)).length;
+  if (!force && queueRemaining === 0) {
+    const lastRunAt = syncLastRunAtByScope.get(scope) ?? 0;
+    if (Date.now() - lastRunAt < SYNC_COOLDOWN_MS) {
+      return {
+        pushed: 0,
+        pulled: 0,
+        changed: false,
+        queueRemaining: 0,
+        skipped: true,
+        reason: 'cool_down',
+      };
+    }
+  }
+
   const runPromise = runSync(scope, client)
+    .then((result) => {
+      syncLastRunAtByScope.set(scope, Date.now());
+      return result;
+    })
     .catch(async (error) => {
       if (isLikelyConnectivityError(error)) {
         return {

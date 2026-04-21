@@ -28,6 +28,7 @@ import {
 } from '../lib/utils';
 import { getExchangeRate, convertAmount, type RateResult } from '../lib/exchangeRate';
 import { generateExpenseInsight } from '../lib/ai';
+import { getActiveDataScope } from '../lib/dataScope';
 import {
   buildQuickInsightLine,
   buildCombinedInsight,
@@ -64,6 +65,24 @@ export interface BreakdownGroup {
   categoryLabel: string;
   totalAmount: number;
   items: BreakdownItem[];
+}
+
+type HistoryListRow =
+  | { kind: 'date'; key: string; dateKey: string; dayTotal: number }
+  | { kind: 'expense'; key: string; expense: Expense };
+
+interface VirtualLayout {
+  offsets: number[];
+  heights: number[];
+  totalHeight: number;
+}
+
+const HISTORY_VIRTUALIZE_THRESHOLD = 200;
+const HISTORY_VIRTUAL_OVERSCAN_PX = 480;
+
+function estimateHistoryRowHeight(row: HistoryListRow, deletingId: string | null): number {
+  if (row.kind === 'date') return 34;
+  return deletingId === row.expense.id ? 72 : 92;
 }
 
 type AssistantMessage =
@@ -150,8 +169,13 @@ function uid(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function insightCacheKey(scope: InsightScope, intent: InsightIntent, dataHash?: string): string {
-  return `expense-rule-insight:${scope.type}:${scope.label}:${intent}${dataHash ? ':' + dataHash : ''}`;
+function insightCacheKey(
+  ownerScope: string,
+  scope: InsightScope,
+  intent: InsightIntent,
+  dataHash?: string,
+): string {
+  return `expense-rule-insight:${ownerScope}:${scope.type}:${scope.label}:${intent}${dataHash ? ':' + dataHash : ''}`;
 }
 
 function buildScopeLabel(scope: InsightScope, activeYear: number, activeMonth: number): string {
@@ -210,12 +234,13 @@ function getScopeMonthsCount(scope: InsightScope, expenses: Expense[], viewYear:
 }
 
 function readCachedInsight(
+  ownerScope: string,
   scope: InsightScope,
   intent: InsightIntent,
   dataHash?: string
 ): CachedInsightEntry | null {
   try {
-    const raw = localStorage.getItem(insightCacheKey(scope, intent, dataHash));
+    const raw = localStorage.getItem(insightCacheKey(ownerScope, scope, intent, dataHash));
     if (!raw) return null;
     return JSON.parse(raw) as CachedInsightEntry;
   } catch {
@@ -224,6 +249,7 @@ function readCachedInsight(
 }
 
 function writeCachedInsight(
+  ownerScope: string,
   scope: InsightScope,
   intent: InsightIntent,
   promptLabel: string,
@@ -238,7 +264,7 @@ function writeCachedInsight(
       insight,
     };
     localStorage.setItem(
-      insightCacheKey(scope, intent, dataHash),
+      insightCacheKey(ownerScope, scope, intent, dataHash),
       JSON.stringify(payload)
     );
   } catch {
@@ -307,6 +333,10 @@ const HistoryPage: React.FC = () => {
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
   const [assistantError, setAssistantError] = useState<string | null>(null);
   const [isQuickInsightExpanded, setIsQuickInsightExpanded] = useState(false);
+  const listScrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const [listScrollTop, setListScrollTop] = useState(0);
+  const [listViewportHeight, setListViewportHeight] = useState(0);
+  const [virtualRowHeights, setVirtualRowHeights] = useState<Record<string, number>>({});
 
   useEffect(() => {
     getExchangeRate().then((res) => setRateInfo(res));
@@ -409,6 +439,38 @@ const HistoryPage: React.FC = () => {
     return () => document.body.classList.remove('flow-mode-active');
   }, [viewMode]);
 
+  useEffect(() => {
+    const container = listScrollContainerRef.current;
+    if (!container) return;
+
+    const updateViewport = () => {
+      setListScrollTop(container.scrollTop);
+      setListViewportHeight(container.clientHeight);
+    };
+
+    const onScroll = () => {
+      setListScrollTop(container.scrollTop);
+    };
+
+    updateViewport();
+    container.addEventListener('scroll', onScroll, { passive: true });
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => updateViewport());
+      observer.observe(container);
+      return () => {
+        container.removeEventListener('scroll', onScroll);
+        observer.disconnect();
+      };
+    }
+
+    window.addEventListener('resize', updateViewport);
+    return () => {
+      container.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', updateViewport);
+    };
+  }, []);
+
   // Filtered
   const filtered = useMemo(() => {
     if (isAllHistoryMode && !normalizedSearch) return [];
@@ -444,6 +506,118 @@ const HistoryPage: React.FC = () => {
 
   const grouped = useMemo(() => groupExpensesByDate(filtered), [filtered]);
   const dateKeys = Object.keys(grouped);
+  const categoryBySlug = useMemo(
+    () => new Map(categories.map((category) => [category.slug, category])),
+    [categories]
+  );
+  const historyRows = useMemo<HistoryListRow[]>(() => {
+    const rows: HistoryListRow[] = [];
+
+    for (const dateKey of dateKeys) {
+      const dayExpenses = grouped[dateKey] ?? [];
+      const dayTotal = dayExpenses
+        .filter((expense) => (typeFilter === 'TRANSFER' ? true : expense.type !== 'TRANSFER'))
+        .reduce((sum, expense) => sum + toDisplay(expense), 0);
+
+      rows.push({
+        kind: 'date',
+        key: `date-${dateKey}`,
+        dateKey,
+        dayTotal,
+      });
+
+      for (const expense of dayExpenses) {
+        rows.push({
+          kind: 'expense',
+          key: `expense-${expense.id}`,
+          expense,
+        });
+      }
+    }
+
+    return rows;
+  }, [dateKeys, grouped, typeFilter, toDisplay]);
+  const shouldVirtualizeHistory = viewMode === 'list' && filtered.length > HISTORY_VIRTUALIZE_THRESHOLD;
+
+  useEffect(() => {
+    if (!shouldVirtualizeHistory) return;
+
+    const rowKeys = new Set(historyRows.map((row) => row.key));
+    setVirtualRowHeights((previous) => {
+      let changed = false;
+      const next: Record<string, number> = {};
+      for (const [key, height] of Object.entries(previous)) {
+        if (rowKeys.has(key)) {
+          next[key] = height;
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : previous;
+    });
+  }, [historyRows, shouldVirtualizeHistory]);
+
+  const virtualLayout = useMemo<VirtualLayout>(() => {
+    const offsets: number[] = [];
+    const heights: number[] = [];
+    let runningTop = 0;
+
+    for (const row of historyRows) {
+      offsets.push(runningTop);
+      const height = virtualRowHeights[row.key] ?? estimateHistoryRowHeight(row, deletingId);
+      heights.push(height);
+      runningTop += height;
+    }
+
+    return {
+      offsets,
+      heights,
+      totalHeight: runningTop,
+    };
+  }, [historyRows, virtualRowHeights, deletingId]);
+
+  const virtualVisibleRange = useMemo(() => {
+    if (!shouldVirtualizeHistory || historyRows.length === 0) {
+      return { startIndex: 0, endIndex: Math.max(0, historyRows.length - 1) };
+    }
+
+    const minTop = Math.max(0, listScrollTop - HISTORY_VIRTUAL_OVERSCAN_PX);
+    const maxTop = listScrollTop + Math.max(listViewportHeight, 1) + HISTORY_VIRTUAL_OVERSCAN_PX;
+
+    let startIndex = 0;
+    while (
+      startIndex < historyRows.length
+      && virtualLayout.offsets[startIndex] + virtualLayout.heights[startIndex] < minTop
+    ) {
+      startIndex += 1;
+    }
+
+    let endIndex = startIndex;
+    while (
+      endIndex < historyRows.length
+      && virtualLayout.offsets[endIndex] < maxTop
+    ) {
+      endIndex += 1;
+    }
+
+    return {
+      startIndex,
+      endIndex: Math.min(historyRows.length - 1, Math.max(startIndex, endIndex)),
+    };
+  }, [historyRows.length, listScrollTop, listViewportHeight, shouldVirtualizeHistory, virtualLayout]);
+
+  const measureVirtualRow = useCallback((key: string, node: HTMLDivElement | null) => {
+    if (!node) return;
+    const measured = Math.ceil(node.getBoundingClientRect().height);
+    if (!Number.isFinite(measured) || measured <= 0) return;
+
+    setVirtualRowHeights((previous) => {
+      const current = previous[key];
+      if (current && Math.abs(current - measured) <= 1) return previous;
+      return { ...previous, [key]: measured };
+    });
+  }, []);
+
   const monthExpenses = useMemo(
     () => expenses.filter((e) => e.date.startsWith(monthPrefix)),
     [expenses, monthPrefix]
@@ -501,11 +675,106 @@ const HistoryPage: React.FC = () => {
     });
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
     haptic();
     await deleteExpense(id);
     setDeletingId(null);
-  };
+  }, [deleteExpense]);
+
+  const renderHistoryRow = useCallback((row: HistoryListRow) => {
+    if (row.kind === 'date') {
+      return (
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-black uppercase text-brutal-black/60 capitalize">
+            {longDate(row.dateKey)}
+          </p>
+          <p className="text-xs font-black text-brutal-black/60">
+            {formatCurrency(row.dayTotal, currency)}
+          </p>
+        </div>
+      );
+    }
+
+    const expense = row.expense;
+    const cat = categoryBySlug.get(expense.category);
+    const isDeleting = deletingId === expense.id;
+    const badgeVariant = expense.type === 'NEED' ? 'need' : expense.type === 'WANT' ? 'want' : 'transfer';
+
+    return (
+      <div className="neo-card overflow-hidden !shadow-[5px_5px_0_0_#000000]">
+        {isDeleting ? (
+          <div className="flex items-center gap-3 p-3 bg-red-500">
+            <p className="flex-1 text-sm font-bold text-white uppercase">
+              Hapus "{expense.name}"?
+            </p>
+            <button
+              onClick={() => handleDelete(expense.id)}
+              className="px-3 py-1.5 bg-white text-red-500 border-2 border-white font-black text-xs uppercase min-h-[36px]"
+            >
+              Hapus
+            </button>
+            <button
+              onClick={() => setDeletingId(null)}
+              className="px-3 py-1.5 bg-red-500 text-white border-2 border-white font-black text-xs uppercase min-h-[36px]"
+            >
+              Batal
+            </button>
+          </div>
+        ) : (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveExpense(expense.id)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                setActiveExpense(expense.id);
+              }
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-all duration-150 cursor-pointer"
+            style={{ color: '#F5F0E8' }}
+            onMouseEnter={(event) => (event.currentTarget.style.backgroundColor = 'rgba(245,240,232,0.05)')}
+            onMouseLeave={(event) => (event.currentTarget.style.backgroundColor = 'transparent')}
+          >
+            <span className="text-2xl w-9 shrink-0 text-center">
+              {expense.type === 'TRANSFER' ? '💸' : (cat?.emoji ?? '🛍️')}
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <p className="text-sm font-bold truncate leading-tight">{expense.name}</p>
+                {expense.type !== 'TRANSFER' && (
+                  <span className="shrink-0 text-[10px] font-bold text-brutal-black/45 truncate">
+                    · {cat?.label ?? expense.category}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 mt-1.5 min-w-0 flex-nowrap">
+                <Badge variant={badgeVariant} size="sm" className="shrink-0">{expense.type}</Badge>
+                {expense.type === 'TRANSFER' && expense.destination ? (
+                  <span className="shrink-0 text-[10px] text-brutal-black/50 font-medium truncate max-w-[96px]">{'\u25b8'} {expense.destination}</span>
+                ) : null}
+                {expense.note && (
+                  <span className="min-w-0 flex-1 text-[10px] text-brutal-black/40 italic truncate">
+                    {expense.note}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <p className="text-sm font-black">{formatCurrency(expense.amount, expense.currency)}</p>
+              <button
+                onClick={(event) => { event.stopPropagation(); haptic(); setDeletingId(expense.id); }}
+                className="p-2 text-brutal-black/40 hover:text-red-500 hover:bg-red-50 transition-colors duration-150 min-w-[36px] min-h-[36px] flex items-center justify-center cursor-pointer"
+                aria-label={`Hapus ${expense.name}`}
+              >
+                <Trash2 size={16} strokeWidth={2.5} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }, [categoryBySlug, currency, deletingId, handleDelete, setActiveExpense]);
 
   const monthTotal = useMemo(
     () => filtered
@@ -617,11 +886,12 @@ const HistoryPage: React.FC = () => {
     const scaledFamilySupportBudget = familySupportMonthlyBudget ? familySupportMonthlyBudget * scopeMonths : undefined;
 
     const dataHash = `${allScopedExpenses.length}-${allScopedExpenses.reduce((s, e) => s + e.amount, 0)}-${scaledPersonalBudget}-${scaledFamilySupportBudget}`;
+    const cacheOwnerScope = getActiveDataScope();
 
     // Use scope-aware cache key for AI calls
     const scopeForCache: InsightScope = { ...insightScope, label: resolvedScopeLabel };
     if (intent === 'deep_analysis') {
-      const cached = readCachedInsight(scopeForCache, intent, dataHash);
+      const cached = readCachedInsight(cacheOwnerScope, scopeForCache, intent, dataHash);
       if (cached) {
         setAssistantMessages((prev) => [
           ...prev,
@@ -818,7 +1088,7 @@ const HistoryPage: React.FC = () => {
       }
 
       if (intent === 'deep_analysis') {
-        writeCachedInsight(scopeForCache, intent, promptLabel, insight, dataHash);
+        writeCachedInsight(cacheOwnerScope, scopeForCache, intent, promptLabel, insight, dataHash);
       }
 
       setAssistantMessages((prev) => [
@@ -1056,7 +1326,7 @@ const HistoryPage: React.FC = () => {
       </div>
 
       {/* ── Scrollable content area (scrollbar starts here, below sticky header) ── */}
-      <div className="flex-1 overflow-y-auto">
+      <div ref={listScrollContainerRef} className="flex-1 overflow-y-auto">
 
       {/* ── Flow view (Sankey diagram) ──────────────────── */}
       {viewMode === 'flow' && (
@@ -1133,105 +1403,55 @@ const HistoryPage: React.FC = () => {
               </p>
             </div>
           ) : (
-            <div className="space-y-5">
-              {dateKeys.map((dateKey) => {
-                const dayExpenses = grouped[dateKey];
-                const dayTotal = dayExpenses
-                  .filter((e) => typeFilter === 'TRANSFER' ? true : e.type !== 'TRANSFER')
-                  .reduce((s, e) => s + toDisplay(e), 0);
+            shouldVirtualizeHistory ? (
+              <div className="relative" style={{ height: `${virtualLayout.totalHeight}px` }}>
+                {historyRows
+                  .slice(virtualVisibleRange.startIndex, virtualVisibleRange.endIndex + 1)
+                  .map((row, localIndex) => {
+                    const absoluteIndex = virtualVisibleRange.startIndex + localIndex;
+                    const nextRow = historyRows[absoluteIndex + 1];
+                    const spacingStyle = row.kind === 'date'
+                      ? { paddingTop: absoluteIndex === 0 ? 0 : 20 }
+                      : { paddingBottom: nextRow?.kind === 'expense' ? 8 : 0 };
 
-                return (
-                  <div key={dateKey}>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-black uppercase text-brutal-black/60 capitalize">
-                        {longDate(dateKey)}
-                      </p>
-                      <p className="text-xs font-black text-brutal-black/60">
-                        {formatCurrency(dayTotal, currency)}
-                      </p>
-                    </div>
+                    return (
+                      <div
+                        key={row.key}
+                        ref={(node) => measureVirtualRow(row.key, node)}
+                        className="absolute left-0 right-0"
+                        style={{
+                          top: virtualLayout.offsets[absoluteIndex],
+                          ...spacingStyle,
+                        }}
+                      >
+                        {renderHistoryRow(row)}
+                      </div>
+                    );
+                  })}
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {dateKeys.map((dateKey) => {
+                  const dayExpenses = grouped[dateKey] ?? [];
+                  const dayTotal = dayExpenses
+                    .filter((expense) => (typeFilter === 'TRANSFER' ? true : expense.type !== 'TRANSFER'))
+                    .reduce((sum, expense) => sum + toDisplay(expense), 0);
 
-                    <div className="space-y-2">
-                      {dayExpenses.map((e) => {
-                        const cat = categories.find((c) => c.slug === e.category);
-                        const isDeleting = deletingId === e.id;
-                        const badgeVariant = e.type === 'NEED' ? 'need' : e.type === 'WANT' ? 'want' : 'transfer';
-
-                        return (
-                          <div key={e.id} className="neo-card overflow-hidden !shadow-[5px_5px_0_0_#000000]">
-                            {isDeleting ? (
-                              <div className="flex items-center gap-3 p-3 bg-red-500">
-                                <p className="flex-1 text-sm font-bold text-white uppercase">
-                                  Hapus "{e.name}"?
-                                </p>
-                                <button
-                                  onClick={() => handleDelete(e.id)}
-                                  className="px-3 py-1.5 bg-white text-red-500 border-2 border-white font-black text-xs uppercase min-h-[36px]"
-                                >
-                                  Hapus
-                                </button>
-                                <button
-                                  onClick={() => setDeletingId(null)}
-                                  className="px-3 py-1.5 bg-red-500 text-white border-2 border-white font-black text-xs uppercase min-h-[36px]"
-                                >
-                                  Batal
-                                </button>
-                              </div>
-                            ) : (
-                              <div
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => setActiveExpense(e.id)}
-                                onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setActiveExpense(e.id); } }}
-                                className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-all duration-150 cursor-pointer"
-                                style={{ color: '#F5F0E8' }}
-                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(245,240,232,0.05)')}
-                                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                              >
-                                <span className="text-2xl w-9 shrink-0 text-center">
-                                  {e.type === 'TRANSFER' ? '💸' : (cat?.emoji ?? '🛍️')}
-                                </span>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <p className="text-sm font-bold truncate leading-tight">{e.name}</p>
-                                    {e.type !== 'TRANSFER' && (
-                                      <span className="shrink-0 text-[10px] font-bold text-brutal-black/45 truncate">
-                                        · {cat?.label ?? e.category}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-1.5 mt-1.5 min-w-0 flex-nowrap">
-                                    <Badge variant={badgeVariant} size="sm" className="shrink-0">{e.type}</Badge>
-                                    {e.type === 'TRANSFER' && e.destination ? (
-                                      <span className="shrink-0 text-[10px] text-brutal-black/50 font-medium truncate max-w-[96px]">{'\u25b8'} {e.destination}</span>
-                                    ) : null}
-                                    {e.note && (
-                                      <span className="min-w-0 flex-1 text-[10px] text-brutal-black/40 italic truncate">
-                                        {e.note}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <p className="text-sm font-black">{formatCurrency(e.amount, e.currency)}</p>
-                                  <button
-                                    onClick={(ev) => { ev.stopPropagation(); haptic(); setDeletingId(e.id); }}
-                                    className="p-2 text-brutal-black/40 hover:text-red-500 hover:bg-red-50 transition-colors duration-150 min-w-[36px] min-h-[36px] flex items-center justify-center cursor-pointer"
-                                    aria-label={`Hapus ${e.name}`}
-                                  >
-                                    <Trash2 size={16} strokeWidth={2.5} />
-                                  </button>
-                                </div>
-                              </div>
-                            )}
+                  return (
+                    <div key={dateKey}>
+                      {renderHistoryRow({ kind: 'date', key: `date-${dateKey}`, dateKey, dayTotal })}
+                      <div className="space-y-2">
+                        {dayExpenses.map((expense) => (
+                          <div key={expense.id}>
+                            {renderHistoryRow({ kind: 'expense', key: `expense-${expense.id}`, expense })}
                           </div>
-                        );
-                      })}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )
           )}
         </div>
       )}

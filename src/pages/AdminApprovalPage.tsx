@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '../components/ui/Button';
 import { ShieldCheck, UserCheck, XCircle, ArrowLeft, Trash2 } from 'lucide-react';
-import { getSupabaseClient } from '../lib/supabase';
+import { getSupabaseClientAsync } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
 
@@ -32,7 +32,7 @@ export default function AdminApprovalPage() {
     setError('');
     
     try {
-      const client = getSupabaseClient();
+      const client = await getSupabaseClientAsync();
       if (!client) throw new Error('Supabase client tidak tersedia.');
 
       const [pendingRes, approvedRes] = await Promise.all([
@@ -68,7 +68,7 @@ export default function AdminApprovalPage() {
     setSuccessMsg('');
     setIsLoading(true);
     try {
-      const client = getSupabaseClient();
+      const client = await getSupabaseClientAsync();
       if (!client) throw new Error('Supabase client tidak tersedia.');
 
       const { error: updateErr } = await client.rpc('approve_user', {
@@ -94,7 +94,7 @@ export default function AdminApprovalPage() {
     setSuccessMsg('');
     setIsLoading(true);
     try {
-      const client = getSupabaseClient();
+      const client = await getSupabaseClientAsync();
       if (!client) throw new Error('Supabase client tidak tersedia.');
 
       const { error: rejectErr } = await client.rpc('reject_user', {

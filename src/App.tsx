@@ -11,6 +11,7 @@ import { seedDemoData } from './lib/demoData';
 import { GUEST_DATA_SCOPE } from './lib/dataScope';
 import { useExpenseStore } from './store/useExpenseStore';
 import { useAuthStore } from './store/useAuthStore';
+import { useSettingsStore } from './store/useSettingsStore';
 
 // ============================================================
 //  LAZY PAGES
@@ -61,6 +62,7 @@ const AppInner: React.FC = () => {
   const _hasHydrated = useExpenseStore((s) => s._hasHydrated);
   const cacheScope = useExpenseStore((s) => s.cacheScope);
   const ensureScope = useExpenseStore((s) => s.ensureScope);
+  const ensureSettingsScope = useSettingsStore((s) => s.ensureScope);
   const demoMode = isDemoMode();
   const userId = user?.id ?? null;
   const activeScope = userId ?? GUEST_DATA_SCOPE;
@@ -82,8 +84,9 @@ const AppInner: React.FC = () => {
   useEffect(() => {
     if (!isInitializing && _hasHydrated) {
       ensureScope(activeScope);
+      ensureSettingsScope(activeScope);
     }
-  }, [isInitializing, _hasHydrated, activeScope, ensureScope]);
+  }, [isInitializing, _hasHydrated, activeScope, ensureScope, ensureSettingsScope]);
 
   // 3. Load data whenever auth state settles, hydration completes, and scope is ready
   useEffect(() => {

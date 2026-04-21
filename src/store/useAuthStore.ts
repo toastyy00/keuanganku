@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { User, Session } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { getSupabaseClientAsync } from '../lib/supabase';
 import { isDemoMode } from '../lib/appConfig';
 
 // ============================================================
@@ -48,18 +48,19 @@ export const useAuthStore = create<AuthState>((set) => ({
       return;
     }
 
-    if (!supabase) {
+    const client = await getSupabaseClientAsync();
+    if (!client) {
       set({ isInitializing: false });
       return;
     }
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await client.auth.getSession();
       
       // -- CUSTOM ADMIN APPROVAL CHECK --
       // Jika email confirmation dimatikan, kita cek is_approved di metadata
       if (session?.user && session.user.user_metadata?.is_approved !== true) {
-        await supabase.auth.signOut();
+        await client.auth.signOut();
         set({ isInitializing: false });
         return;
       }
@@ -80,7 +81,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
 
     // Subscribe to future auth state changes (login, logout, token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
       if (useAuthStore.getState().isRegistering) {
         return;
       }
@@ -101,14 +102,15 @@ export const useAuthStore = create<AuthState>((set) => ({
       return;
     }
 
-    if (!supabase) {
+    const client = await getSupabaseClientAsync();
+    if (!client) {
       set({ error: 'Supabase belum dikonfigurasi.' });
       return;
     }
 
     set({ isLoading: true, error: null });
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await client.auth.signInWithPassword({ email, password });
       
       if (error) {
         // Map Supabase error codes to Indonesian messages
@@ -118,7 +120,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       // -- CUSTOM ADMIN APPROVAL CHECK --
       if (data?.user && data.user.user_metadata?.is_approved !== true) {
-        await supabase.auth.signOut(); // Batal masuk
+        await client.auth.signOut(); // Batal masuk
         set({ error: 'Akun Anda sedang menunggu persetujuan admin.' });
         return;
       }
@@ -137,14 +139,15 @@ export const useAuthStore = create<AuthState>((set) => ({
       return false;
     }
 
-    if (!supabase) {
+    const client = await getSupabaseClientAsync();
+    if (!client) {
       set({ error: 'Supabase belum dikonfigurasi.' });
       return false;
     }
 
     set({ isLoading: true, error: null, isRegistering: true });
     try {
-      const { data, error } = await supabase.auth.signUp({
+      const { data, error } = await client.auth.signUp({
         email,
         password,
         options: {
@@ -161,7 +164,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       // Jika Email Confirmation dimatikan di dashboard, user otomatis punya session.
       // Kita hapus session tersebut agar user tidak terdeteksi sudah login.
       if (data?.session) {
-        await supabase.auth.signOut();
+        await client.auth.signOut();
       }
 
       // On success: user is NOT logged in — they must wait for admin approval.
@@ -182,8 +185,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ user: null, session: null });
       return;
     }
-    if (!supabase) return;
-    await supabase.auth.signOut();
+    const client = await getSupabaseClientAsync();
+    if (!client) return;
+    await client.auth.signOut();
     set({ user: null, session: null });
   },
 
