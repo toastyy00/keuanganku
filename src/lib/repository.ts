@@ -23,6 +23,42 @@ const KEYS = {
   recurring: 'recurring',
 } as const;
 
+const EXPENSE_SELECT_COLUMNS = [
+  'id',
+  'name',
+  'amount',
+  'currency',
+  'category',
+  'type',
+  'destination',
+  'date',
+  'note',
+  'is_recurring',
+  'recurring_id',
+  'created_at',
+  'synced',
+].join(',');
+
+const CATEGORY_SELECT_COLUMNS = [
+  'slug',
+  'label',
+  'emoji',
+  'is_default',
+].join(',');
+
+const RECURRING_SELECT_COLUMNS = [
+  'id',
+  'name',
+  'amount',
+  'currency',
+  'category',
+  'type',
+  'schedule_detail',
+  'note',
+  'last_logged',
+  'active',
+].join(',');
+
 const CATEGORY_MIGRATIONS = [
   {
     from: 'dapur',
@@ -162,63 +198,12 @@ export async function runCategorySlugMigrations(): Promise<void> {
   if (_migrationDone) return;
   _migrationDone = true;
 
-  if (!isAuthenticated()) {
-    await migrateLocalCategorySlugs();
-    await normalizeLocalCategoryMetadata();
-    return;
-  }
+  // Supabase-side category slug migrations have already been completed.
+  // Keep this cleanup for offline/local data only so app startup stays quiet.
+  if (isAuthenticated()) return;
 
-  const client = getSupabaseClient();
-  const userId = useAuthStore.getState().user?.id;
-  if (!client || !userId) return;
-
-  for (const migration of CATEGORY_MIGRATIONS) {
-    await client
-      .from('expenses')
-      .update({ category: migration.to.slug })
-      .eq('user_id', userId)
-      .eq('category', migration.from);
-
-    await client
-      .from('recurring_templates')
-      .update({ category: migration.to.slug })
-      .eq('user_id', userId)
-      .eq('category', migration.from);
-
-    await client
-      .from('categories')
-      .upsert(
-        {
-          slug: migration.to.slug,
-          label: migration.to.label,
-          emoji: migration.to.emoji,
-          is_default: true,
-          user_id: userId,
-        },
-        { onConflict: 'slug,user_id' }
-      );
-
-    await client
-      .from('categories')
-      .delete()
-      .eq('user_id', userId)
-      .eq('slug', migration.from);
-  }
-
-  for (const category of CATEGORY_NORMALIZATIONS) {
-    await client
-      .from('categories')
-      .upsert(
-        {
-          slug: category.slug,
-          label: category.label,
-          emoji: category.emoji,
-          is_default: true,
-          user_id: userId,
-        },
-        { onConflict: 'slug,user_id' }
-      );
-  }
+  await migrateLocalCategorySlugs();
+  await normalizeLocalCategoryMetadata();
 }
 
 // ============================================================
@@ -402,12 +387,12 @@ export class SupabaseExpenseRepository implements ExpenseRepository {
   async getAll(): Promise<Expense[]> {
     const { data, error } = await this.client
       .from('expenses')
-      .select('*')
+      .select(EXPENSE_SELECT_COLUMNS)
       .order('date', { ascending: false })
       .order('created_at', { ascending: false });
 
     if (error) throw new Error(`Supabase getAll error: ${error.message}`);
-    return (data ?? []) as Expense[];
+    return (data ?? []) as unknown as Expense[];
   }
 
   async getByMonth(year: number, month: number): Promise<Expense[]> {
@@ -417,13 +402,13 @@ export class SupabaseExpenseRepository implements ExpenseRepository {
 
     const { data, error } = await this.client
       .from('expenses')
-      .select('*')
+      .select(EXPENSE_SELECT_COLUMNS)
       .gte('date', start)
       .lte('date', endStr)
       .order('date', { ascending: false });
 
     if (error) throw new Error(`Supabase getByMonth error: ${error.message}`);
-    return (data ?? []) as Expense[];
+    return (data ?? []) as unknown as Expense[];
   }
 
   async create(
@@ -440,11 +425,11 @@ export class SupabaseExpenseRepository implements ExpenseRepository {
     const { data: inserted, error } = await this.client
       .from('expenses')
       .insert(payload)
-      .select()
+      .select(EXPENSE_SELECT_COLUMNS)
       .single();
 
     if (error) throw new Error(`Supabase create error: ${error.message}`);
-    return inserted as Expense;
+    return inserted as unknown as Expense;
   }
 
   async update(id: string, data: Partial<Expense>): Promise<Expense> {
@@ -452,11 +437,11 @@ export class SupabaseExpenseRepository implements ExpenseRepository {
       .from('expenses')
       .update({ ...data, synced: true })
       .eq('id', id)
-      .select()
+      .select(EXPENSE_SELECT_COLUMNS)
       .single();
 
     if (error) throw new Error(`Supabase update error: ${error.message}`);
-    return updated as Expense;
+    return updated as unknown as Expense;
   }
 
   async delete(id: string): Promise<void> {
@@ -483,22 +468,22 @@ export class SupabaseCategoryRepository implements CategoryRepository {
   async getAll(): Promise<Category[]> {
     const { data, error } = await this.client
       .from('categories')
-      .select('*')
+      .select(CATEGORY_SELECT_COLUMNS)
       .order('label', { ascending: true });
 
     if (error) throw new Error(`Supabase categories error: ${error.message}`);
-    return (data ?? []) as Category[];
+    return (data ?? []) as unknown as Category[];
   }
 
   async create(data: Category): Promise<Category> {
     const { data: inserted, error } = await this.client
       .from('categories')
       .insert({ ...data, is_default: false, user_id: requireUserId() })
-      .select()
+      .select(CATEGORY_SELECT_COLUMNS)
       .single();
 
     if (error) throw new Error(`Supabase create category error: ${error.message}`);
-    return inserted as Category;
+    return inserted as unknown as Category;
   }
 
   async update(slug: string, data: Partial<Category>): Promise<Category> {
@@ -506,11 +491,11 @@ export class SupabaseCategoryRepository implements CategoryRepository {
       .from('categories')
       .update(data)
       .eq('slug', slug)
-      .select()
+      .select(CATEGORY_SELECT_COLUMNS)
       .single();
 
     if (error) throw new Error(`Supabase update category error: ${error.message}`);
-    return updated as Category;
+    return updated as unknown as Category;
   }
 
   async delete(slug: string): Promise<void> {
@@ -547,11 +532,11 @@ export class SupabaseRecurringRepository implements RecurringRepository {
   async getAll(): Promise<RecurringTemplate[]> {
     const { data, error } = await this.client
       .from('recurring_templates')
-      .select('*')
+      .select(RECURRING_SELECT_COLUMNS)
       .order('active', { ascending: false });
 
     if (error) throw new Error(`Supabase recurring getAll error: ${error.message}`);
-    return (data ?? []) as RecurringTemplate[];
+    return (data ?? []) as unknown as RecurringTemplate[];
   }
 
   async create(data: Omit<RecurringTemplate, 'id'>): Promise<RecurringTemplate> {
@@ -560,7 +545,7 @@ export class SupabaseRecurringRepository implements RecurringRepository {
     const { data: inserted, error } = await this.client
       .from('recurring_templates')
       .insert(payload)
-      .select()
+      .select(RECURRING_SELECT_COLUMNS)
       .single();
 
     if (error) {
@@ -569,7 +554,7 @@ export class SupabaseRecurringRepository implements RecurringRepository {
       }
       throw new Error(`Supabase create recurring error: ${error.message}`);
     }
-    return inserted as RecurringTemplate;
+    return inserted as unknown as RecurringTemplate;
   }
 
   async update(
@@ -580,7 +565,7 @@ export class SupabaseRecurringRepository implements RecurringRepository {
       .from('recurring_templates')
       .update(data)
       .eq('id', id)
-      .select()
+      .select(RECURRING_SELECT_COLUMNS)
       .single();
 
     if (error) {
@@ -589,7 +574,7 @@ export class SupabaseRecurringRepository implements RecurringRepository {
       }
       throw new Error(`Supabase update recurring error: ${error.message}`);
     }
-    return updated as RecurringTemplate;
+    return updated as unknown as RecurringTemplate;
   }
 
   async delete(id: string): Promise<void> {
