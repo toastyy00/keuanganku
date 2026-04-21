@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AlertCircle, CalendarDays } from 'lucide-react';
 import { BottomSheet } from './ui/BottomSheet';
 import { Button } from './ui/Button';
@@ -30,11 +30,10 @@ const AddExpenseSheet: React.FC = () => {
     ? expenses.find((e) => e.id === activeExpenseId) ?? null
     : null;
   const isEditMode = editingExpense !== null;
-  const titleRef = useRef('Tambah Pengeluaran');
-
-  if (isAddSheetOpen) {
-    titleRef.current = isEditMode ? 'Edit Pengeluaran' : 'Tambah Pengeluaran';
-  }
+  const sheetTitle = useMemo(
+    () => (isEditMode ? 'Edit Pengeluaran' : 'Tambah Pengeluaran'),
+    [isEditMode]
+  );
 
   // ── Per-entry currency (independent of global setting) ────
   const [entryCurrency, setEntryCurrency] = useState<Currency>(defaultCurrency);
@@ -44,6 +43,7 @@ const AddExpenseSheet: React.FC = () => {
   const pendingConversionRef = useRef<number | null>(null);
   // Flash animation trigger
   const [flashAmount, setFlashAmount] = useState(false);
+  const flashTimeoutRef = useRef<number | null>(null);
 
   // ── Form state ─────────────────────────────────────────────
   const [name, setName] = useState('');
@@ -64,17 +64,23 @@ const AddExpenseSheet: React.FC = () => {
   const [isDateFieldFocused, setIsDateFieldFocused] = useState(false);
 
   // ── Handle pending conversion after currency switch ────────
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (prevCurrencyRef.current === entryCurrency) return;
     prevCurrencyRef.current = entryCurrency;
     if (pendingConversionRef.current !== null) {
       setFromNumber(pendingConversionRef.current);
       pendingConversionRef.current = null;
-      setFlashAmount(true);
-      const t = setTimeout(() => setFlashAmount(false), 200);
-      return () => clearTimeout(t);
     }
   }, [entryCurrency, setFromNumber]);
+
+  useEffect(() => {
+    return () => {
+      if (flashTimeoutRef.current !== null) {
+        window.clearTimeout(flashTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // ── Reset on open ──────────────────────────────────────────
   const initializedOpenRef = useRef(false);
@@ -88,8 +94,6 @@ const AddExpenseSheet: React.FC = () => {
     // Prevents wiping user input if the app re-renders or resumes while idle
     if (initializedOpenRef.current) return;
     initializedOpenRef.current = true;
-
-    setErrors({});
 
     const initialCurrency = editingExpense?.currency ?? defaultCurrency;
     setEntryCurrency(initialCurrency);
@@ -123,12 +127,18 @@ const AddExpenseSheet: React.FC = () => {
       setNote('');
     }
   }, [isAddSheetOpen, editingExpense, prefillData, defaultCurrency, setFromNumber, reset, categories]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── Type change with haptic ────────────────────────────────
   const handleTypeChange = useCallback((val: ExpenseType) => {
     haptic();
     setType(val);
   }, []);
+
+  const handleClose = useCallback(() => {
+    setErrors({});
+    closeAddSheet();
+  }, [closeAddSheet]);
 
   // ── Currency pill switch with live conversion ──────────────
   const handleCurrencySwitch = useCallback(async () => {
@@ -144,6 +154,14 @@ const AddExpenseSheet: React.FC = () => {
       pendingConversionRef.current = converted;
     }
     setEntryCurrency(newCurrency);
+    setFlashAmount(true);
+    if (flashTimeoutRef.current !== null) {
+      window.clearTimeout(flashTimeoutRef.current);
+    }
+    flashTimeoutRef.current = window.setTimeout(() => {
+      setFlashAmount(false);
+      flashTimeoutRef.current = null;
+    }, 200);
   }, [entryCurrency, rawValue]);
 
   const openDatePicker = useCallback(() => {
@@ -207,7 +225,7 @@ const AddExpenseSheet: React.FC = () => {
         }
       }
       haptic();
-      closeAddSheet();
+      handleClose();
     } catch (err) {
       setErrors({ root: err instanceof Error ? err.message : 'Gagal menyimpan' });
     }
@@ -228,8 +246,8 @@ const AddExpenseSheet: React.FC = () => {
   return (
     <BottomSheet
       isOpen={isAddSheetOpen}
-      onClose={closeAddSheet}
-      title={titleRef.current}
+      onClose={handleClose}
+      title={sheetTitle}
     >
       <div className="flex flex-col gap-4">
         {/* Root error */}
@@ -399,7 +417,7 @@ const AddExpenseSheet: React.FC = () => {
 
         {/* Actions */}
         <div className="flex gap-3 pt-2">
-          <Button variant="secondary" fullWidth onClick={closeAddSheet}>Batal</Button>
+          <Button variant="secondary" fullWidth onClick={handleClose}>Batal</Button>
           <Button variant="primary" fullWidth onClick={handleSave} loading={isLoading}>
             {isEditMode ? 'Simpan' : 'Tambah'}
           </Button>

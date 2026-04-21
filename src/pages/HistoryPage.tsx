@@ -296,7 +296,13 @@ const HistoryPage: React.FC = () => {
   const [catFilterOpen, setCatFilterOpen] = useState(false);
   const [rateInfo, setRateInfo] = useState<RateResult>({ rate: 16000, isFallback: true });
   const assistantOpen = isHistoryInsightOpen;
-  const setAssistantOpen = (v: boolean) => v ? openHistoryInsight() : closeHistoryInsight();
+  const setAssistantOpen = useCallback((v: boolean) => {
+    if (v) {
+      openHistoryInsight();
+    } else {
+      closeHistoryInsight();
+    }
+  }, [openHistoryInsight, closeHistoryInsight]);
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
   const [assistantError, setAssistantError] = useState<string | null>(null);
@@ -304,7 +310,7 @@ const HistoryPage: React.FC = () => {
 
   useEffect(() => {
     getExchangeRate().then((res) => setRateInfo(res));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const location = useLocation();
   useLayoutEffect(() => {
@@ -339,7 +345,7 @@ const HistoryPage: React.FC = () => {
       setSankeyHighlightedCat(null);
     }
     window.history.replaceState({}, document.title);
-  }, [location.state, setTypeFilter, setSearch, setCatFilter, setViewMode, setSankeyHighlightedCat]);
+  }, [location.state, setTypeFilter, setSearch, setCatFilter, setViewMode, setSearchScope, setSankeyHighlightedCat]);
 
   const toDisplay = useCallback(
     (exp: Expense) => convertAmount(exp.amount, exp.currency, currency, rateInfo.rate),
@@ -434,7 +440,7 @@ const HistoryPage: React.FC = () => {
 
     const usedSlugs = new Set(baseExpenses.map(e => e.category).filter(c => c !== ''));
     return categories.filter(c => usedSlugs.has(c.slug));
-  }, [expenses, monthPrefix, typeFilter, normalizedSearch, isAllHistorySearchActive]);
+  }, [expenses, categories, monthPrefix, typeFilter, normalizedSearch, isAllHistorySearchActive]);
 
   const grouped = useMemo(() => groupExpensesByDate(filtered), [filtered]);
   const dateKeys = Object.keys(grouped);

@@ -3,6 +3,7 @@ import { DEFAULT_CATEGORIES } from './categories';
 import { getLocalISODate } from './utils';
 import { writeIDB, deleteIDB, readIDB } from './idb-storage';
 import { get, set, createStore } from 'idb-keyval';
+import { GUEST_DATA_SCOPE, scopedDataKey } from './dataScope';
 
 const appStore = createStore('keuanganku-db', 'app-store');
 
@@ -102,24 +103,28 @@ export async function seedDemoData(): Promise<void> {
   if (alreadySeeded) return;
 
   // Clear previous demo data so new data for current month is generated cleanly
-  await deleteIDB('expenses');
-  await deleteIDB('categories');
-  await deleteIDB('recurring');
+  const expensesKey = scopedDataKey('expenses', GUEST_DATA_SCOPE);
+  const categoriesKey = scopedDataKey('categories', GUEST_DATA_SCOPE);
+  const recurringKey = scopedDataKey('recurring', GUEST_DATA_SCOPE);
+
+  await deleteIDB(expensesKey);
+  await deleteIDB(categoriesKey);
+  await deleteIDB(recurringKey);
 
   // Also remove the old version key if it exists
   localStorage.removeItem('keuanganku-demo-seeded-v1');
 
-  const exps = await readIDB('expenses');
+  const exps = await readIDB(expensesKey);
   if (!exps || exps.length === 0) {
-    await writeIDB('expenses', createDemoExpenses());
+    await writeIDB(expensesKey, createDemoExpenses());
   }
-  const cats = await readIDB('categories');
+  const cats = await readIDB(categoriesKey);
   if (!cats || cats.length === 0) {
-    await writeIDB('categories', DEFAULT_CATEGORIES as Category[]);
+    await writeIDB(categoriesKey, DEFAULT_CATEGORIES as Category[]);
   }
-  const recs = await readIDB('recurring');
+  const recs = await readIDB(recurringKey);
   if (!recs || recs.length === 0) {
-    await writeIDB('recurring', createDemoRecurring());
+    await writeIDB(recurringKey, createDemoRecurring());
   }
 
   await set(currentMonthKey, true, appStore);

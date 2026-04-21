@@ -71,19 +71,6 @@ export default defineConfig(({ mode }) => {
             },
           },
           {
-            // Supabase API calls — NetworkFirst, fallback to cache
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'supabase-api-cache',
-              networkTimeoutSeconds: 10,
-              expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 60 * 60 * 24,
-              },
-            },
-          },
-          {
             // Exchange rate API — NetworkFirst
             urlPattern: /^https:\/\/api\.frankfurter\.(app|dev)\/.*/i,
             handler: 'NetworkFirst',

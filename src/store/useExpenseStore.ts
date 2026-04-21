@@ -8,6 +8,8 @@ import {
   runCategorySlugMigrations,
 } from '../lib/repository';
 import { idbZustandStorage } from '../lib/idb-storage';
+import { GUEST_DATA_SCOPE, getActiveDataScope } from '../lib/dataScope';
+import { syncWithSupabaseIfNeeded } from '../lib/sync-engine';
 
 // ============================================================
 //  STORE STATE SHAPE
@@ -35,6 +37,8 @@ interface ExpenseStoreState {
   hasLoadedOnce: boolean;
   /** Timestamp of the last successful load in this app session */
   lastLoadedAt: number | null;
+  /** Active cache scope owner (`__guest__` or authenticated user id) */
+  cacheScope: string | null;
 }
 
 interface LoadExpensesOptions {
@@ -73,6 +77,7 @@ interface ExpenseStoreActions {
   // ── Internal ──────────────────────────────────────────────
   clearError: () => void;
   setHasHydrated: (state: boolean) => void;
+  ensureScope: (scope: string) => void;
 }
 
 type ExpenseStore = ExpenseStoreState & ExpenseStoreActions;
@@ -98,8 +103,22 @@ export const useExpenseStore = create<ExpenseStore>()(
       _hasHydrated: false,
       hasLoadedOnce: false,
       lastLoadedAt: null,
+      cacheScope: null,
 
       setHasHydrated: (state) => set({ _hasHydrated: state }),
+      ensureScope: (scope) => {
+        const currentScope = get().cacheScope;
+        if (currentScope === scope) return;
+        set({
+          expenses: [],
+          categories: [],
+          recurringTemplates: [],
+          hasLoadedOnce: false,
+          lastLoadedAt: null,
+          cacheScope: scope,
+          error: null,
+        });
+      },
 
       // ── Load all data (deduped — concurrent calls share one promise) ──
       loadExpenses: async (options) => {
@@ -108,6 +127,7 @@ export const useExpenseStore = create<ExpenseStore>()(
         if (existing) return existing;
 
         const force = options?.force ?? false;
+        const activeScope = getActiveDataScope();
         const { hasLoadedOnce, lastLoadedAt } = get();
         const isFresh = hasLoadedOnce
           && lastLoadedAt !== null
@@ -133,7 +153,36 @@ export const useExpenseStore = create<ExpenseStore>()(
               recurringTemplates,
               hasLoadedOnce: true,
               lastLoadedAt: Date.now(),
+              cacheScope: activeScope,
             });
+
+            if (activeScope !== GUEST_DATA_SCOPE) {
+              void syncWithSupabaseIfNeeded()
+                .then(async (result) => {
+                  if (!result.changed) return;
+                  if (getActiveDataScope() !== activeScope) return;
+
+                  const [nextExpenses, nextCategories, nextRecurringTemplates] = await Promise.all([
+                    getExpenseRepository().getAll(),
+                    getCategoryRepository().getAll(),
+                    getRecurringRepository().getAll(),
+                  ]);
+
+                  if (getActiveDataScope() !== activeScope) return;
+                  set({
+                    expenses: nextExpenses,
+                    categories: nextCategories,
+                    recurringTemplates: nextRecurringTemplates,
+                    hasLoadedOnce: true,
+                    lastLoadedAt: Date.now(),
+                    cacheScope: activeScope,
+                  });
+                })
+                .catch((syncErr) => {
+                  const msg = syncErr instanceof Error ? syncErr.message : 'Background sync gagal';
+                  set({ error: msg });
+                });
+            }
           } catch (err) {
             const msg = err instanceof Error ? err.message : 'Failed to load data';
             set({ error: msg });
@@ -298,6 +347,7 @@ export const useExpenseStore = create<ExpenseStore>()(
         categories: state.categories,
         expenses: state.expenses,
         recurringTemplates: state.recurringTemplates,
+        cacheScope: state.cacheScope,
       }),
       onRehydrateStorage: () => (state, error) => {
         if (!error && state) {

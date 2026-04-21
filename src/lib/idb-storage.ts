@@ -84,19 +84,8 @@ async function runMigrationOnce(): Promise<void> {
  * Falls back to localStorage if IDB is unexpectedly unavailable.
  */
 export async function readIDB<T>(key: string): Promise<T[]> {
-  await runMigrationOnce();
-  try {
-    const value = await get<T[]>(key, appStore);
-    return value ?? [];
-  } catch {
-    // IDB unavailable (e.g. Safari private mode) — degrade gracefully
-    try {
-      const raw = localStorage.getItem(key);
-      return raw ? (JSON.parse(raw) as T[]) : [];
-    } catch {
-      return [];
-    }
-  }
+  const value = await readIDBValue<T[]>(key);
+  return value ?? [];
 }
 
 /**
@@ -104,6 +93,41 @@ export async function readIDB<T>(key: string): Promise<T[]> {
  * Falls back to localStorage if IDB is unexpectedly unavailable.
  */
 export async function writeIDB<T>(key: string, data: T[]): Promise<void> {
+  await writeIDBValue(key, data);
+}
+
+/**
+ * Delete a key from IndexedDB.
+ */
+export async function deleteIDB(key: string): Promise<void> {
+  await deleteIDBValue(key);
+}
+
+/**
+ * Read any JSON-serializable value from IndexedDB.
+ * Falls back to localStorage if IDB is unexpectedly unavailable.
+ */
+export async function readIDBValue<T>(key: string): Promise<T | null> {
+  await runMigrationOnce();
+  try {
+    const value = await get<T>(key, appStore);
+    return value ?? null;
+  } catch {
+    // IDB unavailable (e.g. Safari private mode) — degrade gracefully
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? (JSON.parse(raw) as T) : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+/**
+ * Write any JSON-serializable value to IndexedDB.
+ * Falls back to localStorage if IDB is unexpectedly unavailable.
+ */
+export async function writeIDBValue<T>(key: string, data: T): Promise<void> {
   await runMigrationOnce();
   try {
     await set(key, data, appStore);
@@ -117,9 +141,9 @@ export async function writeIDB<T>(key: string, data: T[]): Promise<void> {
 }
 
 /**
- * Delete a key from IndexedDB.
+ * Delete a key from IndexedDB (or localStorage fallback).
  */
-export async function deleteIDB(key: string): Promise<void> {
+export async function deleteIDBValue(key: string): Promise<void> {
   try {
     await del(key, appStore);
   } catch {

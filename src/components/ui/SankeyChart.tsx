@@ -1,4 +1,4 @@
-import React, { useMemo, useLayoutEffect, useRef } from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Expense } from '../../types';
 import { useUIStore } from '../../store/useAppStore';
@@ -192,22 +192,9 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
     });
 
     return { flows: f, rightNodes: rNodes, defaultTop1: top1Slug };
-  }, [expenses]);
+  }, [expenses, CH]);
 
-  // ── Highlight: stabilized local ref to prevent null→value flash ────────────
-  // On first render, `sankeyHighlightedCat` from the global store may be null
-  // (cleared between navigations). We compute the effective value synchronously
-  // using a ref so the very first paint already shows the correct highlight,
-  // eliminating the one-frame flicker on first click.
-  const resolvedHighlightRef = useRef<string | null>(sankeyHighlightedCat ?? defaultTop1);
-
-  // Keep ref in sync whenever the global store changes (user clicks) or data changes
-  useLayoutEffect(() => {
-    const next = sankeyHighlightedCat ?? defaultTop1;
-    resolvedHighlightRef.current = next;
-  }, [sankeyHighlightedCat, defaultTop1]);
-
-  const highlightedCat = sankeyHighlightedCat ?? resolvedHighlightRef.current ?? defaultTop1;
+  const highlightedCat = sankeyHighlightedCat ?? defaultTop1;
 
   const handleCatClick = (slug: string) => {
     setSankeyHighlightedCat(slug);
@@ -229,9 +216,11 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
   const MAX_LABEL_H = 26;
 
   const labels = useMemo(() => {
-    let lastBottom = -Infinity;
     const maxCatH = Math.max(1, ...rightNodes.map(n => n.h));
-    return rightNodes.map(n => {
+    const acc = rightNodes.reduce<{
+      items: Array<(typeof rightNodes)[number] & { labelTop: number; labelH: number; fontSize: number }>;
+      lastBottom: number;
+    }>((state, n) => {
       // Scale label size based on node height relative to max node height
       const scale = Math.pow(n.h / maxCatH, 0.5);
       const curLabelH = Math.round(MIN_LABEL_H + scale * (MAX_LABEL_H - MIN_LABEL_H));
@@ -239,10 +228,16 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
 
       const center = n.y + n.h / 2;
       let top = center - curLabelH / 2;
-      if (top < lastBottom + LABEL_GAP_PX) top = lastBottom + LABEL_GAP_PX;
-      lastBottom = top + curLabelH;
-      return { ...n, labelTop: top, labelH: curLabelH, fontSize };
-    });
+      if (top < state.lastBottom + LABEL_GAP_PX) top = state.lastBottom + LABEL_GAP_PX;
+
+      state.items.push({ ...n, labelTop: top, labelH: curLabelH, fontSize });
+      return {
+        items: state.items,
+        lastBottom: top + curLabelH,
+      };
+    }, { items: [], lastBottom: -Infinity });
+
+    return acc.items;
   }, [rightNodes]);
 
   const LEFT_LABEL_H = 15;
@@ -250,14 +245,22 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
   const activeLeftLabels = useMemo(() => {
     if (!highlightedCat) return [];
     const activeFlows = flows.filter(f => f.categorySlug === highlightedCat);
-    let lastBottom = -Infinity;
-    return activeFlows.map(f => {
+    const acc = activeFlows.reduce<{
+      items: Array<(typeof activeFlows)[number] & { labelTop: number }>;
+      lastBottom: number;
+    }>((state, f) => {
       const center = f.leftY + f.leftH / 2;
       let top = center - LEFT_LABEL_H / 2;
-      if (top < lastBottom + LABEL_GAP_PX) top = lastBottom + LABEL_GAP_PX;
-      lastBottom = top + LEFT_LABEL_H;
-      return { ...f, labelTop: top };
-    });
+      if (top < state.lastBottom + LABEL_GAP_PX) top = state.lastBottom + LABEL_GAP_PX;
+
+      state.items.push({ ...f, labelTop: top });
+      return {
+        items: state.items,
+        lastBottom: top + LEFT_LABEL_H,
+      };
+    }, { items: [], lastBottom: -Infinity });
+
+    return acc.items;
   }, [flows, highlightedCat]);
 
   if (flows.length === 0) {

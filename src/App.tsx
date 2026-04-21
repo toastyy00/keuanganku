@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useRef } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { AddExpenseSheet } from './components/AddExpenseSheet';
@@ -8,6 +8,7 @@ import { SkeletonDashboard } from './components/SkeletonCard';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { appConfig, isDemoMode } from './lib/appConfig';
 import { seedDemoData } from './lib/demoData';
+import { GUEST_DATA_SCOPE } from './lib/dataScope';
 import { useExpenseStore } from './store/useExpenseStore';
 import { useAuthStore } from './store/useAuthStore';
 
@@ -58,9 +59,12 @@ const AppInner: React.FC = () => {
   const { isInitializing, session, user, loadSession } = useAuthStore();
   const loadExpenses = useExpenseStore((s) => s.loadExpenses);
   const _hasHydrated = useExpenseStore((s) => s._hasHydrated);
+  const cacheScope = useExpenseStore((s) => s.cacheScope);
+  const ensureScope = useExpenseStore((s) => s.ensureScope);
   const demoMode = isDemoMode();
   const userId = user?.id ?? null;
-  const previousUserIdRef = useRef<string | null | undefined>(undefined);
+  const activeScope = userId ?? GUEST_DATA_SCOPE;
+  const isScopeReady = cacheScope === activeScope;
 
   // 1. Resolve auth session on mount (must happen before render)
   useEffect(() => {
@@ -74,19 +78,23 @@ const AppInner: React.FC = () => {
     }
   }, [demoMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 2. Load data whenever auth state settles AND Zustand hydration is done
+  // 2. Scope warm cache to the active identity before any page render
   useEffect(() => {
     if (!isInitializing && _hasHydrated) {
-      const shouldForce = previousUserIdRef.current !== undefined
-        && previousUserIdRef.current !== userId;
-      previousUserIdRef.current = userId;
-      void loadExpenses(shouldForce ? { force: true } : undefined);
+      ensureScope(activeScope);
     }
-  }, [isInitializing, userId, _hasHydrated]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isInitializing, _hasHydrated, activeScope, ensureScope]);
+
+  // 3. Load data whenever auth state settles, hydration completes, and scope is ready
+  useEffect(() => {
+    if (!isInitializing && _hasHydrated && isScopeReady) {
+      void loadExpenses();
+    }
+  }, [isInitializing, _hasHydrated, isScopeReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Revalidate when the app becomes active again, but only if the cache is stale.
   useEffect(() => {
-    if (isInitializing || !_hasHydrated) return;
+    if (isInitializing || !_hasHydrated || !isScopeReady) return;
 
     const revalidate = () => { void loadExpenses(); };
     const onVisibilityChange = () => {
@@ -104,12 +112,12 @@ const AppInner: React.FC = () => {
       window.removeEventListener('focus', revalidate);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [isInitializing, _hasHydrated]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isInitializing, _hasHydrated, isScopeReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Block render until we know auth state AND cache is hydrated
   // This prevents a flash of login for authenticated users AND prevents
   // overwriting IDB cache with empty state during async Zustand hydration.
-  if (isInitializing || !_hasHydrated) {
+  if (isInitializing || !_hasHydrated || !isScopeReady) {
     return <AppLoadingScreen />;
   }
 

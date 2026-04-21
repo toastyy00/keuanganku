@@ -1,16 +1,14 @@
 import type { Expense, Category, RecurringTemplate } from '../types';
 import { useAuthStore } from '../store/useAuthStore';
 import { v4 as uuidv4 } from 'uuid';
-import {
-  LocalStorageExpenseRepository,
-  SupabaseExpenseRepository,
-} from './repository';
 import { getSupabaseClient } from './supabase';
 import { getLocalISODate } from './utils';
 import { writeIDB } from './idb-storage';
+import { getActiveDataScope, scopedDataKey } from './dataScope';
+import { syncWithSupabaseIfNeeded } from './sync-engine';
 
 // ============================================================
-//  SYNC — Push unsynced localStorage expenses to Supabase
+//  SYNC — Compatibility wrapper (delegates to local-first sync engine)
 // ============================================================
 
 export interface SyncResult {
@@ -23,58 +21,27 @@ type ImportedCategory = Partial<Category> & { user_id?: string };
 type ImportedRecurring = Partial<RecurringTemplate> & { user_id?: string; frequency?: string };
 type ImportedExpense = Partial<Expense> & { user_id?: string };
 
-/**
- * Pushes all expenses with `synced: false` from localStorage to Supabase.
- * Marks them as `synced: true` in localStorage on success.
- */
 export async function syncToSupabase(): Promise<SyncResult> {
-  const client = getSupabaseClient();
-  if (!client) {
-    throw new Error('Supabase is not configured. Add credentials in Settings.');
+  const result = await syncWithSupabaseIfNeeded();
+
+  if (result.skipped) {
+    return {
+      synced: 0,
+      failed: 0,
+      errors: result.reason ? [`Sync dilewati: ${result.reason}`] : [],
+    };
   }
 
-  const localRepo = new LocalStorageExpenseRepository();
-  const remoteRepo = new SupabaseExpenseRepository();
-
-  const all = await localRepo.getAll();
-  const unsynced = all.filter((e) => !e.synced);
-
-  const result: SyncResult = { synced: 0, failed: 0, errors: [] };
-
-
-
-  for (const expense of unsynced) {
-    try {
-      // Check if the expense already exists in Supabase (by id)
-      const { data: existing } = await client
-        .from('expenses')
-        .select('id')
-        .eq('id', expense.id)
-        .single();
-
-      if (existing) {
-        // Update
-        await remoteRepo.update(expense.id, { ...expense, synced: true });
-      } else {
-        // Insert
-        await client.from('expenses').insert({
-          ...expense,
-          synced: true,
-        });
-      }
-
-      // Mark as synced locally
-      await localRepo.update(expense.id, { synced: true });
-      result.synced++;
-    } catch (err) {
-      result.failed++;
-      result.errors.push(
-        `${expense.name}: ${err instanceof Error ? err.message : 'Unknown error'}`
-      );
-    }
+  const errors: string[] = [];
+  if (result.queueRemaining > 0) {
+    errors.push(`Masih ada ${result.queueRemaining} perubahan yang belum tersinkron.`);
   }
 
-  return result;
+  return {
+    synced: result.pushed,
+    failed: result.queueRemaining,
+    errors,
+  };
 }
 
 // ============================================================
@@ -228,14 +195,15 @@ export async function importJSON(raw: string): Promise<BackupData> {
     }
   } else {
     // Write to offline IndexedDB fallback
+    const scope = getActiveDataScope();
     if (Array.isArray(parsed.expenses)) {
-      await writeIDB('expenses', parsed.expenses);
+      await writeIDB(scopedDataKey('expenses', scope), parsed.expenses);
     }
     if (Array.isArray(parsed.categories)) {
-      await writeIDB('categories', parsed.categories);
+      await writeIDB(scopedDataKey('categories', scope), parsed.categories);
     }
     if (Array.isArray(parsed.recurring)) {
-      await writeIDB('recurring', parsed.recurring);
+      await writeIDB(scopedDataKey('recurring', scope), parsed.recurring);
     }
   }
 

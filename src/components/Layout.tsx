@@ -66,15 +66,9 @@ const Layout: React.FC = () => {
   const scrollPositions = useRef<Record<string, number>>({});
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const isPinchGestureRef = useRef(false);
-  const lastPathRef = useRef(location.pathname);
   const activeScrollPathRef = useRef(location.pathname);
   const restoreFrameRef = useRef<number | null>(null);
   const isRestoringScrollRef = useRef(false);
-
-  if (lastPathRef.current !== location.pathname) {
-    isRestoringScrollRef.current = true;
-    lastPathRef.current = location.pathname;
-  }
 
   React.useEffect(() => {
     return () => {
@@ -172,17 +166,7 @@ const Layout: React.FC = () => {
     i.end ? location.pathname === i.to : location.pathname.startsWith(i.to)
   );
   const previousActiveIndexRef = useRef<number | null>(null);
-  // eslint-disable-next-line react-hooks/refs
-  const prev = previousActiveIndexRef.current;
-  const pageTransitionClass =
-    prev === null
-    || prev === -1
-    || activeIndex === -1
-    || prev === activeIndex
-      ? 'page-fade-in'
-      : activeIndex > prev
-        ? 'page-slide-in-from-right'
-        : 'page-slide-in-from-left';
+  const [pageTransitionClass, setPageTransitionClass] = useState('page-fade-in');
   const isRouteActive = (to: string, end: boolean) => (
     end ? location.pathname === to : location.pathname.startsWith(to)
   );
@@ -196,6 +180,17 @@ const Layout: React.FC = () => {
     document.body.dataset.bottomSheetOpen === 'true';
 
   React.useEffect(() => {
+    const prev = previousActiveIndexRef.current;
+    const nextClass =
+      prev === null
+      || prev === -1
+      || activeIndex === -1
+      || prev === activeIndex
+        ? 'page-fade-in'
+        : activeIndex > prev
+          ? 'page-slide-in-from-right'
+          : 'page-slide-in-from-left';
+    setPageTransitionClass(nextClass);
     previousActiveIndexRef.current = activeIndex;
   }, [activeIndex]);
 

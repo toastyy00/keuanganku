@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getLocalISODate } from './utils';
-import { readIDB, writeIDB } from './idb-storage';
+import { readIDB, readIDBValue, writeIDB, writeIDBValue } from './idb-storage';
+import { GUEST_DATA_SCOPE, getActiveDataScope, scopedDataKey } from './dataScope';
 import type {
   Expense,
   Category,
@@ -12,6 +13,7 @@ import type {
 import { DEFAULT_CATEGORIES } from './categories';
 import { getSupabaseClient } from './supabase';
 import { useAuthStore } from '../store/useAuthStore';
+import { enqueueSyncDelete, enqueueSyncUpsert, triggerBackgroundSync } from './sync-engine';
 
 // ============================================================
 //  STORAGE KEYS
@@ -22,6 +24,37 @@ const KEYS = {
   categories: 'categories',
   recurring: 'recurring',
 } as const;
+const LEGACY_MIGRATION_FLAG_PREFIX = '__scope_legacy_migrated__';
+
+function scopedKey(key: keyof typeof KEYS, scope: string = getActiveDataScope()): string {
+  return scopedDataKey(KEYS[key], scope);
+}
+
+async function readScopedArray<T>(
+  key: keyof typeof KEYS,
+  scope: string = getActiveDataScope(),
+): Promise<T[]> {
+  const currentKey = scopedKey(key, scope);
+  const scopedData = await readIDB<T>(currentKey);
+  if (scopedData.length > 0) return scopedData;
+
+  const migrationFlagKey = scopedDataKey(`${LEGACY_MIGRATION_FLAG_PREFIX}:${KEYS[key]}`, scope);
+  const migrated = await readIDBValue<boolean>(migrationFlagKey);
+  if (migrated) return scopedData;
+
+  // Privacy guard: never auto-import legacy global keys into authenticated scopes.
+  if (scope !== GUEST_DATA_SCOPE) {
+    await writeIDBValue(migrationFlagKey, true);
+    return scopedData;
+  }
+
+  const legacyData = await readIDB<T>(KEYS[key]);
+  if (legacyData.length > 0) {
+    await writeIDB(currentKey, legacyData);
+  }
+  await writeIDBValue(migrationFlagKey, true);
+  return legacyData;
+}
 
 const EXPENSE_SELECT_COLUMNS = [
   'id',
@@ -101,9 +134,12 @@ function isoDate(date: Date = new Date()): string {
 }
 
 async function migrateLocalCategorySlugs(): Promise<void> {
-  const categories = await readIDB<Category>(KEYS.categories);
-  let expenses = await readIDB<Expense>(KEYS.expenses);
-  let recurring = await readIDB<RecurringTemplate>(KEYS.recurring);
+  const categoriesKey = scopedKey('categories', GUEST_DATA_SCOPE);
+  const expensesKey = scopedKey('expenses', GUEST_DATA_SCOPE);
+  const recurringKey = scopedKey('recurring', GUEST_DATA_SCOPE);
+  const categories = await readScopedArray<Category>('categories', GUEST_DATA_SCOPE);
+  let expenses = await readScopedArray<Expense>('expenses', GUEST_DATA_SCOPE);
+  let recurring = await readScopedArray<RecurringTemplate>('recurring', GUEST_DATA_SCOPE);
   let changed = false;
 
   for (const migration of CATEGORY_MIGRATIONS) {
@@ -152,14 +188,15 @@ async function migrateLocalCategorySlugs(): Promise<void> {
   }
 
   if (changed) {
-    await writeIDB(KEYS.categories, categories);
-    await writeIDB(KEYS.expenses, expenses);
-    await writeIDB(KEYS.recurring, recurring);
+    await writeIDB(categoriesKey, categories);
+    await writeIDB(expensesKey, expenses);
+    await writeIDB(recurringKey, recurring);
   }
 }
 
 async function normalizeLocalCategoryMetadata(): Promise<void> {
-  const categories = await readIDB<Category>(KEYS.categories);
+  const categoriesKey = scopedKey('categories', GUEST_DATA_SCOPE);
+  const categories = await readScopedArray<Category>('categories', GUEST_DATA_SCOPE);
   let changed = false;
 
   const normalized = categories.map((item) => {
@@ -176,7 +213,7 @@ async function normalizeLocalCategoryMetadata(): Promise<void> {
   });
 
   if (changed) {
-    await writeIDB(KEYS.categories, normalized);
+    await writeIDB(categoriesKey, normalized);
   }
 }
 
@@ -212,7 +249,7 @@ export async function runCategorySlugMigrations(): Promise<void> {
 
 export class LocalStorageExpenseRepository implements ExpenseRepository {
   async getAll(): Promise<Expense[]> {
-    const expenses = await readIDB<Expense>(KEYS.expenses);
+    const expenses = await readScopedArray<Expense>('expenses');
     return expenses.sort((a, b) => {
       const dateDiff = b.date.localeCompare(a.date);
       if (dateDiff !== 0) return dateDiff;
@@ -236,13 +273,20 @@ export class LocalStorageExpenseRepository implements ExpenseRepository {
       created_at: isoNow(),
       synced: false,
     };
-    const all = await readIDB<Expense>(KEYS.expenses);
-    await writeIDB(KEYS.expenses, [expense, ...all]);
+    const key = scopedKey('expenses');
+    const all = await readScopedArray<Expense>('expenses');
+    await writeIDB(key, [expense, ...all]);
+
+    if (isAuthenticated()) {
+      await enqueueSyncUpsert('expenses', expense.id, expense);
+      triggerBackgroundSync();
+    }
     return expense;
   }
 
   async update(id: string, data: Partial<Expense>): Promise<Expense> {
-    const all = await readIDB<Expense>(KEYS.expenses);
+    const key = scopedKey('expenses');
+    const all = await readScopedArray<Expense>('expenses');
     const index = all.findIndex((e) => e.id === id);
     if (index === -1) {
       throw new Error(`Expense with id "${id}" not found.`);
@@ -254,16 +298,27 @@ export class LocalStorageExpenseRepository implements ExpenseRepository {
       synced: false,
     };
     all[index] = updated;
-    await writeIDB(KEYS.expenses, all);
+    await writeIDB(key, all);
+
+    if (isAuthenticated()) {
+      await enqueueSyncUpsert('expenses', updated.id, updated);
+      triggerBackgroundSync();
+    }
     return updated;
   }
 
   async delete(id: string): Promise<void> {
-    const all = await readIDB<Expense>(KEYS.expenses);
+    const key = scopedKey('expenses');
+    const all = await readScopedArray<Expense>('expenses');
     await writeIDB(
-      KEYS.expenses,
+      key,
       all.filter((e) => e.id !== id)
     );
+
+    if (isAuthenticated()) {
+      await enqueueSyncDelete('expenses', id);
+      triggerBackgroundSync();
+    }
   }
 }
 
@@ -273,7 +328,8 @@ export class LocalStorageExpenseRepository implements ExpenseRepository {
 
 export class LocalStorageCategoryRepository implements CategoryRepository {
   async getAll(): Promise<Category[]> {
-    const stored = await readIDB<Category>(KEYS.categories);
+    const key = scopedKey('categories');
+    const stored = await readScopedArray<Category>('categories');
 
     // Migration/Sync: update labels for default categories that may have changed in code
     let changed = false;
@@ -291,7 +347,7 @@ export class LocalStorageCategoryRepository implements CategoryRepository {
 
     if (missing.length > 0 || changed) {
       const merged = [...updated, ...missing];
-      await writeIDB(KEYS.categories, merged);
+      await writeIDB(key, merged);
       return merged;
     }
 
@@ -305,7 +361,12 @@ export class LocalStorageCategoryRepository implements CategoryRepository {
       throw new Error(`Category slug "${data.slug}" already exists.`);
     }
     const newCategory: Category = { ...data, is_default: false };
-    await writeIDB(KEYS.categories, [...all, newCategory]);
+    await writeIDB(scopedKey('categories'), [...all, newCategory]);
+
+    if (isAuthenticated()) {
+      await enqueueSyncUpsert('categories', newCategory.slug, newCategory);
+      triggerBackgroundSync();
+    }
     return newCategory;
   }
 
@@ -315,7 +376,12 @@ export class LocalStorageCategoryRepository implements CategoryRepository {
     if (index === -1) throw new Error(`Category "${slug}" not found.`);
     const updated: Category = { ...all[index], ...data, slug };
     all[index] = updated;
-    await writeIDB(KEYS.categories, all);
+    await writeIDB(scopedKey('categories'), all);
+
+    if (isAuthenticated()) {
+      await enqueueSyncUpsert('categories', updated.slug, updated);
+      triggerBackgroundSync();
+    }
     return updated;
   }
 
@@ -327,9 +393,14 @@ export class LocalStorageCategoryRepository implements CategoryRepository {
       throw new Error(`Default category "${slug}" cannot be deleted.`);
     }
     await writeIDB(
-      KEYS.categories,
+      scopedKey('categories'),
       all.filter((c) => c.slug !== slug)
     );
+
+    if (isAuthenticated()) {
+      await enqueueSyncDelete('categories', slug);
+      triggerBackgroundSync();
+    }
   }
 }
 
@@ -339,15 +410,21 @@ export class LocalStorageCategoryRepository implements CategoryRepository {
 
 export class LocalStorageRecurringRepository implements RecurringRepository {
   async getAll(): Promise<RecurringTemplate[]> {
-    return readIDB<RecurringTemplate>(KEYS.recurring);
+    return readScopedArray<RecurringTemplate>('recurring');
   }
 
   async create(
     data: Omit<RecurringTemplate, 'id'>
   ): Promise<RecurringTemplate> {
     const template: RecurringTemplate = { ...data, id: uuidv4() };
-    const all = await readIDB<RecurringTemplate>(KEYS.recurring);
-    await writeIDB(KEYS.recurring, [template, ...all]);
+    const key = scopedKey('recurring');
+    const all = await readScopedArray<RecurringTemplate>('recurring');
+    await writeIDB(key, [template, ...all]);
+
+    if (isAuthenticated()) {
+      await enqueueSyncUpsert('recurring', template.id, template);
+      triggerBackgroundSync();
+    }
     return template;
   }
 
@@ -355,21 +432,33 @@ export class LocalStorageRecurringRepository implements RecurringRepository {
     id: string,
     data: Partial<RecurringTemplate>
   ): Promise<RecurringTemplate> {
-    const all = await readIDB<RecurringTemplate>(KEYS.recurring);
+    const key = scopedKey('recurring');
+    const all = await readScopedArray<RecurringTemplate>('recurring');
     const index = all.findIndex((r) => r.id === id);
     if (index === -1) throw new Error(`Recurring template "${id}" not found.`);
     const updated: RecurringTemplate = { ...all[index], ...data, id };
     all[index] = updated;
-    await writeIDB(KEYS.recurring, all);
+    await writeIDB(key, all);
+
+    if (isAuthenticated()) {
+      await enqueueSyncUpsert('recurring', updated.id, updated);
+      triggerBackgroundSync();
+    }
     return updated;
   }
 
   async delete(id: string): Promise<void> {
-    const all = await readIDB<RecurringTemplate>(KEYS.recurring);
+    const key = scopedKey('recurring');
+    const all = await readScopedArray<RecurringTemplate>('recurring');
     await writeIDB(
-      KEYS.recurring,
+      key,
       all.filter((r) => r.id !== id)
     );
+
+    if (isAuthenticated()) {
+      await enqueueSyncDelete('recurring', id);
+      triggerBackgroundSync();
+    }
   }
 }
 
@@ -598,18 +687,15 @@ let _lastAuthState: boolean | null = null;
 
 function getOrCreate<T>(
   current: T | null,
-  authed: boolean,
-  AuthedClass: new () => T,
   LocalClass: new () => T,
 ): T {
-  if (current && _lastAuthState === authed) return current;
-  return authed ? new AuthedClass() : new LocalClass();
+  if (current) return current;
+  return new LocalClass();
 }
 
 /**
- * Returns the correct ExpenseRepository based on auth state.
- * Authenticated (session exists) → SupabaseExpenseRepository
- * Unauthenticated → LocalStorageExpenseRepository (offline fallback)
+ * Returns local-first ExpenseRepository for the active data scope.
+ * Authenticated users write locally first; Supabase sync runs in background.
  */
 export function getExpenseRepository(): ExpenseRepository {
   const authed = isAuthenticated();
@@ -619,21 +705,21 @@ export function getExpenseRepository(): ExpenseRepository {
     _recurringRepo = null;
     _lastAuthState = authed;
   }
-  _expenseRepo = getOrCreate(_expenseRepo, authed, SupabaseExpenseRepository, LocalStorageExpenseRepository);
+  _expenseRepo = getOrCreate(_expenseRepo, LocalStorageExpenseRepository);
   return _expenseRepo;
 }
 
 export function getCategoryRepository(): CategoryRepository {
   const authed = isAuthenticated();
   if (_lastAuthState !== authed) { _lastAuthState = authed; _expenseRepo = null; _categoryRepo = null; _recurringRepo = null; }
-  _categoryRepo = getOrCreate(_categoryRepo, authed, SupabaseCategoryRepository, LocalStorageCategoryRepository);
+  _categoryRepo = getOrCreate(_categoryRepo, LocalStorageCategoryRepository);
   return _categoryRepo;
 }
 
 export function getRecurringRepository(): RecurringRepository {
   const authed = isAuthenticated();
   if (_lastAuthState !== authed) { _lastAuthState = authed; _expenseRepo = null; _categoryRepo = null; _recurringRepo = null; }
-  _recurringRepo = getOrCreate(_recurringRepo, authed, SupabaseRecurringRepository, LocalStorageRecurringRepository);
+  _recurringRepo = getOrCreate(_recurringRepo, LocalStorageRecurringRepository);
   return _recurringRepo;
 }
 

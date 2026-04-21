@@ -21,7 +21,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 IMAGE_NAME=toastty/keuanganku:latest
 ```
 
-You also need to run the SQL from `supabase/migrations/001_init.sql` in the Supabase SQL editor.
+You also need to run the SQL migrations in order from `supabase/migrations/` (`001_init.sql`, then `002_local_first_sync.sql`) in the Supabase SQL editor.
 
 ## Deploy on ARM64 Devices
 

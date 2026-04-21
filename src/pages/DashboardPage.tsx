@@ -61,6 +61,7 @@ function SwipeCarousel({
 
   useEffect(() => {
     if (disableHint || slides.length <= 1 || hasSeenSwipeHint()) return;
+    const currentTimeouts = hintTimeouts.current;
 
     const cleanupListeners = () => {
       window.removeEventListener('touchstart', handleInteraction);
@@ -80,19 +81,19 @@ function SwipeCarousel({
     window.addEventListener('keydown', handleInteraction, { passive: true });
 
     // Set to true after delay to avoid React 18 Strict Mode double-mount cancellation
-    hintTimeouts.current.t1 = setTimeout(() => {
+    currentTimeouts.t1 = setTimeout(() => {
       markSwipeHintSeen();
       setHintPx(-30);
       cleanupListeners(); // Don't need to listen once animation starts
     }, 2000);
-    hintTimeouts.current.t2 = setTimeout(() => setHintPx(0), 2600);
+    currentTimeouts.t2 = setTimeout(() => setHintPx(0), 2600);
 
     return () => {
-      clearTimeout(hintTimeouts.current.t1);
-      clearTimeout(hintTimeouts.current.t2);
+      clearTimeout(currentTimeouts.t1);
+      clearTimeout(currentTimeouts.t2);
       cleanupListeners();
     };
-  }, [slides.length, markHintSeen]);
+  }, [slides.length, disableHint, markHintSeen]);
 
   const accent = accentColors?.[active] ?? '#B8F55A';
 
@@ -365,7 +366,7 @@ const DashboardPage: React.FC = () => {
       _cachedRateInfo = res;
       setRateInfo(res);
     });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // Conversion helper
   const toDisplay = useCallback(
