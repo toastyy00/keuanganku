@@ -847,14 +847,6 @@ const HistoryPage: React.FC = () => {
               Hapus "{expense.name}"?
             </p>
             <button
-              type="button"
-              disabled
-              className="relative z-10 px-3 py-1.5 border-2 font-black text-xs uppercase min-h-[36px] opacity-80"
-              style={{ backgroundColor: '#B91C1C', color: '#FFFFFF', borderColor: '#B91C1C' }}
-            >
-              Hapus
-            </button>
-            <button
               onClick={() => undoPendingDelete(expense.id)}
               className="relative z-10 px-3 py-1.5 border-2 font-black text-xs uppercase min-h-[36px]"
               style={{ backgroundColor: '#EDE7DD', borderColor: '#EDE7DD', color: '#DC2626' }}
@@ -926,7 +918,7 @@ const HistoryPage: React.FC = () => {
               <p className="text-sm font-black">{formatCurrency(expense.amount, expense.currency)}</p>
               <button
                 onClick={(event) => { event.stopPropagation(); haptic(); startDeleteConfirm(expense.id); }}
-                className="p-2 text-brutal-black/40 hover:text-red-500 hover:bg-red-50 transition-colors duration-150 min-w-[36px] min-h-[36px] flex items-center justify-center cursor-pointer"
+                className="p-2 text-brutal-black/40 hover:text-red-50 hover:bg-red-500 active:text-red-50 active:bg-red-600 transition-colors duration-150 min-w-[36px] min-h-[36px] flex items-center justify-center cursor-pointer"
                 aria-label={`Hapus ${expense.name}`}
               >
                 <Trash2 size={16} strokeWidth={2.5} />
