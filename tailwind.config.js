@@ -47,7 +47,7 @@ export default {
         // Neo-card: bordered card with brutal shadow (dark concrete)
         '.neo-card': {
           backgroundColor: '#242424',
-          border: '2px solid #555555',
+          //border: '1px outset #f5f0e80a',
           boxShadow: '3px 3px 0px 0px #F5F0E8',
           borderRadius: '0px',
         },

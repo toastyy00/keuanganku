@@ -818,6 +818,7 @@ const HistoryPage: React.FC = () => {
     const pendingElapsedMs = pendingDelete ? Math.max(0, Date.now() - pendingDelete.startedAt) : 0;
     const pendingAnimationDelayMs = Math.min(HISTORY_DELETE_UNDO_MS, pendingElapsedMs);
     const badgeVariant = expense.type === 'NEED' ? 'need' : expense.type === 'WANT' ? 'want' : 'transfer';
+    const isDeleteState = Boolean(pendingDelete || isDeleting);
     const deleteStateCardStyle = pendingDelete
       ? { backgroundColor: '#EF4444', border: 'none' }
       : isDeleting
@@ -826,7 +827,10 @@ const HistoryPage: React.FC = () => {
 
     return (
       <div
-        className="neo-card overflow-hidden !shadow-[5px_5px_0_0_#000000] transition-colors duration-150"
+        className={`neo-card overflow-hidden !shadow-[4px_4px_0_0_#000000] ${isDeleteState
+          ? 'transition-colors duration-150'
+          : 'transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:!shadow-[4px_6px_0_0_#000000] active:translate-y-[4px] active:translate-x-[4px] active:!shadow-none'
+          }`}
         style={deleteStateCardStyle}
       >
         {pendingDelete ? (
@@ -885,10 +889,8 @@ const HistoryPage: React.FC = () => {
                 setActiveExpense(expense.id);
               }
             }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-all duration-150 cursor-pointer"
+            className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors duration-150 cursor-pointer md:hover:bg-[rgba(245,240,232,0.04)] active:bg-[rgba(245,240,232,0.06)]"
             style={{ color: '#F5F0E8' }}
-            onMouseEnter={(event) => (event.currentTarget.style.backgroundColor = 'rgba(245,240,232,0.05)')}
-            onMouseLeave={(event) => (event.currentTarget.style.backgroundColor = 'transparent')}
           >
             <span className="text-2xl w-9 shrink-0 text-center">
               {expense.type === 'TRANSFER' ? '\u{1F4B8}' : (cat?.emoji ?? '\u{1F6CD}\uFE0F')}

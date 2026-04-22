@@ -256,7 +256,7 @@ const RecurringPage: React.FC = () => {
             <Card
               key={t.id}
               className={!t.active ? 'opacity-60' : ''}
-              style={{ boxShadow: '3px 3px 0px 0px #746C62' }}
+              style={{ boxShadow: '4px 4px 0px 0px #000000ff' }}
             >
               {isDeletingThis ? (
                 <div className="p-3 bg-red-500">

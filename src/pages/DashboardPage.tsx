@@ -692,7 +692,7 @@ const DashboardPage: React.FC = () => {
               <p className="text-xs font-black uppercase tracking-wider mb-3 text-brutal-black/60">
                 Needs vs Wants
               </p>
-              <div className="flex h-6 border-2 border-[#555555] overflow-hidden mb-3">
+              <div className="flex h-6 overflow-hidden mb-3">
                 {split.needsPct > 0 && (
                   <div className="bg-blue-500 transition-all duration-500" style={{ width: `${split.needsPct}%` }} />
                 )}
@@ -710,7 +710,7 @@ const DashboardPage: React.FC = () => {
               <div className="flex justify-between">
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 bg-blue-500 border-2 border-[#555555]" />
+                    <div className="w-3 h-3 bg-blue-500" />
                     <span className="text-xs font-bold uppercase">Need</span>
                     <span className="text-xs font-black">{split.needsPct}%</span>
                   </div>
@@ -720,7 +720,7 @@ const DashboardPage: React.FC = () => {
                   <div className="flex items-center gap-1.5 justify-end">
                     <span className="text-xs font-black">{split.wantsPct}%</span>
                     <span className="text-xs font-bold uppercase">Want</span>
-                    <div className="w-3 h-3 bg-pink-500 border-2 border-[#555555]" />
+                    <div className="w-3 h-3 bg-pink-500" />
                   </div>
                   <p className="text-sm font-bold mt-0.5">{fmt(split.wants)}</p>
                 </div>
@@ -745,12 +745,12 @@ const DashboardPage: React.FC = () => {
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
                           <div className="flex items-center gap-1.5">
-                            <div className={`w-2 h-2 border border-[#555555] ${bc.swatch}`} />
+                            <div className={`w-2 h-2 ${bc.swatch}`} />
                             <span className="text-[10px] font-bold uppercase tracking-wider text-brutal-black/60">Pribadi</span>
                           </div>
                           <span className={`text-[11px] font-black ${bc.text}`}>{budgetSpentPct}%</span>
                         </div>
-                        <div className="h-2 border-2 border-[#555555] overflow-hidden bg-[#111111]">
+                        <div className="h-2 overflow-hidden bg-[#111111]">
                           <div
                             className="h-full transition-all duration-700 ease-out"
                             style={{
@@ -785,12 +785,12 @@ const DashboardPage: React.FC = () => {
                         {/* Reversed Header for Right Alignment */}
                         <div className="flex items-center justify-between mb-1.5 flex-row-reverse">
                           <div className="flex items-center gap-1.5 flex-row-reverse">
-                            <div className={`w-2 h-2 border border-[#555555] ${fc.swatch}`} />
+                            <div className={`w-2 h-2 ${fc.swatch}`} />
                             <span className="text-[10px] font-bold uppercase tracking-wider text-brutal-black/60">Keluarga</span>
                           </div>
                           <span className={`text-[11px] font-black ${fc.text}`}>{familySpentPct}%</span>
                         </div>
-                        <div className="h-2 border-2 border-[#555555] overflow-hidden bg-[#111111]">
+                        <div className="h-2 overflow-hidden bg-[#111111]">
                           <div
                             className="h-full transition-all duration-700 ease-out float-right"
                             style={{
@@ -831,7 +831,7 @@ const DashboardPage: React.FC = () => {
           state={{ fromDashboardCashout: true }}
           className="block group select-none"
         >
-          <Card className="border-[#555555] bg-[#242424] transition-all duration-150 group-hover:-translate-y-0.5 group-hover:!shadow-[4px_6px_0_0_#000] group-active:translate-y-[4px] group-active:translate-x-[4px] group-active:!shadow-none" style={{ boxShadow: dashboardDarkShadow }}>
+          <Card className="border-[#f5f0e812] bg-[#242424] !shadow-[4px_4px_0_0_#000] transition-all duration-150 group-hover:-translate-y-0.5 group-hover:!shadow-[4px_6px_0_0_#000] group-active:translate-y-[4px] group-active:translate-x-[4px] group-active:!shadow-none">
             <CardBody>
               <div className="flex items-start gap-3">
                 <div>
