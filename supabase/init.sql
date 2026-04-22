@@ -213,17 +213,17 @@ BEGIN
 
   -- Seed 11 default categories for this user
   INSERT INTO public.categories (slug, label, emoji, is_default, user_id) VALUES
-    ('tagihan',   'Tagihan',      'âš¡',     TRUE, NEW.id),
-    ('keperluan', 'Keperluan',    'ðŸ›ï¸',     TRUE, NEW.id),
-    ('makan',     'Makan',        'ðŸœ',     TRUE, NEW.id),
-    ('transport', 'Transportasi', 'ðŸš—',     TRUE, NEW.id),
-    ('health',    'Kesehatan',    'ðŸ’Š',     TRUE, NEW.id),
-    ('lifestyle', 'Lifestyle',    'ðŸ‘Ÿ',     TRUE, NEW.id),
-    ('gadget',    'Gadget',       'ðŸ“±',     TRUE, NEW.id),
-    ('digital',   'Digital',      'ðŸ’»',     TRUE, NEW.id),
-    ('sedekah',   'Sedekah',      'ðŸ¤²',     TRUE, NEW.id),
-    ('hadiah',    'Hadiah',       'ðŸŽ',     TRUE, NEW.id),
-    ('keluarga',  'Keluarga',     'ðŸ‘¨â€ðŸ‘©â€ðŸ‘§', TRUE, NEW.id);
+    ('tagihan',   'Tagihan',      '⚡',      TRUE, NEW.id),
+    ('keperluan', 'Keperluan',    '🛍️',     TRUE, NEW.id),
+    ('makan',     'Makan',        '🍜',      TRUE, NEW.id),
+    ('transport', 'Transportasi', '🚗',      TRUE, NEW.id),
+    ('health',    'Kesehatan',    '💊',      TRUE, NEW.id),
+    ('lifestyle', 'Lifestyle',    '👟',      TRUE, NEW.id),
+    ('gadget',    'Gadget',       '📱',      TRUE, NEW.id),
+    ('digital',   'Digital',      '💻',      TRUE, NEW.id),
+    ('sedekah',   'Sedekah',      '🤲',      TRUE, NEW.id),
+    ('hadiah',    'Hadiah',       '🎁',      TRUE, NEW.id),
+    ('keluarga',  'Keluarga',     '👨‍👩‍👧', TRUE, NEW.id);
 
   RETURN NEW;
 END;
