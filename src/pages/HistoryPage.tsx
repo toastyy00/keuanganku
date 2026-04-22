@@ -829,7 +829,7 @@ const HistoryPage: React.FC = () => {
       <div
         className={`neo-card overflow-hidden !shadow-[4px_4px_0_0_#000000] ${isDeleteState
           ? 'transition-colors duration-150'
-          : 'transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:!shadow-[4px_6px_0_0_#000000] active:translate-y-[4px] active:translate-x-[4px] active:!shadow-none'
+          : 'transition-[transform,box-shadow] duration-150 md:hover:-translate-y-0.5 md:hover:!shadow-[4px_6px_0_0_#000000] active:translate-y-[4px] active:translate-x-[4px] active:!shadow-none md:active:!translate-y-[4px] md:active:!translate-x-[4px] md:active:!shadow-none'
           }`}
         style={deleteStateCardStyle}
       >

@@ -831,7 +831,7 @@ const DashboardPage: React.FC = () => {
           state={{ fromDashboardCashout: true }}
           className="block group select-none"
         >
-          <Card className="border-[#f5f0e812] bg-[#242424] !shadow-[4px_4px_0_0_#000] transition-all duration-150 group-hover:-translate-y-0.5 group-hover:!shadow-[4px_6px_0_0_#000] group-active:translate-y-[4px] group-active:translate-x-[4px] group-active:!shadow-none">
+          <Card className="border-[#f5f0e812] bg-[#242424] !shadow-[4px_4px_0_0_#000] transition-[transform,box-shadow] duration-150 md:group-hover:-translate-y-0.5 md:group-hover:!shadow-[4px_6px_0_0_#000] group-active:translate-y-[4px] group-active:translate-x-[4px] group-active:!shadow-none md:group-active:!translate-y-[4px] md:group-active:!translate-x-[4px] md:group-active:!shadow-none">
             <CardBody>
               <div className="flex items-start gap-3">
                 <div>
@@ -865,7 +865,7 @@ const DashboardPage: React.FC = () => {
                 className="block group select-none"
                 aria-label={`Lihat semua pengeluaran ${cat?.label ?? slug}`}
               >
-                <Card className="!shadow-[4px_4px_0_0_#000] p-3 transition-all duration-150 group-hover:-translate-y-0.5 group-hover:!shadow-[4px_6px_0_0_#000] group-active:translate-y-[4px] group-active:translate-x-[4px] group-active:!shadow-none">
+                <Card className="!shadow-[4px_4px_0_0_#000] p-3 transition-[transform,box-shadow] duration-150 md:group-hover:-translate-y-0.5 md:group-hover:!shadow-[4px_6px_0_0_#000] group-active:translate-y-[4px] group-active:translate-x-[4px] group-active:!shadow-none md:group-active:!translate-y-[4px] md:group-active:!translate-x-[4px] md:group-active:!shadow-none">
                   <div className="flex items-center gap-3">
                     <span className="text-2xl w-9 shrink-0 text-center">{cat?.emoji ?? '\u{1F6CD}\uFE0F'}</span>
                     <div className="flex-1 min-w-0">
