@@ -3,13 +3,20 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { VitePWA } from 'vite-plugin-pwa';
 
+function normalizeBasePath(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed || trimmed === '/') return '/';
+  const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return withLeadingSlash.endsWith('/') ? withLeadingSlash : `${withLeadingSlash}/`;
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const isDemo = mode === 'demo';
-  const basePath = process.env.VITE_APP_BASE_PATH || '/';
+  const basePath = normalizeBasePath(process.env.VITE_APP_BASE_PATH || '/');
 
   return {
-  base: isDemo ? basePath : '/',
+  base: basePath,
   plugins: [
     react(),
     VitePWA({
@@ -23,7 +30,8 @@ export default defineConfig(({ mode }) => {
         theme_color: '#1A1A1A',
         background_color: '#1A1A1A',
         display: 'standalone',
-        start_url: '/',
+        start_url: basePath,
+        scope: basePath,
         lang: 'id',
         icons: [
           {
@@ -43,21 +51,12 @@ export default defineConfig(({ mode }) => {
         // Activate new SW immediately — no waiting for tab close
         skipWaiting: true,
         clientsClaim: true,
-        // Precache all built assets except index.html (must be network-first)
-        globPatterns: ['**/*.{js,css,ico,png,svg,woff,woff2}'],
+        // Precache app shell so offline startup can always load index.html
+        globPatterns: ['**/*.{html,js,css,ico,png,svg,woff,woff2}'],
         // SPA navigation fallback
-        navigateFallback: '/index.html',
+        navigateFallback: `${basePath}index.html`,
         navigateFallbackDenylist: [/^\/config\.js/],
         runtimeCaching: [
-          {
-            // index.html — NetworkFirst so new deploys are picked up
-            urlPattern: ({ request }) => request.mode === 'navigate',
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'html-cache',
-              networkTimeoutSeconds: 3,
-            },
-          },
           {
             // Google Fonts — CacheFirst, max 30 days
             urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
@@ -118,3 +117,4 @@ export default defineConfig(({ mode }) => {
   },
 };
 });
+
