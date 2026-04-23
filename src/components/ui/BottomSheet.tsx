@@ -397,8 +397,8 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
               onClick={onClose}
               className={cn(
                 'ml-3 mt-0.5 p-1.5 -mr-1',
-                'border-2 border-[#555555]',
-                'hover:bg-brutal-black hover:text-brutal-yellow',
+                'bg-red-500 text-red-50',
+                'hover:bg-red-600 hover:text-red-60',
                 'active:translate-x-0.5 active:translate-y-0.5',
                 'transition-all duration-150',
               )}

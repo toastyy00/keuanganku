@@ -914,7 +914,7 @@ const DashboardPage: React.FC = () => {
             {recentExpenses.map((e) => {
               const cat = categories.find((c) => c.slug === e.category);
               return (
-                <Card key={e.id} className="!shadow-[4px_4px_0_0_#000]">
+                <Card key={e.id} className="!shadow-[3px_3px_0_0_#000]">
                   <div className="flex items-center gap-2.5 px-3 py-1.5">
                     <span className="text-xl w-8 shrink-0 text-center">
                       {e.type === 'TRANSFER' ? '\u{1F4B8}' : (cat?.emoji ?? '\u{1F6CD}\uFE0F')}

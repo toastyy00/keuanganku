@@ -32,6 +32,15 @@ const RIGHT_ITEMS = [
 // All items in order — used for slide-direction calculation
 const ALL_ITEMS = [...LEFT_ITEMS, ...RIGHT_ITEMS];
 
+const SWIPE_MIN_DISTANCE_BASE = 72;
+const SWIPE_MIN_DISTANCE_MAX = 96;
+const SWIPE_MIN_DISTANCE_SCREEN_RATIO = 0.18;
+const SWIPE_FLICK_MIN_DISTANCE = 44;
+const SWIPE_FLICK_MIN_VELOCITY = 0.55; // px/ms
+const SWIPE_HORIZONTAL_RATIO = 1.8;
+const SWIPE_FLICK_HORIZONTAL_RATIO = 1.4;
+const SWIPE_SCROLL_GUARD_PX = 16;
+
 // ============================================================
 //  Per-route FAB icon & action config
 // ============================================================
@@ -65,6 +74,7 @@ const Layout: React.FC = () => {
   const mainContentRef = useRef<HTMLElement | null>(null);
   const scrollPositions = useRef<Record<string, number>>({});
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const touchGestureMetaRef = useRef<{ startedAt: number; maxAbsX: number; maxAbsY: number } | null>(null);
   const isPinchGestureRef = useRef(false);
   const activeScrollPathRef = useRef(location.pathname);
   const restoreFrameRef = useRef<number | null>(null);
@@ -178,6 +188,15 @@ const Layout: React.FC = () => {
 
   const isBottomSheetActive = () =>
     document.body.dataset.bottomSheetOpen === 'true';
+  const clearSwipeTracking = () => {
+    touchStartRef.current = null;
+    touchGestureMetaRef.current = null;
+  };
+  const getSwipeMinDistance = () => {
+    if (typeof window === 'undefined') return SWIPE_MIN_DISTANCE_BASE;
+    const adaptiveDistance = Math.round(window.innerWidth * SWIPE_MIN_DISTANCE_SCREEN_RATIO);
+    return Math.min(SWIPE_MIN_DISTANCE_MAX, Math.max(SWIPE_MIN_DISTANCE_BASE, adaptiveDistance));
+  };
 
   React.useEffect(() => {
     const prev = previousActiveIndexRef.current;
@@ -304,46 +323,81 @@ const Layout: React.FC = () => {
         }}
         onTouchStart={(e) => {
           if (isBottomSheetActive()) {
-            touchStartRef.current = null;
+            clearSwipeTracking();
             isPinchGestureRef.current = false;
             return;
           }
-          if ((e.target as HTMLElement).closest('[data-no-swipe="true"]')) return;
+          if ((e.target as HTMLElement).closest('[data-no-swipe="true"]')) {
+            clearSwipeTracking();
+            isPinchGestureRef.current = false;
+            return;
+          }
           if (e.touches.length > 1) {
-            touchStartRef.current = null;
+            clearSwipeTracking();
             isPinchGestureRef.current = true;
             return;
           }
           isPinchGestureRef.current = false;
           const touch = e.touches[0];
           touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+          touchGestureMetaRef.current = {
+            startedAt: Date.now(),
+            maxAbsX: 0,
+            maxAbsY: 0,
+          };
         }}
         onTouchMove={(e) => {
           if (e.touches.length > 1) {
-            touchStartRef.current = null;
+            clearSwipeTracking();
             isPinchGestureRef.current = true;
+            return;
           }
+          if (!touchStartRef.current || !touchGestureMetaRef.current) return;
+          const deltaX = e.touches[0].clientX - touchStartRef.current.x;
+          const deltaY = e.touches[0].clientY - touchStartRef.current.y;
+          touchGestureMetaRef.current.maxAbsX = Math.max(touchGestureMetaRef.current.maxAbsX, Math.abs(deltaX));
+          touchGestureMetaRef.current.maxAbsY = Math.max(touchGestureMetaRef.current.maxAbsY, Math.abs(deltaY));
         }}
         onTouchEnd={(e) => {
           if (isBottomSheetActive()) {
-            touchStartRef.current = null;
+            clearSwipeTracking();
             isPinchGestureRef.current = false;
             return;
           }
-          if ((e.target as HTMLElement).closest('[data-no-swipe="true"]')) return;
+          if ((e.target as HTMLElement).closest('[data-no-swipe="true"]')) {
+            clearSwipeTracking();
+            isPinchGestureRef.current = false;
+            return;
+          }
           if (isPinchGestureRef.current) {
-            touchStartRef.current = null;
+            clearSwipeTracking();
             isPinchGestureRef.current = false;
             return;
           }
           if (!touchStartRef.current) return;
-          
+
           const deltaX = e.changedTouches[0].clientX - touchStartRef.current.x;
           const deltaY = e.changedTouches[0].clientY - touchStartRef.current.y;
-          touchStartRef.current = null;
-          
-          // Require mostly horizontal movement and a minimum distance (e.g. 50px)
-          if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+          const absX = Math.abs(deltaX);
+          const absY = Math.abs(deltaY);
+          const elapsedMs = Math.max(1, Date.now() - (touchGestureMetaRef.current?.startedAt ?? Date.now()));
+          const velocityX = absX / elapsedMs;
+          const horizontalRatio = absY === 0 ? Number.POSITIVE_INFINITY : absX / absY;
+          const minDistance = getSwipeMinDistance();
+          const isLongIntentionalSwipe =
+            absX >= minDistance && horizontalRatio >= SWIPE_HORIZONTAL_RATIO;
+          const isIntentionalFlick =
+            absX >= SWIPE_FLICK_MIN_DISTANCE &&
+            velocityX >= SWIPE_FLICK_MIN_VELOCITY &&
+            horizontalRatio >= SWIPE_FLICK_HORIZONTAL_RATIO;
+          const isLikelyVerticalScroll =
+            (touchGestureMetaRef.current?.maxAbsY ?? absY) >= SWIPE_SCROLL_GUARD_PX &&
+            (touchGestureMetaRef.current?.maxAbsY ?? absY) >
+              (touchGestureMetaRef.current?.maxAbsX ?? absX);
+
+          clearSwipeTracking();
+
+          if ((isLongIntentionalSwipe || isIntentionalFlick) && !isLikelyVerticalScroll) {
             if (activeIndex !== -1) {
               if (deltaX > 0 && activeIndex > 0) {
                 // Swipe right -> go to previous

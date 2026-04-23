@@ -156,7 +156,7 @@ function longDate(isoDate: string): string {
 }
 
 const QUICK_PROMPTS: Array<{ intent: InsightIntent; label: string; icon: React.ReactNode }> = [
-  { intent: 'combined', label: 'Review', icon: <Sparkles size={16} strokeWidth={2.5} /> },
+  { intent: 'combined', label: 'Analisis', icon: <Sparkles size={16} strokeWidth={2.5} /> },
   { intent: 'breakdown', label: 'Breakdown', icon: <Layers size={16} strokeWidth={2.5} /> },
   { intent: 'deep_analysis', label: 'Analisis AI', icon: <Bot size={16} strokeWidth={2.5} /> },
 ];
@@ -1794,7 +1794,7 @@ const HistoryPage: React.FC = () => {
                           setInsightScope({ type: 'all', label: 'Semua' });
                         }
                       }}
-                      className="min-h-[38px] px-1 py-1 flex items-center justify-center text-center text-[8px] sm:text-[9px] font-black uppercase leading-[1.05] tracking-[0.08em] border-2 transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5"
+                      className="min-h-[30px] px-1 py-1 flex items-center justify-center text-center text-[8px] sm:text-[9px] font-black uppercase leading-[1.05] tracking-[0.08em] border-2 transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5"
                       style={{
                         borderColor: isActive ? opt.color : '#555555',
                         color: isActive ? opt.color : '#A09890',

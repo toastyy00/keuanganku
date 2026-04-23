@@ -607,7 +607,7 @@ export function buildCombinedInsight(params: HistoryInsightParams): HistoryInsig
   ];
 
   return {
-    title: `Review ${filterLabel === 'Semua' ? '' : `${filterLabel.toLowerCase()} `}${scopeLabel}`.trim(),
+    title: `Analisis ${filterLabel === 'Semua' ? '' : `${filterLabel.toLowerCase()} `}${scopeLabel}`.trim(),
     summary: summaryParts.join(' '),
     highlights: highlights.filter((h): h is string => h !== null && h !== undefined && h !== ''),
     actions: actions.filter((a): a is string => a !== null && a !== undefined && a !== ''),
