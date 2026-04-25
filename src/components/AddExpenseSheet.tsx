@@ -282,13 +282,13 @@ const AddExpenseSheet: React.FC = () => {
                   key={item.id}
                   type="button"
                   onClick={() => handleTypeChange(item.id as ExpenseType)}
-                  className="flex-1 flex items-center justify-center py-2 px-0.5 border-2 font-black uppercase text-sm transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5"
+                  className="flex-1 flex items-center justify-center py-2 px-0.5 border-2 font-black uppercase text-sm transition-[transform,box-shadow,border-color,color,background-color] duration-150 ease-out [box-shadow:3px_3px_0px_0px_var(--chip-shadow)] active:translate-x-[3px] active:translate-y-[3px] active:[box-shadow:0px_0px_0px_0px_transparent]"
                   style={{
                     borderColor: isActive ? item.color : '#555555',
                     color: isActive ? item.color : '#A09890',
-                    boxShadow: isActive ? `3px 3px 0px 0px ${item.color}` : 'none',
                     backgroundColor: isActive ? '#1A1A1A' : 'transparent',
-                  }}
+                    '--chip-shadow': isActive ? item.color : 'transparent',
+                  } as React.CSSProperties & { '--chip-shadow': string }}
                 >
                   <span className="inline-block min-w-[54px] text-center leading-none">
                     {item.label}

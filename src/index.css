@@ -236,6 +236,14 @@
     transition: opacity 150ms ease-out;
   }
 
+  @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    .bottom-sheet-overlay {
+      background-color: rgba(0, 0, 0, 0.45);
+      -webkit-backdrop-filter: blur(4px);
+      backdrop-filter: blur(4px);
+    }
+  }
+
   .bottom-sheet-overlay[data-state="open"] {
     opacity: 1;
   }

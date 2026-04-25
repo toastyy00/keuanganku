@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 import { Link } from 'react-router-dom';
-import { TrendingUp, TrendingDown, Minus, CalendarClock, Target } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, CalendarClock } from 'lucide-react';
 import { Card, CardBody } from '../components/ui/Card';
 import NumberFlow, { continuous } from '@number-flow/react';
 import { SkeletonDashboard } from '../components/SkeletonCard';
@@ -199,7 +199,7 @@ function SwipeCarousel({
               aria-label={`Go to slide ${i + 1}`}
             >
               <div
-                className={`h-1.5 rounded-full transition-all duration-300 ease-out ${active === i ? 'w-3.5 opacity-100' : 'w-1.5 opacity-40 bg-white'}`}
+                className={`h-1 rounded-full transition-all duration-300 ease-out ${active === i ? 'w-3.5 opacity-100' : 'w-1.5 opacity-40 bg-white'}`}
                 style={active === i ? { backgroundColor: accentColors?.[i] ?? '#FFFFFF' } : undefined}
               />
             </button>
@@ -483,11 +483,25 @@ const DashboardPage: React.FC = () => {
     if (pct >= 70) return { text: 'text-yellow-400', bar: '#FACC15', swatch: 'bg-yellow-400', over: false };
     return { text: 'text-green-400', bar: '#4ADE80', swatch: 'bg-green-400', over: false };
   }
+
+  function withAlpha(hex: string, alpha: number) {
+    const normalized = hex.replace('#', '');
+    if (normalized.length !== 6) return hex;
+
+    const r = Number.parseInt(normalized.slice(0, 2), 16);
+    const g = Number.parseInt(normalized.slice(2, 4), 16);
+    const b = Number.parseInt(normalized.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  function budgetTrackColor(color: string) {
+    return withAlpha(color, 0.28);
+  }
+
   const bc = budgetColor(budgetSpentPct);
   const fc = budgetColor(familySpentPct);
 
   const hasBudget = personalMonthlyBudget > 0 || familySupportMonthlyBudget > 0;
-  const dashboardDarkShadow = '3px 3px 0px 0px #746C62';
 
 
 
@@ -526,7 +540,7 @@ const DashboardPage: React.FC = () => {
 
       {/* Stats Carousel (Total Bulan Ini + vs Bulan Lalu) */}
       {/* neo-card border/shadow wrapper, overflow-hidden so slides clip properly */}
-      <div className="neo-card overflow-hidden !p-0">
+      <div className="neo-card overflow-hidden !p-0 !border-0 !shadow-[4px_4px_0_0_#F5F0E8]">
         <SwipeCarousel
           accentColors={['#1A1A1A', '#B8F55A']}
           slides={[
@@ -681,7 +695,7 @@ const DashboardPage: React.FC = () => {
       </div>
 
       {/* Needs vs Wants + Budget Carousel */}
-      <div className="neo-card overflow-hidden !p-0" style={{ boxShadow: dashboardDarkShadow }}>
+      <div className="neo-card overflow-hidden !p-0 !border-0 !shadow-[4px_4px_0_0_#fafefe99]">
         <SwipeCarousel
           variant="dots"
           disableHint
@@ -731,8 +745,7 @@ const DashboardPage: React.FC = () => {
             ...(hasBudget ? [
               <div className="px-4 py-3">
                 {/* Title row matches the Needs vs Wants label height */}
-                <p className="text-xs font-black uppercase tracking-wider mb-3 text-brutal-black/60 flex items-center gap-1.5">
-                  <Target size={11} strokeWidth={2.5} className="shrink-0" />
+                <p className="text-xs font-black uppercase tracking-wider mb-3 text-brutal-black/60">
                   Budget Bulanan
                 </p>
 
@@ -750,7 +763,10 @@ const DashboardPage: React.FC = () => {
                           </div>
                           <span className={`text-[11px] font-black ${bc.text}`}>{budgetSpentPct}%</span>
                         </div>
-                        <div className="h-2 overflow-hidden bg-[#111111]">
+                        <div
+                          className="h-2 overflow-hidden"
+                          style={{ backgroundColor: budgetTrackColor(bc.bar) }}
+                        >
                           <div
                             className="h-full transition-all duration-700 ease-out"
                             style={{
@@ -790,7 +806,10 @@ const DashboardPage: React.FC = () => {
                           </div>
                           <span className={`text-[11px] font-black ${fc.text}`}>{familySpentPct}%</span>
                         </div>
-                        <div className="h-2 overflow-hidden bg-[#111111]">
+                        <div
+                          className="h-2 overflow-hidden"
+                          style={{ backgroundColor: budgetTrackColor(fc.bar) }}
+                        >
                           <div
                             className="h-full transition-all duration-700 ease-out float-right"
                             style={{
@@ -831,7 +850,7 @@ const DashboardPage: React.FC = () => {
           state={{ fromDashboardCashout: true }}
           className="block group select-none"
         >
-          <Card className="border-[#f5f0e812] bg-[#242424] !shadow-[4px_4px_0_0_#000] transition-[transform,box-shadow] duration-150 md:group-hover:-translate-y-0.5 md:group-hover:!shadow-[4px_6px_0_0_#000] group-active:translate-y-[4px] group-active:translate-x-[4px] group-active:!shadow-none md:group-active:!translate-y-[4px] md:group-active:!translate-x-[4px] md:group-active:!shadow-none">
+          <Card className="!border-0 border-[#f5f0e812] bg-[#242424] !shadow-[4px_4px_0_0_#fafefe99] transition-[transform,box-shadow] duration-150 md:group-hover:-translate-y-0.5 md:group-hover:!shadow-[6px_8px_0_0_#fafefe99] group-active:translate-y-[4px] group-active:translate-x-[4px] group-active:!shadow-none md:group-active:!translate-y-[4px] md:group-active:!translate-x-[4px] md:group-active:!shadow-none">
             <CardBody>
               <div className="flex items-start gap-3">
                 <div>
@@ -865,15 +884,15 @@ const DashboardPage: React.FC = () => {
                 className="block group select-none"
                 aria-label={`Lihat semua pengeluaran ${cat?.label ?? slug}`}
               >
-                <Card className="!shadow-[4px_4px_0_0_#000] p-3 transition-[transform,box-shadow] duration-150 md:group-hover:-translate-y-0.5 md:group-hover:!shadow-[4px_6px_0_0_#000] group-active:translate-y-[4px] group-active:translate-x-[4px] group-active:!shadow-none md:group-active:!translate-y-[4px] md:group-active:!translate-x-[4px] md:group-active:!shadow-none">
+                <Card className="!shadow-[1.5px_1.5px_0_0_#fafefe99] p-3 transition-[transform,box-shadow] duration-150 md:group-hover:-translate-y-0.5 md:group-hover:!shadow-[3px_4px_0_0_#fafefe99] group-active:translate-y-[4px] group-active:translate-x-[4px] group-active:!shadow-none md:group-active:!translate-y-[4px] md:group-active:!translate-x-[4px] md:group-active:!shadow-none">
                   <div className="flex items-center gap-3">
                     <span className="text-2xl w-9 shrink-0 text-center">{cat?.emoji ?? '\u{1F6CD}\uFE0F'}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center justify-between mb-1 -translate-y-[1px]">
                         <span className="text-sm font-bold truncate">{cat?.label ?? slug}</span>
                         <span className="text-sm font-black shrink-0 ml-2">{fmt(amount)}</span>
                       </div>
-                      <div className="h-2 border-2 border-[#555555] overflow-hidden">
+                      <div className="h-1 overflow-hidden bg-brutal-black/15">
                         <div className="h-full bg-brutal-black transition-all duration-500" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
@@ -914,7 +933,7 @@ const DashboardPage: React.FC = () => {
             {recentExpenses.map((e) => {
               const cat = categories.find((c) => c.slug === e.category);
               return (
-                <Card key={e.id} className="!shadow-[3px_3px_0_0_#000]">
+                <Card key={e.id} className="!shadow-[1px_1px_0_0_#fafefe99]">
                   <div className="flex items-center gap-2.5 px-3 py-1.5">
                     <span className="text-xl w-8 shrink-0 text-center">
                       {e.type === 'TRANSFER' ? '\u{1F4B8}' : (cat?.emoji ?? '\u{1F6CD}\uFE0F')}

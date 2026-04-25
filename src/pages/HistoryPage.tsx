@@ -16,7 +16,6 @@ import {
   CalendarDays,
   History,
 } from 'lucide-react';
-import { Badge } from '../components/ui/Badge';
 import { BottomSheet } from '../components/ui/BottomSheet';
 import { useExpenseStore } from '../store/useExpenseStore';
 import { useUIStore } from '../store/useAppStore';
@@ -817,7 +816,12 @@ const HistoryPage: React.FC = () => {
     const pendingDelete = pendingDeletes[expense.id];
     const pendingElapsedMs = pendingDelete ? Math.max(0, Date.now() - pendingDelete.startedAt) : 0;
     const pendingAnimationDelayMs = Math.min(HISTORY_DELETE_UNDO_MS, pendingElapsedMs);
-    const badgeVariant = expense.type === 'NEED' ? 'need' : expense.type === 'WANT' ? 'want' : 'transfer';
+    const typeEmojiBg =
+      expense.type === 'NEED'
+        ? '#3B82F6'
+        : expense.type === 'WANT'
+          ? '#EC4899'
+          : '#FB923C';
     const isDeleteState = Boolean(pendingDelete || isDeleting);
     const deleteStateCardStyle = pendingDelete
       ? { backgroundColor: '#EF4444', border: 'none' }
@@ -827,9 +831,9 @@ const HistoryPage: React.FC = () => {
 
     return (
       <div
-        className={`neo-card overflow-hidden !shadow-[4px_4px_0_0_#000000] ${isDeleteState
+        className={`neo-card overflow-hidden !shadow-[1.8px_1.8px_0_0_#fafefe99] ${isDeleteState
           ? 'transition-colors duration-150'
-          : 'transition-[transform,box-shadow] duration-150 md:hover:-translate-y-0.5 md:hover:!shadow-[4px_6px_0_0_#000000] active:translate-y-[4px] active:translate-x-[4px] active:!shadow-none md:active:!translate-y-[4px] md:active:!translate-x-[4px] md:active:!shadow-none'
+          : 'transition-[transform,box-shadow] duration-150 md:hover:-translate-y-0.5 md:hover:!shadow-[3px_4px_0_0_#fafefe99] active:translate-y-[4px] active:translate-x-[4px] active:!shadow-none md:active:!translate-y-[4px] md:active:!translate-x-[4px] md:active:!shadow-none'
           }`}
         style={deleteStateCardStyle}
       >
@@ -892,7 +896,19 @@ const HistoryPage: React.FC = () => {
             className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors duration-150 cursor-pointer md:hover:bg-[rgba(245,240,232,0.04)] active:bg-[rgba(245,240,232,0.06)]"
             style={{ color: '#F5F0E8' }}
           >
-            <span className="text-2xl w-9 shrink-0 text-center">
+            <span
+              className="text-[1.7rem] w-[38px] h-[38px] shrink-0 flex items-center justify-center rounded-[4px]"
+              style={{
+                background: `linear-gradient(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.18)), ${typeEmojiBg}`,
+                textShadow: [
+                  '0 0.5px 0 rgba(255, 255, 255, 0.48)',
+                  '0 1px 0 rgba(255, 255, 255, 0.22)',
+                  '0 1.5px 1.5px rgba(0, 0, 0, 0.5)',
+                  '0 3px 3px rgba(0, 0, 0, 0.32)',
+                ].join(', '),
+                filter: 'drop-shadow(0 1px 0 rgba(255,255,255,0.18)) drop-shadow(0 2px 2px rgba(0,0,0,0.35))',
+              }}
+            >
               {expense.type === 'TRANSFER' ? '\u{1F4B8}' : (cat?.emoji ?? '\u{1F6CD}\uFE0F')}
             </span>
             <div className="flex-1 min-w-0">
@@ -905,7 +921,6 @@ const HistoryPage: React.FC = () => {
                 )}
               </div>
               <div className="flex items-center gap-1.5 mt-1.5 min-w-0 flex-nowrap">
-                <Badge variant={badgeVariant} size="sm" className="shrink-0">{expense.type}</Badge>
                 {expense.type === 'TRANSFER' && expense.destination ? (
                   <span className="shrink-0 text-[10px] text-brutal-black/50 font-medium truncate max-w-[96px]">{'\u25b8'} {expense.destination}</span>
                 ) : null}
@@ -1358,27 +1373,27 @@ const HistoryPage: React.FC = () => {
                     setCatFilter(new Set());
                   }
                 }}
-                className="shrink-0 flex items-center justify-center gap-1.5 px-2.5 py-1 border-2 font-black uppercase text-xs tracking-wider transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5"
+                className="shrink-0 flex items-center justify-center gap-1.5 px-2.5 py-1 border-2 font-black uppercase text-xs tracking-wider transition-[transform,box-shadow,border-color,color,background-color] duration-150 ease-out [box-shadow:3px_3px_0px_0px_var(--chip-shadow)] active:translate-x-[3px] active:translate-y-[3px] active:[box-shadow:0px_0px_0px_0px_transparent]"
                 style={{
                   borderColor: isActive ? f.color : '#555555',
                   color: isActive ? f.color : '#A09890',
-                  boxShadow: isActive ? `3px 3px 0px 0px ${f.color}` : 'none',
                   backgroundColor: isActive ? '#1A1A1A' : 'transparent',
-                }}
+                  '--chip-shadow': isActive ? f.color : 'transparent',
+                } as React.CSSProperties & { '--chip-shadow': string }}
               >
                 {f.label}
               </button>
             );
           })}
           <button
-            onClick={() => setViewMode(viewMode === 'flow' ? 'list' : 'flow')}
-            className="shrink-0 flex items-center justify-center gap-1.5 px-2.5 py-1 border-2 font-black uppercase text-xs tracking-wider transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5"
+            onClick={() => setViewMode('flow')}
+            className="shrink-0 flex items-center justify-center gap-1.5 px-2.5 py-1 border-2 font-black uppercase text-xs tracking-wider transition-[transform,box-shadow,border-color,color,background-color] duration-150 ease-out [box-shadow:3px_3px_0px_0px_var(--chip-shadow)] active:translate-x-[3px] active:translate-y-[3px] active:[box-shadow:0px_0px_0px_0px_transparent]"
             style={{
               borderColor: viewMode === 'flow' ? '#F87171' : '#555555',
               color: viewMode === 'flow' ? '#F87171' : '#A09890',
-              boxShadow: viewMode === 'flow' ? '3px 3px 0px 0px #F87171' : 'none',
               backgroundColor: viewMode === 'flow' ? '#1A1A1A' : 'transparent',
-            }}
+              '--chip-shadow': viewMode === 'flow' ? '#F87171' : 'transparent',
+            } as React.CSSProperties & { '--chip-shadow': string }}
           >
             Flow
           </button>

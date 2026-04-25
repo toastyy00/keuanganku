@@ -13,6 +13,7 @@ import {
 import { cn } from '../lib/utils';
 import { isDemoMode } from '../lib/appConfig';
 import { useUIStore } from '../store';
+import { useAuthStore } from '../store/useAuthStore';
 
 // ============================================================
 //  NAV ITEMS config  (without FAB slot — inserted via JSX)
@@ -61,10 +62,22 @@ const Layout: React.FC = () => {
     openHistoryInsight,
     openRecurringSheet,
   } = useUIStore();
+  const user = useAuthStore((state) => state.user);
 
   const navigate = useNavigate();
   const location = useLocation();
   const demoMode = isDemoMode();
+  const sidebarUserName = (() => {
+    const fromMeta = typeof user?.user_metadata?.display_name === 'string'
+      ? user.user_metadata.display_name.trim()
+      : '';
+    if (fromMeta) return fromMeta;
+
+    const fromEmail = user?.email?.split('@')[0]?.trim() ?? '';
+    if (fromEmail) return fromEmail;
+
+    return demoMode ? 'Demo User' : 'User';
+  })();
 
   const [isMinimized, setIsMinimized] = useState(
     () => localStorage.getItem('sidebar_min') === 'true'
@@ -296,14 +309,14 @@ const Layout: React.FC = () => {
           ))}
         </nav>
 
-        {/* Footer: version */}
+        {/* Footer: account name */}
         {!isMinimized && (
           <div
             className="py-3 px-4 border-t-4"
             style={{ borderColor: '#3A3A3A' }}
           >
             <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#3A3A3A' }}>
-              v0.1.0-alpha
+              {sidebarUserName}
             </p>
           </div>
         )}
