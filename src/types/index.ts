@@ -90,3 +90,36 @@ export interface RecurringRepository {
   update(id: string, data: Partial<RecurringTemplate>): Promise<RecurringTemplate>;
   delete(id: string): Promise<void>;
 }
+
+export interface PortfolioPocket {
+  id: string;
+  name: string;
+  source_type: 'CEX' | 'WEB3' | 'WALLET' | 'LAINNYA';
+  source?: string;
+  color_theme: string;
+  icon: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface PortfolioAsset {
+  id: string;
+  pocket_id: string;
+  ticker: string;
+  coingecko_id?: string;
+  amount: number;
+  created_at: string;
+}
+
+export interface PortfolioActivityLog {
+  id: string;
+  pocket_id: string;
+  asset_id: string;
+  ticker: string;
+  action: 'ADD' | 'REDUCE';
+  amount_change: number;
+  balance_after: number;
+  price_at_time: number;
+  note?: string;
+  created_at: string;
+}

@@ -503,6 +503,16 @@
 
 @layer utilities { .scrollbar-none::-webkit-scrollbar { display: none; } .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; } }
 
+/* Portfolio mobile tap responsiveness:
+   force immediate tap interaction so press animation appears on quick touch. */
+.portfolio-touch button,
+.portfolio-touch [role="button"] {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
 
 body.flow-mode-active::-webkit-scrollbar { display: none; }
 body.flow-mode-active * { scrollbar-width: none; -ms-overflow-style: none; }

@@ -1,15 +1,42 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Category, Expense, RecurringTemplate } from '../types';
+import type {
+  Category,
+  Expense,
+  PortfolioActivityLog,
+  PortfolioAsset,
+  PortfolioPocket,
+  RecurringTemplate
+} from '../types';
 import { getSupabaseClientAsync } from './supabase';
 import { GUEST_DATA_SCOPE, getActiveDataScope, scopedDataKey } from './dataScope';
 import { readIDB, readIDBValue, writeIDB, writeIDBValue } from './idb-storage';
 import { useAuthStore } from '../store/useAuthStore';
+import {
+  applyPortfolioActivityLogOp,
+  applyPortfolioAssetOp,
+  applyPortfolioPocketOp,
+  pullPortfolioActivityLog,
+  pullPortfolioAssets,
+  pullPortfolioPockets
+} from './portfolio-sync';
 
-type SyncEntity = 'expenses' | 'categories' | 'recurring';
+type SyncEntity =
+  | 'expenses'
+  | 'categories'
+  | 'recurring'
+  | 'portfolio_pockets'
+  | 'portfolio_assets'
+  | 'portfolio_activity_log';
 type SyncKind = 'upsert' | 'delete';
 
-type SyncPayload = Expense | Category | RecurringTemplate;
+type SyncPayload =
+  | Expense
+  | Category
+  | RecurringTemplate
+  | PortfolioPocket
+  | PortfolioAsset
+  | PortfolioActivityLog;
 
 interface SyncOperation {
   opId: string;
@@ -44,6 +71,9 @@ const BASE_KEYS = {
   expenses: 'expenses',
   categories: 'categories',
   recurring: 'recurring',
+  portfolio_pockets: 'portfolio_pockets',
+  portfolio_assets: 'portfolio_assets',
+  portfolio_activity_log: 'portfolio_activity_log',
 } as const;
 const PULL_PAGE_SIZE = 500;
 const SYNC_COOLDOWN_MS = 20_000;
@@ -410,6 +440,15 @@ async function applyOperation(client: SupabaseClient, userId: string, op: SyncOp
       return;
     case 'recurring':
       await applyRecurringOperation(client, userId, op);
+      return;
+    case 'portfolio_pockets':
+      await applyPortfolioPocketOp(client, userId, op);
+      return;
+    case 'portfolio_assets':
+      await applyPortfolioAssetOp(client, userId, op);
+      return;
+    case 'portfolio_activity_log':
+      await applyPortfolioActivityLogOp(client, userId, op);
       return;
     default:
       return;
@@ -789,15 +828,31 @@ async function pullFromRemote(scope: string, client: SupabaseClient): Promise<{ 
   const expensesResult = await pullExpenses(scope, client, meta.cursorByEntity.expenses);
   const categoriesResult = await pullCategories(scope, client, meta.cursorByEntity.categories);
   const recurringResult = await pullRecurring(scope, client, meta.cursorByEntity.recurring);
+  const pocketsResult = await pullPortfolioPockets(scope, client, meta.cursorByEntity.portfolio_pockets);
+  const assetsResult = await pullPortfolioAssets(scope, client, meta.cursorByEntity.portfolio_assets);
+  const activityResult = await pullPortfolioActivityLog(scope, client, meta.cursorByEntity.portfolio_activity_log);
 
   if (expensesResult.cursor) meta.cursorByEntity.expenses = expensesResult.cursor;
   if (categoriesResult.cursor) meta.cursorByEntity.categories = categoriesResult.cursor;
   if (recurringResult.cursor) meta.cursorByEntity.recurring = recurringResult.cursor;
+  if (pocketsResult.cursor) meta.cursorByEntity.portfolio_pockets = pocketsResult.cursor;
+  if (assetsResult.cursor) meta.cursorByEntity.portfolio_assets = assetsResult.cursor;
+  if (activityResult.cursor) meta.cursorByEntity.portfolio_activity_log = activityResult.cursor;
   await writeMeta(scope, meta);
 
   return {
-    pulled: expensesResult.pulled + categoriesResult.pulled + recurringResult.pulled,
-    changed: expensesResult.changed || categoriesResult.changed || recurringResult.changed,
+    pulled: expensesResult.pulled
+      + categoriesResult.pulled
+      + recurringResult.pulled
+      + pocketsResult.pulled
+      + assetsResult.pulled
+      + activityResult.pulled,
+    changed: expensesResult.changed
+      || categoriesResult.changed
+      || recurringResult.changed
+      || pocketsResult.changed
+      || assetsResult.changed
+      || activityResult.changed,
   };
 }
 

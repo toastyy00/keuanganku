@@ -66,6 +66,7 @@ const Layout: React.FC = () => {
 
   const navigate = useNavigate();
   const location = useLocation();
+  const isPortfolioRoute = location.pathname === '/portfolio' || location.pathname.startsWith('/portfolio/');
   const demoMode = isDemoMode();
   const sidebarUserName = (() => {
     const fromMeta = typeof user?.user_metadata?.display_name === 'string'
@@ -427,7 +428,7 @@ const Layout: React.FC = () => {
           <Outlet />
         </div>
         {/* Spacer so mobile content clears the bottom nav/FAB — not needed for /history which manages its own */}
-        {location.pathname !== '/history' && (
+        {location.pathname !== '/history' && !isPortfolioRoute && (
           <div
             className="md:hidden"
             style={{ height: 'calc(76px + env(safe-area-inset-bottom, 0px))' }}
@@ -437,6 +438,8 @@ const Layout: React.FC = () => {
       </main>
 
       {/* ── Desktop FAB ── */}
+      {!isPortfolioRoute && (
+        <>
       <button
         className="fab hidden md:flex"
         onClick={fab.action}
@@ -548,6 +551,8 @@ const Layout: React.FC = () => {
           </div>
         </nav>
       </div>
+        </>
+      )}
     </div>
   );
 };

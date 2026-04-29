@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
-import { Link } from 'react-router-dom';
-import { TrendingUp, TrendingDown, Minus, CalendarClock } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { TrendingUp, TrendingDown, Minus, CalendarClock, WalletCards } from 'lucide-react';
 import { Card, CardBody } from '../components/ui/Card';
 import NumberFlow, { continuous } from '@number-flow/react';
 import { SkeletonDashboard } from '../components/SkeletonCard';
@@ -20,7 +20,11 @@ import type { Currency, Expense } from '../types';
 //  HELPERS
 // ============================================================
 
-function haptic() { if ('vibrate' in navigator) navigator.vibrate(10); }
+function haptic() {
+  if (!('vibrate' in navigator)) return;
+  if ('userActivation' in navigator && navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
+  navigator.vibrate(10);
+}
 
 // Swipeable Card Carousel
 const SWIPE_HINT_KEY = 'dashboard_swipe_hint_seen';
@@ -284,6 +288,7 @@ let _cachedRateInfo: RateResult = { rate: 16000, isFallback: true };
 
 const DashboardPage: React.FC = () => {
   useEffect(() => { document.title = 'Dashboard - KeuanganKu'; return () => { document.title = 'Keuanganku'; }; }, []);
+  const navigate = useNavigate();
 
   const { expenses, categories, isLoading } =
     useExpenseStore();
@@ -295,6 +300,15 @@ const DashboardPage: React.FC = () => {
   const suppressHeaderClickRef = useRef(false);
   const clearHeaderClickSuppressTimerRef = useRef<number | null>(null);
   const [dateDragging, setDateDragging] = useState(false);
+  const portfolioRevealStartYRef = useRef<number | null>(null);
+  const portfolioRevealHoldStartedAtRef = useRef<number | null>(null);
+  const portfolioRevealHoldUnlockedRef = useRef(false);
+  const portfolioRevealAnchorPxRef = useRef<number | null>(null);
+  const portfolioRevealMaxPxRef = useRef(0);
+  const portfolioRevealBasePxRef = useRef(0);
+  const [portfolioRevealPx, setPortfolioRevealPx] = useState(0);
+  const [portfolioRevealDragging, setPortfolioRevealDragging] = useState(false);
+  const [portfolioReadyToOpen, setPortfolioReadyToOpen] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -375,6 +389,88 @@ const DashboardPage: React.FC = () => {
   );
 
   const fmt = (amount: number) => formatCurrency(amount, dashCurrency);
+
+  const isAtDashboardBottom = () => {
+    const mainEl = document.getElementById('main-content');
+    if (!mainEl) return false;
+    return mainEl.scrollTop + mainEl.clientHeight >= mainEl.scrollHeight - 2;
+  };
+
+  const startPortfolioReveal = (clientY: number) => {
+    if (!isAtDashboardBottom()) {
+      portfolioRevealStartYRef.current = null;
+      return;
+    }
+    portfolioRevealStartYRef.current = clientY;
+    portfolioRevealHoldStartedAtRef.current = null;
+    portfolioRevealHoldUnlockedRef.current = false;
+    portfolioRevealAnchorPxRef.current = null;
+    portfolioRevealMaxPxRef.current = 0;
+    portfolioRevealBasePxRef.current = portfolioRevealPx;
+    setPortfolioRevealDragging(true);
+    setPortfolioReadyToOpen(false);
+  };
+
+  const movePortfolioReveal = (clientY: number) => {
+    if (portfolioRevealStartYRef.current === null) return;
+
+    const delta = portfolioRevealStartYRef.current - clientY;
+    const rawPx = Math.max(0, portfolioRevealBasePxRef.current + delta);
+    const easedPx = rawPx <= 68 ? rawPx : 68 + (rawPx - 68) ** 0.65;
+
+    portfolioRevealMaxPxRef.current = Math.max(portfolioRevealMaxPxRef.current, easedPx);
+
+    if (easedPx >= 22 && portfolioRevealHoldStartedAtRef.current === null) {
+      portfolioRevealHoldStartedAtRef.current = Date.now();
+    }
+
+    if (easedPx < 16) {
+      portfolioRevealHoldStartedAtRef.current = null;
+      portfolioRevealHoldUnlockedRef.current = false;
+      portfolioRevealAnchorPxRef.current = null;
+      setPortfolioReadyToOpen(false);
+    }
+
+    if (
+      !portfolioRevealHoldUnlockedRef.current
+      && portfolioRevealHoldStartedAtRef.current !== null
+      && Date.now() - portfolioRevealHoldStartedAtRef.current >= 220
+    ) {
+      portfolioRevealHoldUnlockedRef.current = true;
+      portfolioRevealAnchorPxRef.current = easedPx;
+    }
+
+    if (
+      portfolioRevealHoldUnlockedRef.current
+      && portfolioRevealAnchorPxRef.current !== null
+      && Math.max(0, easedPx - portfolioRevealAnchorPxRef.current) >= 20
+    ) {
+      setPortfolioReadyToOpen(true);
+    }
+
+    setPortfolioRevealPx(easedPx);
+  };
+
+  const endPortfolioReveal = () => {
+    if (portfolioRevealStartYRef.current === null) return;
+
+    const shouldOpen = portfolioReadyToOpen && portfolioRevealMaxPxRef.current >= 42 && portfolioRevealPx >= 40;
+    setPortfolioRevealPx(0);
+
+    if (shouldOpen) {
+      haptic();
+      navigate('/portfolio');
+    }
+
+    portfolioRevealStartYRef.current = null;
+    portfolioRevealHoldStartedAtRef.current = null;
+    portfolioRevealHoldUnlockedRef.current = false;
+    portfolioRevealAnchorPxRef.current = null;
+    portfolioRevealMaxPxRef.current = 0;
+    portfolioRevealBasePxRef.current = 0;
+    setPortfolioRevealDragging(false);
+    setPortfolioReadyToOpen(false);
+  };
 
   // Month prefixes used for filtering
   const nowDate = new Date();
@@ -508,7 +604,21 @@ const DashboardPage: React.FC = () => {
   if (isLoading && expenses.length === 0) return <SkeletonDashboard />;
 
   return (
-    <div className="section-pad space-y-5 max-w-2xl mx-auto">
+    <div
+      className="section-pad space-y-5 max-w-2xl mx-auto pt-5 pb-1"
+      onTouchStart={(e) => startPortfolioReveal(e.touches[0].clientY)}
+      onTouchMove={(e) => movePortfolioReveal(e.touches[0].clientY)}
+      onTouchEnd={endPortfolioReveal}
+      onMouseDown={(e) => startPortfolioReveal(e.clientY)}
+      onMouseMove={(e) => movePortfolioReveal(e.clientY)}
+      onMouseUp={endPortfolioReveal}
+      onMouseLeave={endPortfolioReveal}
+      style={{
+        transform: `translateY(${-Math.min(22, portfolioRevealPx * 0.34)}px)`,
+        transition: portfolioRevealDragging ? 'none' : 'transform 180ms cubic-bezier(0.16, 1, 0.3, 1)',
+        touchAction: portfolioRevealDragging ? 'none' : 'pan-y',
+      }}
+    >
       {/* Header */}
       <div
         className="flex items-center justify-between py-1 -mt-1 -mx-2 px-2 select-none"
@@ -952,7 +1062,61 @@ const DashboardPage: React.FC = () => {
         )}
       </div>
 
-      <div className="h-4" />
+      <div className="pb-0 pt-0 md:hidden">
+        <div
+          className="relative overflow-hidden"
+          style={{ height: `${14 + Math.min(110, portfolioRevealPx * 1.45)}px` }}
+        >
+          {portfolioRevealDragging && portfolioRevealPx >= 22 && (
+            <div className="pointer-events-none absolute inset-x-0 top-1.5 flex items-center justify-center">
+              <div
+                className="h-1 rounded-full bg-[#B8F55A] transition-all duration-150"
+                style={{
+                  width: `${28 + Math.min(90, Math.max(0, portfolioRevealPx - 22) * 2.7)}px`,
+                  boxShadow: portfolioReadyToOpen
+                    ? '0 0 0 1px #1A1A1A, 0 0 14px #B8F55A88'
+                    : '0 0 0 1px #1A1A1A, 0 0 10px #B8F55A55',
+                }}
+              />
+            </div>
+          )}
+
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0"
+            style={{
+              bottom: '14px',
+              transform: `translateY(${68 - Math.min(68, portfolioRevealPx)}px)`,
+              transition: portfolioRevealDragging ? 'none' : 'transform 180ms cubic-bezier(0.16, 1, 0.3, 1)',
+              opacity: portfolioReadyToOpen ? 1 : 0,
+            }}
+          >
+            <div
+              className="border border-dashed border-[#F5F0E8]/14 bg-[#202020]/45 px-4 py-2.5 text-[#F5F0E8]/50"
+              aria-hidden="true"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#F5F0E8]/35">
+                    Portfolio
+                  </p>
+                  <div className="mt-1 flex min-w-0 items-center gap-3">
+                    <WalletCards size={14} strokeWidth={2.3} className="shrink-0" />
+                    <div className="min-w-0">
+                      <p className="truncate text-[10px] font-black uppercase tracking-[0.14em]">
+                        Kantong Portofolio
+                      </p>
+                      <p className="truncate text-[9px] font-medium opacity-55">
+                        Web3, CEX, wallet, dan tracker aset manual
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <span className="text-[10px] font-black opacity-35">{'\u25B8'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

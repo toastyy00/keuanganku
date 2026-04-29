@@ -12,12 +12,14 @@ import { GUEST_DATA_SCOPE } from './lib/dataScope';
 import { useExpenseStore } from './store/useExpenseStore';
 import { useAuthStore } from './store/useAuthStore';
 import { useSettingsStore } from './store/useSettingsStore';
+import { usePortfolioStore } from './store/usePortfolioStore';
 
 // ============================================================
 //  LAZY PAGES
 // ============================================================
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const PortfolioPage = lazy(() => import('./pages/PortfolioPage'));
 const HistoryPage = lazy(() => import('./pages/HistoryPage'));
 const RecurringPage = lazy(() => import('./pages/RecurringPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
@@ -63,6 +65,7 @@ const AppInner: React.FC = () => {
   const cacheScope = useExpenseStore((s) => s.cacheScope);
   const ensureScope = useExpenseStore((s) => s.ensureScope);
   const ensureSettingsScope = useSettingsStore((s) => s.ensureScope);
+  const ensurePortfolioScope = usePortfolioStore((s) => s.ensureScope);
   const demoMode = isDemoMode();
   const userId = user?.id ?? null;
   const activeScope = userId ?? GUEST_DATA_SCOPE;
@@ -85,8 +88,9 @@ const AppInner: React.FC = () => {
     if (!isInitializing && _hasHydrated) {
       ensureScope(activeScope);
       ensureSettingsScope(activeScope);
+      ensurePortfolioScope(activeScope);
     }
-  }, [isInitializing, _hasHydrated, activeScope, ensureScope, ensureSettingsScope]);
+  }, [isInitializing, _hasHydrated, activeScope, ensureScope, ensureSettingsScope, ensurePortfolioScope]);
 
   // 3. Load data whenever auth state settles, hydration completes, and scope is ready
   useEffect(() => {
@@ -156,6 +160,7 @@ const AppInner: React.FC = () => {
             }
           >
             <Route index element={<DashboardPage />} />
+            <Route path="/portfolio" element={<PortfolioPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/recurring" element={<RecurringPage />} />
             <Route path="/settings" element={<SettingsPage />} />
