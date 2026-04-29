@@ -1,17 +1,27 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { PocketDetail } from '../components/portfolio/PocketDetail';
 import { PocketList } from '../components/portfolio/PocketList';
 import { usePortfolioStore } from '../store/usePortfolioStore';
 
-const ACTIVE_POCKET_KEY = 'portfolio_active_pocket';
+function slugifyPocketName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
 
 const PortfolioPage: React.FC = () => {
   const navigate = useNavigate();
+  const { pocketId } = useParams<{ pocketId?: string; slug?: string }>();
   const loadPortfolio = usePortfolioStore((s) => s.loadPortfolio);
-  const [activePocketId, setActivePocketId] = useState<string | null>(() => {
-    return sessionStorage.getItem(ACTIVE_POCKET_KEY);
-  });
+  const pockets = usePortfolioStore((s) => s.pockets);
+  const activePocketId = pocketId ?? null;
+  const activePocket = activePocketId ? pockets.find((item) => item.id === activePocketId) : undefined;
+  const hasPocket = !!activePocket;
 
   useEffect(() => {
     document.title = 'Portfolio - KeuanganKu';
@@ -21,21 +31,24 @@ const PortfolioPage: React.FC = () => {
     };
   }, [loadPortfolio]);
 
+  useEffect(() => {
+    if (!activePocketId) return;
+    if (pockets.length === 0) return;
+    if (!hasPocket) navigate('/portfolio', { replace: true });
+  }, [activePocketId, hasPocket, navigate, pockets.length]);
+
   return (
     <div className="portfolio-touch mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 pb-10 pt-6 md:px-6">
       {activePocketId ? (
         <PocketDetail
           pocketId={activePocketId}
-          onBack={() => {
-            setActivePocketId(null);
-            sessionStorage.removeItem(ACTIVE_POCKET_KEY);
-          }}
+          onBack={() => navigate('/portfolio')}
         />
       ) : (
         <PocketList
-          onOpenPocket={(pocketId) => {
-            setActivePocketId(pocketId);
-            sessionStorage.setItem(ACTIVE_POCKET_KEY, pocketId);
+          onOpenPocket={(pocket) => {
+            const slug = slugifyPocketName(pocket.name);
+            navigate(slug ? `/portfolio/${pocket.id}/${slug}` : `/portfolio/${pocket.id}`);
           }}
         />
       )}

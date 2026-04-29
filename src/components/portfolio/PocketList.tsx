@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { ArrowLeft, BriefcaseBusiness, Ellipsis, Landmark, Link2, Shield, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { usePortfolioStore } from '../../store/usePortfolioStore';
@@ -6,7 +6,7 @@ import type { PortfolioPocket } from '../../types';
 import { PocketSettingsSheet } from './PocketSettingsSheet';
 
 interface PocketListProps {
-  onOpenPocket: (pocketId: string) => void;
+  onOpenPocket: (pocket: PortfolioPocket) => void;
 }
 
 function withAlpha(hex: string, alphaHex: string): string {
@@ -40,37 +40,14 @@ const PocketList: React.FC<PocketListProps> = ({ onOpenPocket }) => {
   const [settingsPressedId, setSettingsPressedId] = useState<string | null>(null);
   const [settingsTapId, setSettingsTapId] = useState<string | null>(null);
   const [cardTapId, setCardTapId] = useState<string | null>(null);
-  const [isBackPressed, setIsBackPressed] = useState(false);
-  const backReleaseTimerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (backReleaseTimerRef.current !== null) {
-        window.clearTimeout(backReleaseTimerRef.current);
-      }
-    };
-  }, []);
 
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between pt-0.5">
         <button
           type="button"
-          onPointerDown={() => {
-            if (backReleaseTimerRef.current !== null) window.clearTimeout(backReleaseTimerRef.current);
-            setIsBackPressed(true);
-          }}
-          onPointerUp={() => {
-            if (backReleaseTimerRef.current !== null) window.clearTimeout(backReleaseTimerRef.current);
-            backReleaseTimerRef.current = window.setTimeout(() => setIsBackPressed(false), 45);
-          }}
-          onPointerLeave={() => setIsBackPressed(false)}
-          onPointerCancel={() => setIsBackPressed(false)}
-          onBlur={() => setIsBackPressed(false)}
-          onClick={() => window.setTimeout(() => navigate('/'), 28)}
-          className={`inline-flex h-9 w-9 items-center justify-center border-[3px] border-[#F5F0E8] bg-[#1E1E1E] text-[#F5F0E8] transition-[transform,box-shadow] duration-100 md:hover:-translate-y-0.5 md:hover:shadow-[6px_8px_0_0_#969696] ${
-            isBackPressed ? 'translate-x-[5px] translate-y-[5px] shadow-none' : 'shadow-[4px_4px_0_0_#969696]'
-          }`}
+          onClick={() => navigate('/')}
+          className="inline-flex h-9 w-9 items-center justify-center border-[3px] border-[#F5F0E8] bg-[#1E1E1E] text-[#F5F0E8] shadow-[4px_4px_0_0_#969696] transition-[transform,box-shadow] duration-150 md:hover:-translate-y-0.5 md:hover:shadow-[6px_8px_0_0_#969696] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none md:active:translate-x-[4px] md:active:translate-y-[4px] md:active:shadow-none"
         >
           <ArrowLeft size={16} strokeWidth={3.2} />
         </button>
@@ -108,11 +85,11 @@ const PocketList: React.FC<PocketListProps> = ({ onOpenPocket }) => {
               key={pocket.id}
               role="button"
               tabIndex={0}
-              onClick={() => onOpenPocket(pocket.id)}
+              onClick={() => onOpenPocket(pocket)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
-                  onOpenPocket(pocket.id);
+                  onOpenPocket(pocket);
                 }
               }}
               className={`group relative block w-full bg-[#1D1D1D] px-2 py-2 text-left transition-[transform,box-shadow] duration-150 ${

@@ -3,6 +3,7 @@ type HistoricalPoint = [number, number];
 type Timeframe = '24H' | '1W' | '1M' | '1Y' | 'ALL';
 
 const COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3';
+const BINANCE_BASE_URL = 'https://api.binance.com/api/v3';
 const PRICE_CACHE_TTL_MS = 30_000;
 const MAX_BATCH_SIZE = 50;
 
@@ -56,6 +57,34 @@ function timeframeToDays(timeframe: Timeframe): number {
     default:
       return 30;
   }
+}
+
+function historicalQueryForDays(days: number): { interval: '15m' | '1h' | '4h' | '1d' | '1w'; limit: number } {
+  if (days <= 1) return { interval: '15m', limit: 96 };
+  if (days <= 7) return { interval: '1h', limit: 168 };
+  if (days <= 30) return { interval: '4h', limit: 180 };
+  if (days <= 365) return { interval: '1d', limit: 365 };
+  return { interval: '1w', limit: 520 };
+}
+
+async function fetchBinanceWithBackoff(path: string, attempts = 3): Promise<Response> {
+  let lastError: Error | null = null;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      const res = await fetch(`${BINANCE_BASE_URL}${path}`, {
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (res.status !== 429) return res;
+      if (i === attempts - 1) return res;
+      await new Promise((resolve) => setTimeout(resolve, 350 * (i + 1)));
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error('Unknown Binance fetch error');
+      if (i < attempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 350 * (i + 1)));
+      }
+    }
+  }
+  throw lastError ?? new Error('Binance request failed');
 }
 
 function targetPointCount(timeframe: Timeframe, maxAvailable: number): number {
@@ -197,6 +226,29 @@ export async function fetchCurrentPrices(coingeckoIds: string[]): Promise<Curren
 
 export async function fetchHistoricalPrices(coingeckoId: string, days: number): Promise<HistoricalPoint[]> {
   if (!coingeckoId) return [];
+
+  const ticker = COINGECKO_TO_TICKER[coingeckoId] ?? coingeckoId.trim().toUpperCase();
+  const { interval, limit } = historicalQueryForDays(days);
+  if (ticker) {
+    try {
+      const params = new URLSearchParams({
+        symbol: `${ticker}USDT`,
+        interval,
+        limit: String(limit),
+      });
+      const res = await fetchBinanceWithBackoff(`/klines?${params.toString()}`);
+      if (res.ok) {
+        const klines = (await res.json()) as Array<[number, string, string, string, string, string, number]>;
+        const points = klines
+          .filter((item) => Number.isFinite(item[6]) && Number.isFinite(Number(item[4])))
+          .map((item) => [Math.round(item[6]), Number(item[4])] as HistoricalPoint);
+        if (points.length > 0) return points;
+      }
+    } catch {
+      // Fallback to CoinGecko below.
+    }
+  }
+
   const params = new URLSearchParams({
     vs_currency: 'usd',
     days: String(days),

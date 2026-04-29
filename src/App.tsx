@@ -161,6 +161,8 @@ const AppInner: React.FC = () => {
           >
             <Route index element={<DashboardPage />} />
             <Route path="/portfolio" element={<PortfolioPage />} />
+            <Route path="/portfolio/:pocketId" element={<PortfolioPage />} />
+            <Route path="/portfolio/:pocketId/:slug" element={<PortfolioPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/recurring" element={<RecurringPage />} />
             <Route path="/settings" element={<SettingsPage />} />

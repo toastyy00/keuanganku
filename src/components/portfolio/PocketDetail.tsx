@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { formatCurrency } from '../../lib/utils';
 import { usePortfolioStore } from '../../store/usePortfolioStore';
@@ -36,17 +36,18 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [scrubValue, setScrubValue] = useState<number | null>(null);
   const [scrubPointValue, setScrubPointValue] = useState<number | null>(null);
-  const [isBackPressed, setIsBackPressed] = useState(false);
+  const [isScrubbing, setIsScrubbing] = useState(false);
   const [isRefreshPressed, setIsRefreshPressed] = useState(false);
   const refreshReleaseTimerRef = useRef<number | null>(null);
-  const backReleaseTimerRef = useRef<number | null>(null);
+  const resetScrubState = () => {
+    setIsScrubbing(false);
+    setScrubValue(null);
+    setScrubPointValue(null);
+  };
 
   const pocket = pockets.find((item) => item.id === pocketId) as PortfolioPocket | undefined;
   const pocketAssets = useMemo(() => assets.filter((item) => item.pocket_id === pocketId), [assets, pocketId]);
-  const pocketLogs = useMemo(
-    () => logs.filter((item) => item.pocket_id === pocketId).sort((a, b) => b.created_at.localeCompare(a.created_at)),
-    [logs, pocketId]
-  );
+  const pocketLogs = useMemo(() => logs.filter((item) => item.pocket_id === pocketId).sort((a, b) => b.created_at.localeCompare(a.created_at)), [logs, pocketId]);
 
   useEffect(() => {
     void fetchPrices(pocketId);
@@ -58,9 +59,6 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
       if (refreshReleaseTimerRef.current !== null) {
         window.clearTimeout(refreshReleaseTimerRef.current);
       }
-      if (backReleaseTimerRef.current !== null) {
-        window.clearTimeout(backReleaseTimerRef.current);
-      }
     };
   }, []);
 
@@ -70,9 +68,9 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   }, 0);
 
   const chartData = chartByPocket[pocketId] ?? [];
-  const displayValue = scrubValue ?? totalUsd;
+  const displayValue = isScrubbing ? (scrubValue ?? totalUsd) : totalUsd;
   const firstPointValue = chartData[0]?.value ?? 0;
-  const endPointValue = scrubPointValue ?? chartData[chartData.length - 1]?.value ?? 0;
+  const endPointValue = isScrubbing ? (scrubPointValue ?? chartData[chartData.length - 1]?.value ?? 0) : (chartData[chartData.length - 1]?.value ?? 0);
   const changeValue = endPointValue - firstPointValue;
   const changePct = firstPointValue === 0 ? 0 : (changeValue / firstPointValue) * 100;
   const isChangePositive = changeValue >= 0;
@@ -86,21 +84,8 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
       <div className="flex items-start justify-between pt-0.5">
         <button
           type="button"
-          onPointerDown={() => {
-            if (backReleaseTimerRef.current !== null) window.clearTimeout(backReleaseTimerRef.current);
-            setIsBackPressed(true);
-          }}
-          onPointerUp={() => {
-            if (backReleaseTimerRef.current !== null) window.clearTimeout(backReleaseTimerRef.current);
-            backReleaseTimerRef.current = window.setTimeout(() => setIsBackPressed(false), 45);
-          }}
-          onPointerLeave={() => setIsBackPressed(false)}
-          onPointerCancel={() => setIsBackPressed(false)}
-          onBlur={() => setIsBackPressed(false)}
-          onClick={() => window.setTimeout(() => onBack(), 28)}
-          className={`inline-flex h-9 w-9 items-center justify-center border-[3px] border-[#F5F0E8] bg-[#1E1E1E] text-[#F5F0E8] transition-[transform,box-shadow] duration-100 md:hover:-translate-y-0.5 md:hover:shadow-[6px_8px_0_0_#969696] ${
-            isBackPressed ? 'translate-x-[5px] translate-y-[5px] shadow-none' : 'shadow-[4px_4px_0_0_#969696]'
-          }`}
+          onClick={onBack}
+          className="inline-flex h-9 w-9 items-center justify-center border-[3px] border-[#F5F0E8] bg-[#1E1E1E] text-[#F5F0E8] shadow-[4px_4px_0_0_#969696] transition-[transform,box-shadow] duration-150 md:hover:-translate-y-0.5 md:hover:shadow-[6px_8px_0_0_#969696] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none md:active:translate-x-[4px] md:active:translate-y-[4px] md:active:shadow-none"
         >
           <ArrowLeft size={16} strokeWidth={3.2} />
         </button>
@@ -122,22 +107,16 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
               <p className="text-xs font-black uppercase text-brutal-black/50">Total Assets</p>
               <p className="text-2xl font-black">{formatCurrency(displayValue * 16000, 'IDR')}</p>
               <p className="text-sm font-bold text-brutal-black/60">${displayValue.toFixed(2)}</p>
-              <p className={`mt-1 text-sm font-black ${changeColorClass}`}>
-                {`${changeSign}$${Math.abs(changeValue).toFixed(2)} (${changeSign}${Math.abs(changePct).toFixed(2)}%) ${timeframe}`}
-              </p>
+              <p className={`mt-1 text-sm font-black ${changeColorClass}`}>{`${changeSign}$${Math.abs(changeValue).toFixed(2)} (${changeSign}${Math.abs(changePct).toFixed(2)}%) ${timeframe}`}</p>
             </div>
             <button
               type="button"
-              className={`inline-flex h-9 w-9 items-center justify-center border-2 transition-[transform,box-shadow] duration-150 ease-out ${
-                isRefreshPressed ? 'translate-x-1 translate-y-1' : ''
-              }`}
+              className={`inline-flex h-9 w-9 items-center justify-center border-2 transition-[transform,box-shadow] duration-150 ease-out ${isRefreshPressed ? 'translate-x-1 translate-y-1' : ''}`}
               style={{
                 borderColor: `${pocket.color_theme}`,
                 color: `${pocket.color_theme}`,
                 backgroundColor: 'rgba(20,20,24,0.45)',
-                boxShadow: isRefreshPressed
-                  ? `inset 0 0 0 2px ${pocket.color_theme}`
-                  : `2px 2px 0 0 rgba(0,0,0,0.45), inset 0 0 0 1px ${pocket.color_theme}33`,
+                boxShadow: isRefreshPressed ? `inset 0 0 0 2px ${pocket.color_theme}` : `2px 2px 0 0 rgba(0,0,0,0.45), inset 0 0 0 1px ${pocket.color_theme}33`,
               }}
               onPointerDown={() => {
                 if (refreshReleaseTimerRef.current !== null) {
@@ -169,13 +148,11 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
             colorTheme={pocket.color_theme}
             timeframe={timeframe}
             onScrub={(point) => {
+              setIsScrubbing(true);
               setScrubValue(point.value);
               setScrubPointValue(point.value);
             }}
-            onScrubEnd={() => {
-              setScrubValue(null);
-              setScrubPointValue(null);
-            }}
+            onScrubEnd={resetScrubState}
           />
         </div>
 
@@ -185,7 +162,10 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
               <button
                 key={frame}
                 type="button"
-                onClick={() => setTimeframe(frame)}
+                onClick={() => {
+                  resetScrubState();
+                  setTimeframe(frame);
+                }}
                 className="neo-btn-secondary px-2 py-1 text-[10px]"
                 style={timeframe === frame ? { backgroundColor: pocket.color_theme, color: '#1A1A1A' } : undefined}
               >
@@ -206,15 +186,12 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
         {pocketAssets.map((asset) => {
           const price = prices[asset.coingecko_id ?? '']?.usd ?? 0;
           return (
-            <button
-              key={asset.id}
-              type="button"
-              className="neo-card flex w-full items-center justify-between px-3 py-2 text-left"
-              onClick={() => setAssetAction(asset)}
-            >
+            <button key={asset.id} type="button" className="neo-card flex w-full items-center justify-between px-3 py-2 text-left" onClick={() => setAssetAction(asset)}>
               <div>
                 <p className="text-sm font-black">{asset.ticker}</p>
-                <p className="text-xs font-medium text-brutal-black/60">{asset.amount} · ${price.toFixed(4)}</p>
+                <p className="text-xs font-medium text-brutal-black/60">
+                  {asset.amount} · ${price.toFixed(4)}
+                </p>
               </div>
               <p className="text-sm font-black">{formatCurrency(price * asset.amount * 16000, 'IDR')}</p>
             </button>
@@ -258,7 +235,9 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         pocket={pocket}
-        onSave={async (input) => { await updatePocket(pocket.id, input); }}
+        onSave={async (input) => {
+          await updatePocket(pocket.id, input);
+        }}
         onDelete={async () => {
           await deletePocket(pocket.id);
           onBack();

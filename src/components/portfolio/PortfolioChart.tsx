@@ -33,6 +33,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const scrubXRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
+  const isScrubbingRef = useRef(false);
 
   const yRange = useMemo(() => {
     if (dataPoints.length === 0) return { min: 0, max: 1 };
@@ -137,7 +138,10 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       const labelH = 20;
       const labelW = textWidth + labelPadX * 2;
       const labelX = Math.min(width - labelW - 4, Math.max(4, x - labelW / 2));
-      const labelY = 6;
+      const topY = 6;
+      const bottomY = Math.max(6, height - labelH - 8);
+      const isNearTop = dotY <= (padY + labelH + 10);
+      const labelY = isNearTop ? bottomY : topY;
 
       ctx.fillStyle = 'rgba(15, 15, 18, 0.88)';
       ctx.fillRect(labelX, labelY, labelW, labelH);
@@ -191,21 +195,49 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
   };
 
   const endScrub = () => {
+    isScrubbingRef.current = false;
     scrubXRef.current = null;
     onScrubEnd?.();
     const wrapper = wrapperRef.current;
     if (wrapper) draw(wrapper.clientWidth, 200);
   };
 
+  useEffect(() => {
+    const end = () => endScrub();
+    window.addEventListener('mouseup', end);
+    window.addEventListener('touchend', end, { passive: true });
+    window.addEventListener('touchcancel', end, { passive: true });
+    return () => {
+      window.removeEventListener('mouseup', end);
+      window.removeEventListener('touchend', end);
+      window.removeEventListener('touchcancel', end);
+    };
+  });
+
   return (
     <div
       ref={wrapperRef}
       className="w-full"
-      onMouseMove={(e) => scrubAtClientX(e.clientX)}
+      onMouseDown={(e) => {
+        isScrubbingRef.current = true;
+        scrubAtClientX(e.clientX);
+      }}
+      onMouseMove={(e) => {
+        if (!isScrubbingRef.current) return;
+        scrubAtClientX(e.clientX);
+      }}
       onMouseLeave={endScrub}
       onMouseUp={endScrub}
-      onTouchMove={(e) => scrubAtClientX(e.touches[0].clientX)}
+      onTouchStart={(e) => {
+        isScrubbingRef.current = true;
+        scrubAtClientX(e.touches[0].clientX);
+      }}
+      onTouchMove={(e) => {
+        if (!isScrubbingRef.current) return;
+        scrubAtClientX(e.touches[0].clientX);
+      }}
       onTouchEnd={endScrub}
+      onTouchCancel={endScrub}
     >
       <canvas ref={canvasRef} className="block w-full" />
     </div>
