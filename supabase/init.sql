@@ -1,15 +1,19 @@
 ﻿-- ============================================================
---  KEUANGANKU - Fresh Install (Combined 001 + 002)
+--  KEUANGANKU - Fresh Install (Combined 001-006)
 --
 --  Purpose:
 --  - One-file bootstrap for NEW self-host installations only.
 --  - This file combines:
 --      1) supabase/migrations/001_init.sql
 --      2) supabase/migrations/002_local_first_sync.sql
+--      3) supabase/migrations/003_portfolio.sql
+--      4) supabase/migrations/004_portfolio_holdings_metadata.sql
+--      5) supabase/migrations/005_portfolio_activity_holding_metadata.sql
+--      6) supabase/migrations/006_admin_cleanup_soft_deleted_rows.sql
 --
 --  IMPORTANT:
 --  - Use this file ONLY for fresh installs.
---  - Do not run together with 001/002 in the same database lifecycle.
+--  - Do not run together with individual migration files in the same database lifecycle.
 -- ============================================================
 
 -- ==================== BEGIN 001_init.sql ====================
@@ -406,4 +410,222 @@ CREATE INDEX IF NOT EXISTS idx_recurring_user_updated
   ON public.recurring_templates (user_id, updated_at DESC);
 
 
+-- ==================== BEGIN 003_portfolio.sql ====================
+-- ============================================================
+--  PORTFOLIO TRACKER TABLES
+-- ============================================================
 
+create table if not exists public.portfolio_pockets (
+  id uuid primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  source_type text not null check (source_type in ('CEX', 'WEB3', 'WALLET', 'LAINNYA')),
+  source text,
+  color_theme text not null,
+  icon text not null,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
+create table if not exists public.portfolio_assets (
+  id uuid primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  pocket_id uuid not null references public.portfolio_pockets(id) on delete cascade,
+  ticker text not null,
+  coingecko_id text,
+  amount numeric not null,
+  location text not null default 'Wallet',
+  holding_type text not null default 'liquid' check (holding_type in ('liquid', 'staked', 'locked')),
+  chain text,
+  note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
+create table if not exists public.portfolio_activity_log (
+  id uuid primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  pocket_id uuid not null references public.portfolio_pockets(id) on delete cascade,
+  asset_id uuid not null references public.portfolio_assets(id) on delete cascade,
+  ticker text not null,
+  action text not null check (action in ('ADD', 'REDUCE')),
+  amount_change numeric not null,
+  balance_after numeric not null,
+  price_at_time numeric not null,
+  note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
+create index if not exists idx_portfolio_pockets_user_updated
+  on public.portfolio_pockets (user_id, updated_at desc);
+
+create index if not exists idx_portfolio_assets_user_updated
+  on public.portfolio_assets (user_id, updated_at desc);
+
+create index if not exists idx_portfolio_activity_log_user_updated
+  on public.portfolio_activity_log (user_id, updated_at desc);
+
+alter table public.portfolio_pockets enable row level security;
+alter table public.portfolio_assets enable row level security;
+alter table public.portfolio_activity_log enable row level security;
+
+drop policy if exists "portfolio_pockets_owner_only" on public.portfolio_pockets;
+create policy "portfolio_pockets_owner_only"
+  on public.portfolio_pockets
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists "portfolio_assets_owner_only" on public.portfolio_assets;
+create policy "portfolio_assets_owner_only"
+  on public.portfolio_assets
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists "portfolio_activity_log_owner_only" on public.portfolio_activity_log;
+create policy "portfolio_activity_log_owner_only"
+  on public.portfolio_activity_log
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop trigger if exists portfolio_pockets_set_updated_at on public.portfolio_pockets;
+create trigger portfolio_pockets_set_updated_at
+before update on public.portfolio_pockets
+for each row execute function public.set_updated_at();
+
+drop trigger if exists portfolio_assets_set_updated_at on public.portfolio_assets;
+create trigger portfolio_assets_set_updated_at
+before update on public.portfolio_assets
+for each row execute function public.set_updated_at();
+
+drop trigger if exists portfolio_activity_log_set_updated_at on public.portfolio_activity_log;
+create trigger portfolio_activity_log_set_updated_at
+before update on public.portfolio_activity_log
+for each row execute function public.set_updated_at();
+
+
+-- ==================== BEGIN 004_portfolio_holdings_metadata.sql ====================
+-- ============================================================
+--  PORTFOLIO HOLDINGS METADATA
+-- ============================================================
+
+alter table public.portfolio_assets
+  add column if not exists location text,
+  add column if not exists holding_type text,
+  add column if not exists chain text,
+  add column if not exists note text;
+
+update public.portfolio_assets
+set
+  location = coalesce(nullif(trim(location), ''), 'Wallet'),
+  holding_type = case
+    when holding_type in ('liquid', 'staked', 'locked') then holding_type
+    else 'liquid'
+  end
+where location is null
+   or trim(location) = ''
+   or holding_type is null
+   or holding_type = ''
+   or holding_type not in ('liquid', 'staked', 'locked');
+
+alter table public.portfolio_assets
+  alter column location set default 'Wallet',
+  alter column location set not null,
+  alter column holding_type set default 'liquid',
+  alter column holding_type set not null;
+
+alter table public.portfolio_assets
+  drop constraint if exists portfolio_assets_holding_type_check;
+
+alter table public.portfolio_assets
+  add constraint portfolio_assets_holding_type_check
+  check (holding_type in ('liquid', 'staked', 'locked'));
+
+
+-- ==================== BEGIN 005_portfolio_activity_holding_metadata.sql ====================
+-- ============================================================
+--  PORTFOLIO ACTIVITY HOLDING LOCATION SNAPSHOT
+-- ============================================================
+
+alter table public.portfolio_activity_log
+  add column if not exists location text;
+
+
+-- ==================== BEGIN 006_admin_cleanup_soft_deleted_rows.sql ====================
+-- ============================================================
+--  ADMIN CLEANUP SOFT-DELETED ROWS
+-- ============================================================
+-- Returns counts for rows with deleted_at set. When dry_run = false,
+-- permanently deletes those rows. Restricted to profiles.is_admin = true.
+
+create or replace function public.cleanup_soft_deleted_rows(dry_run boolean default true)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  is_request_admin boolean;
+  table_names text[] := array[
+    'portfolio_activity_log',
+    'portfolio_assets',
+    'portfolio_pockets',
+    'expenses',
+    'recurring_templates',
+    'categories'
+  ];
+  target_table text;
+  row_count bigint;
+  has_deleted_at boolean;
+  result jsonb := '{}'::jsonb;
+begin
+  select coalesce(p.is_admin, false)
+    into is_request_admin
+  from public.profiles p
+  where p.id = auth.uid();
+
+  if not coalesce(is_request_admin, false) then
+    raise exception 'Only admins can cleanup soft-deleted rows.';
+  end if;
+
+  foreach target_table in array table_names loop
+    if to_regclass(format('public.%I', target_table)) is null then
+      result := result || jsonb_build_object(target_table, 0);
+      continue;
+    end if;
+
+    select exists (
+      select 1
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = target_table
+        and column_name = 'deleted_at'
+    ) into has_deleted_at;
+
+    if not has_deleted_at then
+      result := result || jsonb_build_object(target_table, 0);
+      continue;
+    end if;
+
+    execute format('select count(*) from public.%I where deleted_at is not null', target_table)
+      into row_count;
+    result := result || jsonb_build_object(target_table, row_count);
+
+    if not dry_run and row_count > 0 then
+      execute format('delete from public.%I where deleted_at is not null', target_table);
+    end if;
+  end loop;
+
+  return result;
+end;
+$$;
+
+revoke all on function public.cleanup_soft_deleted_rows(boolean) from public;
+grant execute on function public.cleanup_soft_deleted_rows(boolean) to authenticated;

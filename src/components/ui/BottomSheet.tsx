@@ -24,6 +24,8 @@ interface BottomSheetProps {
   panelClassName?: string;
   /** Extra class for the inner content wrapper */
   contentClassName?: string;
+  /** Keep mobile swipe gestures inside this sheet so page pull-to-refresh is not triggered */
+  containPageOverscroll?: boolean;
   children?: React.ReactNode;
 }
 
@@ -68,6 +70,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
   disableBackdropClose = false,
   panelClassName,
   contentClassName,
+  containPageOverscroll = false,
   children,
 }) => {
   const [isRendered, setIsRendered] = useState(isOpen);
@@ -284,10 +287,15 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
     dragStartX.current = touch.clientX;
     isDragDismiss.current = false;
 
-    // Walk up from touch target to find any scrollable element
-    // that is currently scrolled down
+    // Close gesture is only allowed when the sheet itself and the touched
+    // scroll area are already at the very top.
     let el = e.target as HTMLElement | null;
     const panel = panelRef.current;
+    if (panel && panel.scrollTop > 0) {
+      dragStartY.current = null;
+      return;
+    }
+
     while (el && el !== panel) {
       if (el.scrollHeight > el.clientHeight && el.scrollTop > 0) {
         dragStartY.current = null;
@@ -312,6 +320,9 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
 
     if (deltaY > 0) {
       isDragDismiss.current = true;
+      if (containPageOverscroll && e.cancelable) {
+        e.preventDefault();
+      }
       // Rubber-band: diminishing returns past threshold
       applyDragOffset(Math.min(deltaY * 0.6, 200));
     } else {
@@ -321,7 +332,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
         resetDrag();
       }
     }
-  }, [applyDragOffset, resetDrag]);
+  }, [applyDragOffset, containPageOverscroll, resetDrag]);
 
   const handleTouchEnd = useCallback(() => {
     if (dragStartY.current === null) {
@@ -350,6 +361,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
         ref={overlayRef}
         className="bottom-sheet-overlay"
         data-no-swipe="true"
+        data-contain-page-overscroll={containPageOverscroll ? 'true' : undefined}
         data-state={isVisible ? 'open' : 'closed'}
         onClick={disableBackdropClose ? undefined : onClose}
         aria-hidden="true"
@@ -365,6 +377,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
         aria-describedby={description ? descriptionId : undefined}
         className={cn('bottom-sheet-panel', panelClassName)}
         data-no-swipe="true"
+        data-contain-page-overscroll={containPageOverscroll ? 'true' : undefined}
         data-state={isVisible ? 'open' : 'closed'}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}

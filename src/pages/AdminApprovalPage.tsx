@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Button } from '../components/ui/Button';
-import { ShieldCheck, UserCheck, XCircle, ArrowLeft, Trash2 } from 'lucide-react';
+import { ShieldCheck, UserCheck, XCircle, ArrowLeft, Trash2, Database, RefreshCw } from 'lucide-react';
 import { getSupabaseClientAsync } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
@@ -17,10 +17,14 @@ interface UserData {
   is_admin?: boolean;
 }
 
+type CleanupStats = Record<string, number>;
+
 export default function AdminApprovalPage() {
   const [pendingUsers, setPendingUsers] = useState<UserData[]>([]);
   const [approvedUsers, setApprovedUsers] = useState<UserData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isCleanupLoading, setIsCleanupLoading] = useState(false);
+  const [cleanupStats, setCleanupStats] = useState<CleanupStats | null>(null);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   
@@ -113,7 +117,57 @@ export default function AdminApprovalPage() {
     }
   };
 
+  const runSoftDeletedCleanup = async (dryRun: boolean) => {
+    if (!dryRun) {
+      const totalRows = cleanupStats
+        ? Object.values(cleanupStats).reduce((sum, count) => sum + Number(count || 0), 0)
+        : 0;
+      const confirmed = window.confirm(
+        `Hapus permanen ${totalRows} row yang sudah ditandai deleted_at? Aksi ini tidak bisa dibatalkan.`
+      );
+      if (!confirmed) return;
+    }
+
+    setError('');
+    setSuccessMsg('');
+    setIsCleanupLoading(true);
+    try {
+      const client = await getSupabaseClientAsync();
+      if (!client) throw new Error('Supabase client tidak tersedia.');
+
+      const { data, error: cleanupErr } = await client.rpc('cleanup_soft_deleted_rows', {
+        dry_run: dryRun,
+      });
+
+      if (cleanupErr) {
+        throw new Error(cleanupErr.message || 'Gagal menjalankan cleanup soft-deleted rows.');
+      }
+
+      const stats = (data ?? {}) as CleanupStats;
+      setCleanupStats(stats);
+      const totalRows = Object.values(stats).reduce((sum, count) => sum + Number(count || 0), 0);
+      setSuccessMsg(
+        dryRun
+          ? `Preview cleanup berhasil. Ditemukan ${totalRows} row soft-deleted.`
+          : `Cleanup berhasil. ${totalRows} row soft-deleted sudah dihapus permanen.`
+      );
+
+      if (!dryRun) {
+        const preview = await client.rpc('cleanup_soft_deleted_rows', { dry_run: true });
+        if (!preview.error) setCleanupStats((preview.data ?? {}) as CleanupStats);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Terjadi kesalahan saat cleanup. Pastikan migration 006 sudah dijalankan.');
+    } finally {
+      setIsCleanupLoading(false);
+    }
+  };
+
   if (!session) return null;
+
+  const cleanupTotal = cleanupStats
+    ? Object.values(cleanupStats).reduce((sum, count) => sum + Number(count || 0), 0)
+    : 0;
 
   return (
     <div className="min-h-dvh flex flex-col items-center p-4 py-8" style={{ backgroundColor: '#1A1A1A' }}>
@@ -153,6 +207,56 @@ export default function AdminApprovalPage() {
             <UserCheck size={16} className="shrink-0" /> <span className="flex-1">{successMsg}</span>
           </div>
         )}
+
+        {/* DATABASE CLEANUP SECTION */}
+        <div className="border-3 border-[#555555] p-4 space-y-4" style={{ backgroundColor: '#242424' }}>
+          <div className="flex items-start gap-3">
+            <div className="shrink-0 border-2 border-[#B8F55A] bg-[#B8F55A]/10 p-2 text-[#B8F55A]">
+              <Database size={20} strokeWidth={2.5} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-[#F5F0E8] font-black uppercase tracking-widest text-sm">
+                Database Cleanup
+              </h2>
+              <p className="text-xs text-[#A09890] font-medium mt-1">
+                Hapus permanen row yang sudah punya <span className="font-black text-[#F5F0E8]">deleted_at</span>.
+              </p>
+            </div>
+          </div>
+
+          {cleanupStats && (
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(cleanupStats).map(([tableName, count]) => (
+                <div key={tableName} className="border-2 border-[#3A3A3A] bg-[#1A1A1A] px-2 py-2">
+                  <p className="truncate text-[10px] font-black uppercase tracking-wider text-[#A09890]">{tableName}</p>
+                  <p className="text-lg font-black text-[#F5F0E8]">{count}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button
+              variant="secondary"
+              loading={isCleanupLoading}
+              className="flex-1"
+              leftIcon={<RefreshCw size={14} />}
+              onClick={() => runSoftDeletedCleanup(true)}
+            >
+              Preview
+            </Button>
+            <Button
+              variant="destructive"
+              loading={isCleanupLoading}
+              disabled={!cleanupStats || cleanupTotal === 0}
+              className="flex-1"
+              leftIcon={<Trash2 size={14} />}
+              onClick={() => runSoftDeletedCleanup(false)}
+            >
+              Cleanup Permanen
+            </Button>
+          </div>
+        </div>
 
         {/* PENDING USERS SECTION */}
         <div className="flex justify-between items-center mb-2 mt-8">

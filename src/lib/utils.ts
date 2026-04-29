@@ -41,6 +41,17 @@ export function formatAmount(amount: number, currency: Currency): string {
   }).format(amount);
 }
 
+export function roundPortfolioAmount(amount: number): number {
+  if (!Number.isFinite(amount)) return 0;
+  return Math.round((amount + Number.EPSILON) * 100_000_000) / 100_000_000;
+}
+
+export function formatPortfolioAmount(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 8,
+  }).format(roundPortfolioAmount(amount));
+}
+
 // ============================================================
 //  DATE UTILITIES
 // ============================================================

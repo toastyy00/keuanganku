@@ -1,4 +1,5 @@
 import React, { useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle } from 'lucide-react';
 import { Button } from './Button';
 
@@ -61,11 +62,11 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
+  const modalMarkup = (
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-50 bg-black/60"
+        className="fixed inset-0 z-[80] bg-black/60"
         onClick={onCancel}
         aria-hidden="true"
       />
@@ -76,7 +77,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
         aria-modal="true"
         aria-labelledby="confirm-modal-title"
         aria-describedby={description ? 'confirm-modal-desc' : undefined}
-        className="fixed inset-0 z-50 flex items-center justify-center px-4 pointer-events-none"
+        className="fixed inset-0 z-[81] flex items-center justify-center px-4 pointer-events-none"
       >
         <div
           className="w-full max-w-sm pointer-events-auto"
@@ -144,6 +145,9 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
       </div>
     </>
   );
+
+  if (typeof document === 'undefined') return modalMarkup;
+  return createPortal(modalMarkup, document.body);
 };
 
 export { ConfirmModal };

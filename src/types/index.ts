@@ -108,6 +108,10 @@ export interface PortfolioAsset {
   ticker: string;
   coingecko_id?: string;
   amount: number;
+  location: string;
+  holding_type: 'liquid' | 'staked' | 'locked';
+  chain?: string;
+  note?: string;
   created_at: string;
 }
 
@@ -120,6 +124,7 @@ export interface PortfolioActivityLog {
   amount_change: number;
   balance_after: number;
   price_at_time: number;
+  location?: string;
   note?: string;
   created_at: string;
 }

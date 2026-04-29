@@ -1,10 +1,11 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
-import { formatCurrency } from '../../lib/utils';
+import { formatCurrency, formatPortfolioAmount, roundPortfolioAmount } from '../../lib/utils';
 import { usePortfolioStore } from '../../store/usePortfolioStore';
 import { AddAssetSheet } from './AddAssetSheet';
 import { AssetActionSheet } from './AssetActionSheet';
 import { ActivityFeed } from './ActivityFeed';
+import { HoldingsBottomSheet, type AggregatedPortfolioAsset } from './HoldingsBottomSheet';
 import { PocketSettingsSheet } from './PocketSettingsSheet';
 import { PortfolioChart } from './PortfolioChart';
 import type { PortfolioAsset, PortfolioPocket } from '../../types';
@@ -26,6 +27,8 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const refreshPrices = usePortfolioStore((s) => s.refreshPrices);
   const refreshChartSeries = usePortfolioStore((s) => s.refreshChartSeries);
   const addAsset = usePortfolioStore((s) => s.addAsset);
+  const addHolding = usePortfolioStore((s) => s.addHolding);
+  const updateAssetMetadata = usePortfolioStore((s) => s.updateAssetMetadata);
   const updateAssetAmount = usePortfolioStore((s) => s.updateAssetAmount);
   const removeAsset = usePortfolioStore((s) => s.removeAsset);
   const updatePocket = usePortfolioStore((s) => s.updatePocket);
@@ -33,6 +36,8 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const [timeframe, setTimeframe] = useState<'24H' | '1W' | '1M' | '1Y' | 'ALL'>('24H');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [assetAction, setAssetAction] = useState<PortfolioAsset | null>(null);
+  const [selectedAggregateKey, setSelectedAggregateKey] = useState<string | null>(null);
+  const [returnAggregateKey, setReturnAggregateKey] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [scrubValue, setScrubValue] = useState<number | null>(null);
   const [scrubPointValue, setScrubPointValue] = useState<number | null>(null);
@@ -48,6 +53,31 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const pocket = pockets.find((item) => item.id === pocketId) as PortfolioPocket | undefined;
   const pocketAssets = useMemo(() => assets.filter((item) => item.pocket_id === pocketId), [assets, pocketId]);
   const pocketLogs = useMemo(() => logs.filter((item) => item.pocket_id === pocketId).sort((a, b) => b.created_at.localeCompare(a.created_at)), [logs, pocketId]);
+  const aggregatedAssets = useMemo<AggregatedPortfolioAsset[]>(() => {
+    const map = new Map<string, AggregatedPortfolioAsset>();
+    for (const asset of pocketAssets) {
+      const key = `${asset.ticker}::${asset.coingecko_id ?? ''}`;
+      const price = prices[asset.coingecko_id ?? '']?.usd ?? 0;
+      const current = map.get(key);
+      if (current) {
+        current.totalAmount = roundPortfolioAmount(current.totalAmount + asset.amount);
+        current.totalUsdValue += asset.amount * price;
+        current.holdings.push(asset);
+        continue;
+      }
+      map.set(key, {
+        key,
+        pocket_id: asset.pocket_id,
+        ticker: asset.ticker,
+        coingecko_id: asset.coingecko_id,
+        totalAmount: asset.amount,
+        totalUsdValue: asset.amount * price,
+        holdings: [asset],
+      });
+    }
+    return Array.from(map.values()).sort((a, b) => b.totalUsdValue - a.totalUsdValue);
+  }, [pocketAssets, prices]);
+  const selectedAggregate = useMemo(() => aggregatedAssets.find((item) => item.key === selectedAggregateKey) ?? null, [aggregatedAssets, selectedAggregateKey]);
 
   useEffect(() => {
     void fetchPrices(pocketId);
@@ -81,7 +111,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between pt-0.5">
+      <div className="sticky top-0 z-30 -mx-4 -mt-6 flex items-start justify-between bg-[#1A1A1A] px-4 pb-3 pt-6 md:-mx-6 md:px-6">
         <button
           type="button"
           onClick={onBack}
@@ -177,23 +207,44 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
       </section>
 
       <section className="space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-black uppercase text-brutal-black/60">Active Balance</p>
-          <button type="button" className="neo-btn-primary px-3 py-1 text-xs" onClick={() => setIsAddOpen(true)}>
+        <div className="flex items-center gap-2">
+          <p className="shrink-0 text-xs font-black uppercase text-brutal-black/60">Active Balance</p>
+          <div
+            className="h-px flex-1"
+            style={{ backgroundColor: `${pocket.color_theme}73` }}
+          />
+          <button
+            type="button"
+            className="portfolio-add-asset-button shrink-0 border-2 px-3 py-1 text-xs font-black uppercase tracking-wider text-[#1A1A1A]"
+            style={{
+              '--portfolio-pocket-accent': pocket.color_theme,
+              backgroundColor: pocket.color_theme,
+            } as React.CSSProperties}
+            onClick={() => setIsAddOpen(true)}
+          >
             ADD ASSET
           </button>
         </div>
-        {pocketAssets.map((asset) => {
+        {aggregatedAssets.map((asset) => {
           const price = prices[asset.coingecko_id ?? '']?.usd ?? 0;
           return (
-            <button key={asset.id} type="button" className="neo-card flex w-full items-center justify-between px-3 py-2 text-left" onClick={() => setAssetAction(asset)}>
+            <button
+              key={asset.key}
+              type="button"
+              className="neo-card portfolio-active-balance-card flex w-full items-center justify-between px-3 py-2 text-left"
+              style={{
+                '--portfolio-pocket-accent': pocket.color_theme,
+                '--portfolio-pocket-accent-soft': `${pocket.color_theme}24`,
+              } as React.CSSProperties}
+              onClick={() => setSelectedAggregateKey(asset.key)}
+            >
               <div>
                 <p className="text-sm font-black">{asset.ticker}</p>
                 <p className="text-xs font-medium text-brutal-black/60">
-                  {asset.amount} · ${price.toFixed(4)}
+                  {formatPortfolioAmount(asset.totalAmount)} · ${price.toFixed(4)}
                 </p>
               </div>
-              <p className="text-sm font-black">{formatCurrency(price * asset.amount * 16000, 'IDR')}</p>
+              <p className="text-sm font-black">{formatCurrency(asset.totalUsdValue * 16000, 'IDR')}</p>
             </button>
           );
         })}
@@ -201,26 +252,80 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
 
       <section className="pt-3">
         <p className="mb-2 text-xs font-black uppercase text-brutal-black/60">Activity Feed</p>
-        <ActivityFeed logs={pocketLogs} />
+        <ActivityFeed logs={pocketLogs} colorTheme={pocket.color_theme} />
       </section>
 
       <AddAssetSheet
         isOpen={isAddOpen}
         onClose={() => setIsAddOpen(false)}
-        onAdd={async (ticker, amount, note) => {
-          await addAsset({ pocket_id: pocketId, ticker, amount, coingecko_id: undefined }, note);
+        onAdd={async (input) => {
+          await addAsset({
+            pocket_id: pocketId,
+            ticker: input.ticker,
+            amount: input.amount,
+            coingecko_id: undefined,
+            location: input.location,
+            holding_type: input.holding_type,
+            chain: input.chain,
+            note: input.note,
+          }, input.note);
           await refreshPrices(pocketId);
           await refreshChartSeries(pocketId, timeframe);
         }}
       />
 
+      <HoldingsBottomSheet
+        isOpen={!!selectedAggregate}
+        onClose={() => setSelectedAggregateKey(null)}
+        aggregate={selectedAggregate}
+        currentPriceUsd={selectedAggregate ? prices[selectedAggregate.coingecko_id ?? '']?.usd : undefined}
+        onAddHolding={async (input) => {
+          if (!selectedAggregate) return;
+          await addHolding(
+            {
+              pocket_id: selectedAggregate.pocket_id,
+              ticker: selectedAggregate.ticker,
+              coingecko_id: selectedAggregate.coingecko_id,
+            },
+            {
+              amount: input.amount,
+              location: input.location,
+              holding_type: input.holding_type,
+              chain: input.chain,
+              note: input.note,
+            },
+            input.note,
+          );
+          await refreshPrices(pocketId);
+          await refreshChartSeries(pocketId, timeframe);
+        }}
+        onSelectHolding={(holding) => {
+          setReturnAggregateKey(selectedAggregate?.key ?? null);
+          setSelectedAggregateKey(null);
+          setAssetAction(holding);
+        }}
+      />
+
       <AssetActionSheet
         isOpen={!!assetAction}
-        onClose={() => setAssetAction(null)}
+        onClose={() => {
+          setAssetAction(null);
+          setReturnAggregateKey(null);
+        }}
+        onBack={() => {
+          setAssetAction(null);
+          setSelectedAggregateKey(returnAggregateKey);
+          setReturnAggregateKey(null);
+        }}
         asset={assetAction}
         currentPriceUsd={assetAction ? prices[assetAction.coingecko_id ?? '']?.usd : undefined}
         onApply={async (assetId, newAmount, action, note) => {
           await updateAssetAmount(assetId, newAmount, action, note);
+          await refreshPrices(pocketId);
+          await refreshChartSeries(pocketId, timeframe);
+        }}
+        onSaveMetadata={async (assetId, input) => {
+          await updateAssetMetadata(assetId, input);
           await refreshPrices(pocketId);
           await refreshChartSeries(pocketId, timeframe);
         }}

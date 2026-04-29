@@ -61,6 +61,22 @@ function applyCursorFilter<TQuery extends { gt: (column: string, value: string) 
   );
 }
 
+function isMissingHoldingMetadataColumnError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const message = String((error as { message?: string }).message ?? '').toLowerCase();
+  const details = String((error as { details?: string }).details ?? '').toLowerCase();
+  const payload = `${message} ${details}`;
+  return ['location', 'holding_type', 'chain', 'note'].some((column) => payload.includes('column') && payload.includes(column));
+}
+
+function isMissingActivityLocationColumnError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const message = String((error as { message?: string }).message ?? '').toLowerCase();
+  const details = String((error as { details?: string }).details ?? '').toLowerCase();
+  const payload = `${message} ${details}`;
+  return payload.includes('column') && payload.includes('location');
+}
+
 function pocketStorageKey(scope: string): string {
   return scopedDataKey('portfolio_pockets', scope);
 }
@@ -71,6 +87,12 @@ function assetStorageKey(scope: string): string {
 
 function activityStorageKey(scope: string): string {
   return scopedDataKey('portfolio_activity_log', scope);
+}
+
+function activityLogSelectColumns(includeLocation = true): string {
+  return includeLocation
+    ? 'id,pocket_id,asset_id,ticker,action,amount_change,balance_after,price_at_time,location,note,created_at,updated_at,deleted_at'
+    : 'id,pocket_id,asset_id,ticker,action,amount_change,balance_after,price_at_time,note,created_at,updated_at,deleted_at';
 }
 
 function normalizePortfolioPocket(record: PortfolioPocket): PortfolioPocket {
@@ -93,6 +115,10 @@ function normalizePortfolioAsset(record: PortfolioAsset): PortfolioAsset {
     ticker: record.ticker,
     coingecko_id: record.coingecko_id ?? undefined,
     amount: Number(record.amount),
+    location: record.location?.trim() || 'Wallet',
+    holding_type: record.holding_type === 'staked' || record.holding_type === 'locked' ? record.holding_type : 'liquid',
+    chain: record.chain?.trim() || undefined,
+    note: record.note?.trim() || undefined,
     created_at: record.created_at,
   };
 }
@@ -107,6 +133,7 @@ function normalizePortfolioActivityLog(record: PortfolioActivityLog): PortfolioA
     amount_change: Number(record.amount_change),
     balance_after: Number(record.balance_after),
     price_at_time: Number(record.price_at_time),
+    location: record.location?.trim() || undefined,
     note: record.note ?? undefined,
     created_at: record.created_at,
   };
@@ -129,6 +156,10 @@ function arePortfolioAssetsEqual(a: PortfolioAsset, b: PortfolioAsset): boolean 
     && a.ticker === b.ticker
     && (a.coingecko_id ?? undefined) === (b.coingecko_id ?? undefined)
     && a.amount === b.amount
+    && a.location === b.location
+    && a.holding_type === b.holding_type
+    && (a.chain ?? undefined) === (b.chain ?? undefined)
+    && (a.note ?? undefined) === (b.note ?? undefined)
     && a.created_at === b.created_at;
 }
 
@@ -141,6 +172,7 @@ function arePortfolioActivityLogsEqual(a: PortfolioActivityLog, b: PortfolioActi
     && a.amount_change === b.amount_change
     && a.balance_after === b.balance_after
     && a.price_at_time === b.price_at_time
+    && (a.location ?? undefined) === (b.location ?? undefined)
     && (a.note ?? undefined) === (b.note ?? undefined)
     && a.created_at === b.created_at;
 }
@@ -192,11 +224,29 @@ export async function applyPortfolioAssetOp(
       ticker: payload.ticker,
       coingecko_id: payload.coingecko_id ?? null,
       amount: payload.amount,
+      location: payload.location,
+      holding_type: payload.holding_type,
+      chain: payload.chain ?? null,
+      note: payload.note ?? null,
       created_at: payload.created_at,
     };
-    const { error } = await client
+    let { error } = await client
       .from('portfolio_assets')
       .upsert({ ...basePayload, deleted_at: null }, { onConflict: 'id' });
+    if (error && isMissingHoldingMetadataColumnError(error)) {
+      const legacyPayload = {
+        id: payload.id,
+        user_id: userId,
+        pocket_id: payload.pocket_id,
+        ticker: payload.ticker,
+        coingecko_id: payload.coingecko_id ?? null,
+        amount: payload.amount,
+        created_at: payload.created_at,
+      };
+      ({ error } = await client
+        .from('portfolio_assets')
+        .upsert({ ...legacyPayload, deleted_at: null }, { onConflict: 'id' }));
+    }
     if (error) throw new Error(`Sync portfolio_assets upsert gagal: ${error.message}`);
     return;
   }
@@ -226,12 +276,31 @@ export async function applyPortfolioActivityLogOp(
       amount_change: payload.amount_change,
       balance_after: payload.balance_after,
       price_at_time: payload.price_at_time,
+      location: payload.location ?? null,
       note: payload.note ?? null,
       created_at: payload.created_at,
     };
-    const { error } = await client
+    let { error } = await client
       .from('portfolio_activity_log')
       .upsert({ ...basePayload, deleted_at: null }, { onConflict: 'id' });
+    if (error && isMissingActivityLocationColumnError(error)) {
+      const legacyPayload = {
+        id: payload.id,
+        user_id: userId,
+        pocket_id: payload.pocket_id,
+        asset_id: payload.asset_id,
+        ticker: payload.ticker,
+        action: payload.action,
+        amount_change: payload.amount_change,
+        balance_after: payload.balance_after,
+        price_at_time: payload.price_at_time,
+        note: payload.note ?? null,
+        created_at: payload.created_at,
+      };
+      ({ error } = await client
+        .from('portfolio_activity_log')
+        .upsert({ ...legacyPayload, deleted_at: null }, { onConflict: 'id' }));
+    }
     if (error) throw new Error(`Sync portfolio_activity_log upsert gagal: ${error.message}`);
     return;
   }
@@ -300,13 +369,28 @@ export async function pullPortfolioAssets(scope: string, client: SupabaseClient,
   while (true) {
     let query = client
       .from('portfolio_assets')
-      .select('id,pocket_id,ticker,coingecko_id,amount,created_at,updated_at,deleted_at')
+      .select('id,pocket_id,ticker,coingecko_id,amount,location,holding_type,chain,note,created_at,updated_at,deleted_at')
       .order('updated_at', { ascending: true })
       .order('id', { ascending: true })
       .limit(PULL_PAGE_SIZE);
 
     query = applyCursorFilter(query, currentCursor, 'id');
-    const { data, error } = await query;
+    const result = await query;
+    let data = result.data as RemotePortfolioAssetRow[] | null;
+    let error = result.error;
+    if (error && isMissingHoldingMetadataColumnError(error)) {
+      let legacyQuery = client
+        .from('portfolio_assets')
+        .select('id,pocket_id,ticker,coingecko_id,amount,created_at,updated_at,deleted_at')
+        .order('updated_at', { ascending: true })
+        .order('id', { ascending: true })
+        .limit(PULL_PAGE_SIZE);
+
+      legacyQuery = applyCursorFilter(legacyQuery, currentCursor, 'id');
+      const legacyResult = await legacyQuery;
+      data = legacyResult.data as RemotePortfolioAssetRow[] | null;
+      error = legacyResult.error;
+    }
     if (error) throw new Error(`Pull portfolio_assets gagal: ${error.message}`);
 
     const rows = (data ?? []) as RemotePortfolioAssetRow[];
@@ -346,13 +430,28 @@ export async function pullPortfolioActivityLog(scope: string, client: SupabaseCl
   while (true) {
     let query = client
       .from('portfolio_activity_log')
-      .select('id,pocket_id,asset_id,ticker,action,amount_change,balance_after,price_at_time,note,created_at,updated_at,deleted_at')
+      .select(activityLogSelectColumns(true))
       .order('updated_at', { ascending: true })
       .order('id', { ascending: true })
       .limit(PULL_PAGE_SIZE);
 
     query = applyCursorFilter(query, currentCursor, 'id');
-    const { data, error } = await query;
+    const result = await query;
+    let data = result.data as RemotePortfolioActivityLogRow[] | null;
+    let error = result.error;
+    if (error && isMissingActivityLocationColumnError(error)) {
+      let legacyQuery = client
+        .from('portfolio_activity_log')
+        .select(activityLogSelectColumns(false))
+        .order('updated_at', { ascending: true })
+        .order('id', { ascending: true })
+        .limit(PULL_PAGE_SIZE);
+
+      legacyQuery = applyCursorFilter(legacyQuery, currentCursor, 'id');
+      const legacyResult = await legacyQuery;
+      data = legacyResult.data as RemotePortfolioActivityLogRow[] | null;
+      error = legacyResult.error;
+    }
     if (error) throw new Error(`Pull portfolio_activity_log gagal: ${error.message}`);
 
     const rows = (data ?? []) as RemotePortfolioActivityLogRow[];
@@ -380,4 +479,56 @@ export async function pullPortfolioActivityLog(scope: string, client: SupabaseCl
 
   if (changed) await writeIDB(key, Array.from(map.values()));
   return { pulled, changed, cursor: serializeCursor(currentCursor) ?? cursor };
+}
+
+export async function reconcilePortfolioActivityLogSnapshot(scope: string, client: SupabaseClient): Promise<PullResult> {
+  const key = activityStorageKey(scope);
+  const map = new Map((await readIDB<PortfolioActivityLog>(key)).map((item) => [item.id, item]));
+  let pulled = 0;
+  let changed = false;
+  let offset = 0;
+
+  while (true) {
+    let query = client
+      .from('portfolio_activity_log')
+      .select(activityLogSelectColumns(true))
+      .order('updated_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(offset, offset + PULL_PAGE_SIZE - 1);
+
+    let result = await query;
+    if (result.error && isMissingActivityLocationColumnError(result.error)) {
+      query = client
+        .from('portfolio_activity_log')
+        .select(activityLogSelectColumns(false))
+        .order('updated_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(offset, offset + PULL_PAGE_SIZE - 1);
+      result = await query;
+    }
+    if (result.error) throw new Error(`Reconcile portfolio_activity_log gagal: ${result.error.message}`);
+
+    const rows = ((result.data ?? []) as unknown) as RemotePortfolioActivityLogRow[];
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      if (row.deleted_at) {
+        if (map.delete(row.id)) changed = true;
+      } else {
+        const next = normalizePortfolioActivityLog(row);
+        const current = map.get(next.id);
+        if (!current || !arePortfolioActivityLogsEqual(current, next)) {
+          map.set(next.id, next);
+          changed = true;
+        }
+      }
+      pulled += 1;
+    }
+
+    if (rows.length < PULL_PAGE_SIZE) break;
+    offset += PULL_PAGE_SIZE;
+  }
+
+  if (changed) await writeIDB(key, Array.from(map.values()));
+  return { pulled, changed };
 }

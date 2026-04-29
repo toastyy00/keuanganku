@@ -18,7 +18,8 @@ import {
   applyPortfolioPocketOp,
   pullPortfolioActivityLog,
   pullPortfolioAssets,
-  pullPortfolioPockets
+  pullPortfolioPockets,
+  reconcilePortfolioActivityLogSnapshot
 } from './portfolio-sync';
 
 type SyncEntity =
@@ -831,6 +832,7 @@ async function pullFromRemote(scope: string, client: SupabaseClient): Promise<{ 
   const pocketsResult = await pullPortfolioPockets(scope, client, meta.cursorByEntity.portfolio_pockets);
   const assetsResult = await pullPortfolioAssets(scope, client, meta.cursorByEntity.portfolio_assets);
   const activityResult = await pullPortfolioActivityLog(scope, client, meta.cursorByEntity.portfolio_activity_log);
+  const activityReconcileResult = await reconcilePortfolioActivityLogSnapshot(scope, client);
 
   if (expensesResult.cursor) meta.cursorByEntity.expenses = expensesResult.cursor;
   if (categoriesResult.cursor) meta.cursorByEntity.categories = categoriesResult.cursor;
@@ -846,13 +848,15 @@ async function pullFromRemote(scope: string, client: SupabaseClient): Promise<{ 
       + recurringResult.pulled
       + pocketsResult.pulled
       + assetsResult.pulled
-      + activityResult.pulled,
+      + activityResult.pulled
+      + activityReconcileResult.pulled,
     changed: expensesResult.changed
       || categoriesResult.changed
       || recurringResult.changed
       || pocketsResult.changed
       || assetsResult.changed
-      || activityResult.changed,
+      || activityResult.changed
+      || activityReconcileResult.changed,
   };
 }
 

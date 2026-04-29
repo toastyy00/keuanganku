@@ -23,6 +23,29 @@ function isAuthenticated(): boolean {
   return useAuthStore.getState().session !== null;
 }
 
+async function enqueueSyncDeletesSequentially(entity: 'portfolio_assets' | 'portfolio_activity_log', ids: string[]): Promise<void> {
+  for (const id of ids) {
+    await enqueueSyncDelete(entity, id);
+  }
+}
+
+function normalizeHoldingType(value: unknown): PortfolioAsset['holding_type'] {
+  if (value === 'staked' || value === 'locked') return value;
+  return 'liquid';
+}
+
+function normalizePortfolioAssetLocal(record: PortfolioAsset): PortfolioAsset {
+  return {
+    ...record,
+    ticker: record.ticker.trim().toUpperCase(),
+    amount: Math.round((Number(record.amount) + Number.EPSILON) * 100_000_000) / 100_000_000,
+    location: record.location?.trim() || 'Wallet',
+    holding_type: normalizeHoldingType(record.holding_type),
+    chain: record.chain?.trim() || undefined,
+    note: record.note?.trim() || undefined,
+  };
+}
+
 export class LocalPortfolioPocketRepo {
   async getAll(): Promise<PortfolioPocket[]> {
     const list = await readIDB<PortfolioPocket>(scopedKey('pockets'));
@@ -81,15 +104,15 @@ export class LocalPortfolioPocketRepo {
 export class LocalPortfolioAssetRepo {
   async getAll(): Promise<PortfolioAsset[]> {
     const list = await readIDB<PortfolioAsset>(scopedKey('assets'));
-    return list.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    return list.map(normalizePortfolioAssetLocal).sort((a, b) => b.created_at.localeCompare(a.created_at));
   }
 
   async create(data: Omit<PortfolioAsset, 'id' | 'created_at'>): Promise<PortfolioAsset> {
-    const next: PortfolioAsset = {
+    const next = normalizePortfolioAssetLocal({
       ...data,
       id: uuidv4(),
       created_at: isoNow(),
-    };
+    });
     const key = scopedKey('assets');
     const all = await readIDB<PortfolioAsset>(key);
     await writeIDB(key, [next, ...all]);
@@ -106,7 +129,7 @@ export class LocalPortfolioAssetRepo {
     const all = await readIDB<PortfolioAsset>(key);
     const index = all.findIndex((item) => item.id === id);
     if (index < 0) throw new Error(`Portfolio asset "${id}" not found.`);
-    const updated: PortfolioAsset = { ...all[index], ...data, id };
+    const updated: PortfolioAsset = normalizePortfolioAssetLocal({ ...all[index], ...data, id });
     all[index] = updated;
     await writeIDB(key, all);
 
@@ -124,6 +147,18 @@ export class LocalPortfolioAssetRepo {
 
     if (isAuthenticated()) {
       await enqueueSyncDelete('portfolio_assets', id);
+      triggerBackgroundSync();
+    }
+  }
+
+  async deleteByPocketId(pocketId: string): Promise<void> {
+    const key = scopedKey('assets');
+    const all = await readIDB<PortfolioAsset>(key);
+    const deletedIds = all.filter((item) => item.pocket_id === pocketId).map((item) => item.id);
+    await writeIDB(key, all.filter((item) => item.pocket_id !== pocketId));
+
+    if (isAuthenticated() && deletedIds.length > 0) {
+      await enqueueSyncDeletesSequentially('portfolio_assets', deletedIds);
       triggerBackgroundSync();
     }
   }
@@ -155,6 +190,18 @@ export class LocalPortfolioActivityLogRepo {
       triggerBackgroundSync();
     }
     return next;
+  }
+
+  async deleteByPocketId(pocketId: string): Promise<void> {
+    const key = scopedKey('activity');
+    const all = await readIDB<PortfolioActivityLog>(key);
+    const deletedIds = all.filter((item) => item.pocket_id === pocketId).map((item) => item.id);
+    await writeIDB(key, all.filter((item) => item.pocket_id !== pocketId));
+
+    if (isAuthenticated() && deletedIds.length > 0) {
+      await enqueueSyncDeletesSequentially('portfolio_activity_log', deletedIds);
+      triggerBackgroundSync();
+    }
   }
 }
 

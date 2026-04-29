@@ -37,6 +37,7 @@ const PocketSettingsSheet: React.FC<PocketSettingsSheetProps> = ({ isOpen, onClo
   const [saving, setSaving] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [errors, setErrors] = useState<{ name?: string }>({});
 
   useEffect(() => {
     setName(pocket?.name ?? '');
@@ -44,6 +45,7 @@ const PocketSettingsSheet: React.FC<PocketSettingsSheetProps> = ({ isOpen, onClo
     setSource(pocket?.source ?? '');
     setColorTheme(pocket?.color_theme ?? COLORS[0]);
     setIcon(pocket?.icon ?? ICONS[0]);
+    setErrors({});
   }, [pocket, isOpen]);
 
   const renderIcon = (iconKey: string) => {
@@ -56,9 +58,23 @@ const PocketSettingsSheet: React.FC<PocketSettingsSheetProps> = ({ isOpen, onClo
 
   return (
     <>
-      <BottomSheet isOpen={isOpen} onClose={onClose} title={pocket ? 'POCKET SETTINGS' : 'NEW POCKET'}>
+      <BottomSheet
+        isOpen={isOpen}
+        onClose={onClose}
+        title={pocket ? 'POCKET SETTINGS' : 'NEW POCKET'}
+        containPageOverscroll
+      >
         <div className="space-y-5">
-          <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} className="!py-2.5" />
+          <Input
+            label="Name"
+            value={name}
+            error={errors.name}
+            onChange={(e) => {
+              setName(e.target.value);
+              setErrors((current) => ({ ...current, name: undefined }));
+            }}
+            className="!py-2.5"
+          />
           <div>
             <p className="mb-2 text-xs font-bold uppercase">Source Type</p>
             <div className="grid grid-cols-4 gap-1.5">
@@ -117,6 +133,11 @@ const PocketSettingsSheet: React.FC<PocketSettingsSheetProps> = ({ isOpen, onClo
             disabled={saving}
             className="w-full border-2 border-[#B8F55A] bg-[#B8F55A] py-3 text-sm font-black uppercase text-[#1A1A1A] shadow-[4px_4px_0_0_#000] transition-transform active:translate-x-1 active:translate-y-1 active:shadow-none disabled:opacity-60"
             onClick={async () => {
+              const nextErrors = {
+                name: !name.trim() ? 'Name wajib diisi' : undefined,
+              };
+              setErrors(nextErrors);
+              if (nextErrors.name) return;
               setSaving(true);
               try {
                 await onSave({

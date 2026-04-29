@@ -5,6 +5,7 @@ import { GUEST_DATA_SCOPE, getActiveDataScope } from '../lib/dataScope';
 import { syncWithSupabaseIfNeeded } from '../lib/sync-engine';
 import { getPortfolioActivityLogRepo, getPortfolioAssetRepo, getPortfolioPocketRepo } from '../lib/portfolio-repository';
 import { clearCurrentPriceCache, computePortfolioValueSeries, daysForTimeframe, fetchCurrentPrices, fetchHistoricalPrices, resolveCoingeckoId } from '../lib/portfolio-prices';
+import { roundPortfolioAmount } from '../lib/utils';
 import type { PortfolioActivityLog, PortfolioAsset, PortfolioPocket } from '../types';
 
 type Timeframe = '24H' | '1W' | '1M' | '1Y' | 'ALL';
@@ -32,6 +33,8 @@ interface PortfolioStoreActions {
   updatePocket: (id: string, data: Partial<PortfolioPocket>) => Promise<PortfolioPocket>;
   deletePocket: (id: string) => Promise<void>;
   addAsset: (data: Omit<PortfolioAsset, 'id' | 'created_at'>, note?: string) => Promise<PortfolioAsset>;
+  addHolding: (baseAsset: Pick<PortfolioAsset, 'pocket_id' | 'ticker' | 'coingecko_id'>, data: Pick<PortfolioAsset, 'amount' | 'location' | 'holding_type'> & Pick<Partial<PortfolioAsset>, 'chain' | 'note'>, activityNote?: string) => Promise<PortfolioAsset>;
+  updateAssetMetadata: (id: string, data: Pick<PortfolioAsset, 'location' | 'holding_type'> & Pick<Partial<PortfolioAsset>, 'chain' | 'note'>) => Promise<PortfolioAsset>;
   updateAssetAmount: (id: string, newAmount: number, action: 'ADD' | 'REDUCE', note?: string) => Promise<PortfolioAsset>;
   removeAsset: (id: string) => Promise<void>;
   fetchPrices: (pocketId: string) => Promise<Record<string, { usd: number }>>;
@@ -77,9 +80,10 @@ function toActivityLogInput(asset: PortfolioAsset, action: 'ADD' | 'REDUCE', amo
     asset_id: asset.id,
     ticker: asset.ticker,
     action,
-    amount_change: Math.abs(amountChange),
-    balance_after: balanceAfter,
+    amount_change: roundPortfolioAmount(Math.abs(amountChange)),
+    balance_after: roundPortfolioAmount(balanceAfter),
     price_at_time: priceAtTime,
+    location: asset.location,
     note: note?.trim() || undefined,
   };
 }
@@ -208,24 +212,29 @@ export const usePortfolioStore = create<PortfolioStore>()(
       },
 
       deletePocket: async (id) => {
-        const snapshot = get().pockets;
-        const assetIds = new Set(
-          get()
-            .assets.filter((item) => item.pocket_id === id)
-            .map((item) => item.id),
-        );
-        const previousSeries = get().chartSeriesByPocket;
+        const stateSnapshot = get();
+        const pocketSnapshot = stateSnapshot.pockets;
+        const assetSnapshot = stateSnapshot.assets;
+        const logSnapshot = stateSnapshot.activityLogs;
+        const seriesSnapshot = stateSnapshot.chartSeriesByPocket;
         set((state) => ({
           pockets: state.pockets.filter((item) => item.id !== id),
           assets: state.assets.filter((item) => item.pocket_id !== id),
-          activityLogs: state.activityLogs.filter((item) => !assetIds.has(item.asset_id)),
+          activityLogs: state.activityLogs.filter((item) => item.pocket_id !== id),
           chartSeriesByPocket: Object.fromEntries(Object.entries(state.chartSeriesByPocket).filter(([pocketId]) => pocketId !== id)),
         }));
         try {
           invalidatePocketCacheMeta(id);
+          await getPortfolioActivityLogRepo().deleteByPocketId(id);
+          await getPortfolioAssetRepo().deleteByPocketId(id);
           await getPortfolioPocketRepo().delete(id);
         } catch (err) {
-          set({ pockets: snapshot, chartSeriesByPocket: previousSeries });
+          set({
+            pockets: pocketSnapshot,
+            assets: assetSnapshot,
+            activityLogs: logSnapshot,
+            chartSeriesByPocket: seriesSnapshot,
+          });
           const msg = err instanceof Error ? err.message : 'Failed to delete pocket';
           set({ error: msg });
           throw err;
@@ -239,6 +248,11 @@ export const usePortfolioStore = create<PortfolioStore>()(
             ...data,
             ticker: data.ticker.trim().toUpperCase(),
             coingecko_id: data.coingecko_id ?? resolveCoingeckoId(data.ticker),
+            amount: roundPortfolioAmount(data.amount),
+            location: data.location.trim() || 'Wallet',
+            holding_type: data.holding_type,
+            chain: data.chain?.trim() || undefined,
+            note: data.note?.trim() || undefined,
           };
           const created = await getPortfolioAssetRepo().create(payload);
 
@@ -262,18 +276,60 @@ export const usePortfolioStore = create<PortfolioStore>()(
         }
       },
 
+      addHolding: async (baseAsset, data, activityNote) => {
+        return get().addAsset(
+          {
+            pocket_id: baseAsset.pocket_id,
+            ticker: baseAsset.ticker,
+            coingecko_id: baseAsset.coingecko_id,
+            amount: roundPortfolioAmount(data.amount),
+            location: data.location,
+            holding_type: data.holding_type,
+            chain: data.chain,
+            note: data.note,
+          },
+          activityNote ?? data.note,
+        );
+      },
+
+      updateAssetMetadata: async (id, data) => {
+        set({ isLoading: true, error: null });
+        try {
+          const asset = get().assets.find((item) => item.id === id);
+          if (!asset) throw new Error(`Portfolio asset "${id}" not found.`);
+          const updated = await getPortfolioAssetRepo().update(id, {
+            location: data.location.trim() || 'Wallet',
+            holding_type: data.holding_type,
+            chain: data.chain?.trim() || undefined,
+            note: data.note?.trim() || undefined,
+          });
+          set((state) => ({
+            assets: state.assets.map((item) => (item.id === id ? updated : item)),
+          }));
+          invalidatePocketCacheMeta(asset.pocket_id);
+          return updated;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Failed to update asset metadata';
+          set({ error: msg });
+          throw err;
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
       updateAssetAmount: async (id, newAmount, action, note) => {
         set({ isLoading: true, error: null });
         try {
           const asset = get().assets.find((item) => item.id === id);
           if (!asset) throw new Error(`Portfolio asset "${id}" not found.`);
 
-          const updated = await getPortfolioAssetRepo().update(id, { amount: newAmount });
-          const amountChange = Math.abs(newAmount - asset.amount);
+          const roundedAmount = roundPortfolioAmount(newAmount);
+          const updated = await getPortfolioAssetRepo().update(id, { amount: roundedAmount });
+          const amountChange = roundPortfolioAmount(Math.abs(roundedAmount - asset.amount));
           const prices = await fetchCurrentPrices([asset.coingecko_id ?? resolveCoingeckoId(asset.ticker)]);
           const coingeckoId = asset.coingecko_id ?? resolveCoingeckoId(asset.ticker);
           const priceAtTime = prices[coingeckoId]?.usd ?? 0;
-          const log = await getPortfolioActivityLogRepo().create(toActivityLogInput({ ...asset, coingecko_id: coingeckoId }, action, amountChange, newAmount, priceAtTime, note));
+          const log = await getPortfolioActivityLogRepo().create(toActivityLogInput({ ...asset, coingecko_id: coingeckoId }, action, amountChange, roundedAmount, priceAtTime, note));
 
           set((state) => ({
             assets: state.assets.map((item) => (item.id === id ? updated : item)),
@@ -294,15 +350,28 @@ export const usePortfolioStore = create<PortfolioStore>()(
       removeAsset: async (id) => {
         const stateSnapshot = get();
         const snapshot = stateSnapshot.assets;
+        const logSnapshot = stateSnapshot.activityLogs;
         const asset = snapshot.find((item) => item.id === id);
         set((state) => ({
           assets: state.assets.filter((item) => item.id !== id),
         }));
         try {
-          if (asset) invalidatePocketCacheMeta(asset.pocket_id);
+          let log: PortfolioActivityLog | null = null;
+          if (asset) {
+            const coingeckoId = asset.coingecko_id ?? resolveCoingeckoId(asset.ticker);
+            const prices = await fetchCurrentPrices([coingeckoId]);
+            const priceAtTime = prices[coingeckoId]?.usd ?? 0;
+            log = await getPortfolioActivityLogRepo().create(toActivityLogInput({ ...asset, coingecko_id: coingeckoId }, 'REDUCE', asset.amount, 0, priceAtTime, `Removed ${asset.chain ? `${asset.chain} · ` : ''}${asset.location}`));
+            invalidatePocketCacheMeta(asset.pocket_id);
+          }
           await getPortfolioAssetRepo().delete(id);
+          if (log) {
+            set((state) => ({
+              activityLogs: [log, ...state.activityLogs],
+            }));
+          }
         } catch (err) {
-          set({ assets: snapshot });
+          set({ assets: snapshot, activityLogs: logSnapshot });
           const msg = err instanceof Error ? err.message : 'Failed to remove asset';
           set({ error: msg });
           throw err;
