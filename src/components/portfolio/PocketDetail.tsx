@@ -119,14 +119,19 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const chartData = chartByPocket[pocketId] ?? [];
   const displayValue = isScrubbing ? (scrubValue ?? totalUsd) : totalUsd;
   const firstPointValue = chartData[0]?.value ?? 0;
-  const endPointValue = isScrubbing ? (scrubPointValue ?? chartData[chartData.length - 1]?.value ?? 0) : (chartData[chartData.length - 1]?.value ?? 0);
+  const latestPointValue = chartData[chartData.length - 1]?.value ?? 0;
+  const endPointValue = isScrubbing ? (scrubPointValue ?? latestPointValue) : latestPointValue;
+  const stableChangeValue = latestPointValue - firstPointValue;
+  const stableChangePct = firstPointValue === 0 ? 0 : (stableChangeValue / firstPointValue) * 100;
   const changeValue = endPointValue - firstPointValue;
   const changePct = firstPointValue === 0 ? 0 : (changeValue / firstPointValue) * 100;
-  const isChangeFlat = Math.abs(changeValue) < 0.005 && Math.abs(changePct) < 0.005;
-  const isChangePositive = changeValue >= 0;
-  const changeColorClass = isChangeFlat ? 'text-[#F5F0E8]' : (isChangePositive ? 'text-[#22C55E]' : 'text-[#EF4444]');
-  const chartPerformanceColor = isChangeFlat ? CHART_FLAT_COLOR : (isChangePositive ? CHART_GAIN_COLOR : CHART_LOSS_COLOR);
-  const changeSign = isChangePositive ? '+' : '-';
+  const isStableChangeFlat = Math.abs(stableChangeValue) < 0.005 && Math.abs(stableChangePct) < 0.005;
+  const isStableChangePositive = stableChangeValue >= 0;
+  const isDisplayChangeFlat = Math.abs(changeValue) < 0.005 && Math.abs(changePct) < 0.005;
+  const isDisplayChangePositive = changeValue >= 0;
+  const changeColorClass = isDisplayChangeFlat ? 'text-[#F5F0E8]' : (isDisplayChangePositive ? 'text-[#22C55E]' : 'text-[#EF4444]');
+  const chartPerformanceColor = isStableChangeFlat ? CHART_FLAT_COLOR : (isStableChangePositive ? CHART_GAIN_COLOR : CHART_LOSS_COLOR);
+  const changeSign = changeValue >= 0 ? '+' : '-';
   const formatPortfolioIdrValue = (usdValue: number) => (
     portfolioRateInfo ? formatCurrency(usdValue * portfolioRateInfo.rate, 'IDR') : 'Rp --'
   );

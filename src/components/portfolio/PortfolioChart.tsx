@@ -13,6 +13,10 @@ interface PortfolioChartProps {
   onScrubEnd?: () => void;
 }
 
+const SCRUB_GAIN_COLOR = '#22C55E';
+const SCRUB_LOSS_COLOR = '#EF4444';
+const SCRUB_FLAT_COLOR = '#F5F0E8';
+
 function hexToRgba(hex: string, alpha: number): string {
   const cleaned = hex.replace('#', '').trim();
   if (cleaned.length !== 6) return `rgba(184,245,90,${alpha})`;
@@ -20,6 +24,14 @@ function hexToRgba(hex: string, alpha: number): string {
   const g = Number.parseInt(cleaned.slice(2, 4), 16);
   const b = Number.parseInt(cleaned.slice(4, 6), 16);
   return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function getScrubPerformanceColor(firstValue: number, currentValue: number): string {
+  const changeValue = currentValue - firstValue;
+  const changePct = firstValue === 0 ? 0 : (changeValue / firstValue) * 100;
+  const isFlat = Math.abs(changeValue) < 0.005 && Math.abs(changePct) < 0.005;
+  if (isFlat) return SCRUB_FLAT_COLOR;
+  return changeValue >= 0 ? SCRUB_GAIN_COLOR : SCRUB_LOSS_COLOR;
 }
 
 const PortfolioChart: React.FC<PortfolioChartProps> = ({
@@ -109,6 +121,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       const idx = Math.max(0, Math.min(dataPoints.length - 1, Math.round(ratio * (dataPoints.length - 1))));
       const point = dataPoints[idx];
       const dotY = toY(point.value);
+      const scrubColor = getScrubPerformanceColor(dataPoints[0].value, point.value);
       const timeLabel = new Intl.DateTimeFormat('id-ID', {
         day: '2-digit',
         month: 'short',
@@ -116,6 +129,36 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
         minute: '2-digit',
         hour12: false,
       }).format(new Date(point.timestamp));
+
+      const scrubGradient = ctx.createLinearGradient(0, padY, 0, height);
+      scrubGradient.addColorStop(0, hexToRgba(scrubColor, 0.26));
+      scrubGradient.addColorStop(1, hexToRgba(scrubColor, 0.02));
+
+      ctx.beginPath();
+      dataPoints.slice(0, idx + 1).forEach((segmentPoint, segmentIdx) => {
+        const segmentX = toX(segmentPoint.timestamp);
+        const segmentY = toY(segmentPoint.value);
+        if (segmentIdx === 0) ctx.moveTo(segmentX, segmentY);
+        else ctx.lineTo(segmentX, segmentY);
+      });
+      ctx.lineTo(x, dotY);
+      ctx.lineTo(x, height - padY);
+      ctx.lineTo(firstX, height - padY);
+      ctx.closePath();
+      ctx.fillStyle = scrubGradient;
+      ctx.fill();
+
+      ctx.beginPath();
+      dataPoints.slice(0, idx + 1).forEach((segmentPoint, segmentIdx) => {
+        const segmentX = toX(segmentPoint.timestamp);
+        const segmentY = toY(segmentPoint.value);
+        if (segmentIdx === 0) ctx.moveTo(segmentX, segmentY);
+        else ctx.lineTo(segmentX, segmentY);
+      });
+      ctx.lineTo(x, dotY);
+      ctx.lineWidth = 2.8;
+      ctx.strokeStyle = scrubColor;
+      ctx.stroke();
 
       ctx.beginPath();
       ctx.moveTo(x, padY);
@@ -126,7 +169,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
 
       ctx.beginPath();
       ctx.arc(x, dotY, 4.5, 0, Math.PI * 2);
-      ctx.fillStyle = colorTheme;
+      ctx.fillStyle = scrubColor;
       ctx.fill();
       ctx.lineWidth = 2;
       ctx.strokeStyle = '#F5F0E8';

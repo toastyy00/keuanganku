@@ -53,7 +53,7 @@ const PocketList: React.FC<PocketListProps> = ({ onOpenPocket }) => {
         </button>
         <div className="flex flex-col items-end gap-0 pt-0.5 text-right leading-none">
           <p className="text-[12px] font-black uppercase tracking-[0.18em] text-[#B8F55A]">Portfolio</p>
-          <p className="mt-[-6px] text-[24px] font-black uppercase tracking-[-0.01em] text-[#F5F0E8]">Pockets</p>
+          <p className="mt-[-6px] text-[24px] font-black uppercase tracking-[-0.01em] text-[#F5F0E8]">Tracker</p>
         </div>
       </div>
 
