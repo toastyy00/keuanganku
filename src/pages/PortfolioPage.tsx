@@ -2,6 +2,8 @@ import React, { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { PocketDetail } from '../components/portfolio/PocketDetail';
 import { PocketList } from '../components/portfolio/PocketList';
+import { GUEST_DATA_SCOPE } from '../lib/dataScope';
+import { useAuthStore } from '../store/useAuthStore';
 import { usePortfolioStore } from '../store/usePortfolioStore';
 
 function slugifyPocketName(name: string): string {
@@ -17,25 +19,46 @@ function slugifyPocketName(name: string): string {
 const PortfolioPage: React.FC = () => {
   const navigate = useNavigate();
   const { pocketId } = useParams<{ pocketId?: string; slug?: string }>();
+  const user = useAuthStore((s) => s.user);
+  const portfolioHydrated = usePortfolioStore((s) => s._hasHydrated);
+  const cacheScope = usePortfolioStore((s) => s.cacheScope);
+  const ensureScope = usePortfolioStore((s) => s.ensureScope);
   const loadPortfolio = usePortfolioStore((s) => s.loadPortfolio);
   const pockets = usePortfolioStore((s) => s.pockets);
+  const activeScope = user?.id ?? GUEST_DATA_SCOPE;
+  const isPortfolioScopeReady = portfolioHydrated && cacheScope === activeScope;
   const activePocketId = pocketId ?? null;
   const activePocket = activePocketId ? pockets.find((item) => item.id === activePocketId) : undefined;
   const hasPocket = !!activePocket;
 
   useEffect(() => {
     document.title = 'Portfolio - KeuanganKu';
-    void loadPortfolio();
     return () => {
       document.title = 'Keuanganku';
     };
-  }, [loadPortfolio]);
+  }, []);
+
+  useEffect(() => {
+    if (!portfolioHydrated) return;
+    ensureScope(activeScope);
+  }, [activeScope, ensureScope, portfolioHydrated]);
+
+  useEffect(() => {
+    if (!portfolioHydrated || cacheScope !== activeScope) return;
+    void loadPortfolio();
+  }, [activeScope, cacheScope, loadPortfolio, portfolioHydrated]);
 
   useEffect(() => {
     if (!activePocketId) return;
     if (pockets.length === 0) return;
     if (!hasPocket) navigate('/portfolio', { replace: true });
   }, [activePocketId, hasPocket, navigate, pockets.length]);
+
+  if (!isPortfolioScopeReady) {
+    return (
+      <div className="portfolio-touch mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 pb-10 pt-6 md:px-6" />
+    );
+  }
 
   return (
     <div className="portfolio-touch mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 pb-10 pt-6 md:px-6">

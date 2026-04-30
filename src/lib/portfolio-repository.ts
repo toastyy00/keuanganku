@@ -68,7 +68,7 @@ export class LocalPortfolioPocketRepo {
 
     if (isAuthenticated()) {
       await enqueueSyncUpsert('portfolio_pockets', next.id, next);
-      triggerBackgroundSync();
+      triggerBackgroundSync({ domain: 'portfolio' });
     }
     return next;
   }
@@ -84,7 +84,7 @@ export class LocalPortfolioPocketRepo {
 
     if (isAuthenticated()) {
       await enqueueSyncUpsert('portfolio_pockets', updated.id, updated);
-      triggerBackgroundSync();
+      triggerBackgroundSync({ domain: 'portfolio' });
     }
     return updated;
   }
@@ -96,7 +96,7 @@ export class LocalPortfolioPocketRepo {
 
     if (isAuthenticated()) {
       await enqueueSyncDelete('portfolio_pockets', id);
-      triggerBackgroundSync();
+      triggerBackgroundSync({ domain: 'portfolio' });
     }
   }
 }
@@ -119,7 +119,7 @@ export class LocalPortfolioAssetRepo {
 
     if (isAuthenticated()) {
       await enqueueSyncUpsert('portfolio_assets', next.id, next);
-      triggerBackgroundSync();
+      triggerBackgroundSync({ domain: 'portfolio' });
     }
     return next;
   }
@@ -135,7 +135,7 @@ export class LocalPortfolioAssetRepo {
 
     if (isAuthenticated()) {
       await enqueueSyncUpsert('portfolio_assets', updated.id, updated);
-      triggerBackgroundSync();
+      triggerBackgroundSync({ domain: 'portfolio' });
     }
     return updated;
   }
@@ -147,7 +147,7 @@ export class LocalPortfolioAssetRepo {
 
     if (isAuthenticated()) {
       await enqueueSyncDelete('portfolio_assets', id);
-      triggerBackgroundSync();
+      triggerBackgroundSync({ domain: 'portfolio' });
     }
   }
 
@@ -159,7 +159,7 @@ export class LocalPortfolioAssetRepo {
 
     if (isAuthenticated() && deletedIds.length > 0) {
       await enqueueSyncDeletesSequentially('portfolio_assets', deletedIds);
-      triggerBackgroundSync();
+      triggerBackgroundSync({ domain: 'portfolio' });
     }
   }
 }
@@ -187,7 +187,7 @@ export class LocalPortfolioActivityLogRepo {
 
     if (isAuthenticated()) {
       await enqueueSyncUpsert('portfolio_activity_log', next.id, next);
-      triggerBackgroundSync();
+      triggerBackgroundSync({ domain: 'portfolio' });
     }
     return next;
   }
@@ -200,7 +200,7 @@ export class LocalPortfolioActivityLogRepo {
 
     if (isAuthenticated() && deletedIds.length > 0) {
       await enqueueSyncDeletesSequentially('portfolio_activity_log', deletedIds);
-      triggerBackgroundSync();
+      triggerBackgroundSync({ domain: 'portfolio' });
     }
   }
 }

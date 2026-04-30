@@ -4,10 +4,13 @@ type Timeframe = '24H' | '1W' | '1M' | '1Y' | 'ALL';
 
 const COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3';
 const BINANCE_BASE_URL = 'https://api.binance.com/api/v3';
-const PRICE_CACHE_TTL_MS = 30_000;
-const MAX_BATCH_SIZE = 50;
+const PRICE_CACHE_TTL_MS = 60_000;
+const HISTORICAL_CACHE_TTL_MS = 2 * 60_000;
 
 const currentPriceCache = new Map<string, { value: { usd: number }; expiresAt: number }>();
+const currentPriceInflight = new Map<string, Promise<{ usd: number } | null>>();
+const historicalPriceCache = new Map<string, { value: HistoricalPoint[]; expiresAt: number }>();
+const historicalPriceInflight = new Map<string, Promise<HistoricalPoint[]>>();
 
 const TICKER_TO_COINGECKO_ID: Record<string, string> = {
   BTC: 'bitcoin',
@@ -51,14 +54,6 @@ const STABLECOIN_IDS = new Set([
   'paxos-standard',
 ]);
 
-function chunk<T>(items: T[], size: number): T[][] {
-  const result: T[][] = [];
-  for (let i = 0; i < items.length; i += size) {
-    result.push(items.slice(i, i + size));
-  }
-  return result;
-}
-
 function timeframeToDays(timeframe: Timeframe): number {
   switch (timeframe) {
     case '24H':
@@ -95,6 +90,10 @@ function buildStablecoinHistoricalPrices(days: number): HistoricalPoint[] {
   const count = Math.max(2, limit);
   const step = (end - start) / (count - 1);
   return Array.from({ length: count }, (_, index) => [Math.round(start + step * index), 1] as HistoricalPoint);
+}
+
+function historicalCacheKey(coingeckoId: string, days: number): string {
+  return `${coingeckoId.trim().toLowerCase()}::${days}`;
 }
 
 async function fetchBinanceWithBackoff(path: string, attempts = 3): Promise<Response> {
@@ -184,7 +183,7 @@ export async function fetchCurrentPrices(coingeckoIds: string[]): Promise<Curren
 
   const now = Date.now();
   const result: CurrentPriceMap = {};
-  const missing: string[] = [];
+  const pending: Array<Promise<void>> = [];
 
   for (const id of uniqueIds) {
     if (isStablecoinId(id)) {
@@ -199,65 +198,33 @@ export async function fetchCurrentPrices(coingeckoIds: string[]): Promise<Curren
     if (cached && cached.expiresAt > now) {
       result[id] = cached.value;
     } else {
-      missing.push(id);
-    }
-  }
+      let inflight = currentPriceInflight.get(id);
+      if (!inflight) {
+        inflight = fetchCurrentPriceSingle(id)
+          .then((price) => {
+            if (price) {
+              currentPriceCache.set(id, {
+                value: price,
+                expiresAt: Date.now() + PRICE_CACHE_TTL_MS,
+              });
+            }
+            return price;
+          })
+          .finally(() => {
+            currentPriceInflight.delete(id);
+          });
+        currentPriceInflight.set(id, inflight);
+      }
 
-  const stillMissing: string[] = [];
-  await Promise.all(missing.map(async (id) => {
-    const ticker = COINGECKO_TO_TICKER[id] ?? id.trim().toUpperCase();
-    if (!ticker) {
-      stillMissing.push(id);
-      return;
-    }
-    try {
-      const res = await fetch(
-        `https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(`${ticker}USDT`)}`,
-        { signal: AbortSignal.timeout(10_000) }
+      pending.push(
+        inflight.then((price) => {
+          if (price) result[id] = price;
+        }),
       );
-      if (!res.ok) {
-        stillMissing.push(id);
-        return;
-      }
-      const data = (await res.json()) as { price?: string };
-      const price = Number(data.price);
-      if (!Number.isFinite(price) || price <= 0) {
-        stillMissing.push(id);
-        return;
-      }
-      result[id] = { usd: price };
-      currentPriceCache.set(id, {
-        value: { usd: price },
-        expiresAt: now + PRICE_CACHE_TTL_MS,
-      });
-    } catch {
-      stillMissing.push(id);
-    }
-  }));
-
-  // Fallback for tokens not listed in Binance USDT pair.
-  const batches = chunk(stillMissing, MAX_BATCH_SIZE);
-  for (const batch of batches) {
-    if (batch.length === 0) continue;
-    const params = new URLSearchParams({
-      ids: batch.join(','),
-      vs_currencies: 'usd',
-    });
-    const res = await fetch(`${COINGECKO_BASE_URL}/simple/price?${params.toString()}`, {
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) continue;
-    const data = (await res.json()) as CurrentPriceMap;
-    for (const id of batch) {
-      const payload = data[id];
-      if (!payload || typeof payload.usd !== 'number') continue;
-      result[id] = { usd: payload.usd };
-      currentPriceCache.set(id, {
-        value: { usd: payload.usd },
-        expiresAt: now + PRICE_CACHE_TTL_MS,
-      });
     }
   }
+
+  await Promise.all(pending);
 
   return result;
 }
@@ -301,6 +268,72 @@ export async function fetchHistoricalPrices(coingeckoId: string, days: number): 
   return prices
     .filter((item) => Number.isFinite(item[0]) && Number.isFinite(item[1]))
     .map(([ts, price]) => [Math.round(ts), Number(price)] as HistoricalPoint);
+}
+
+async function fetchCurrentPriceSingle(coingeckoId: string): Promise<{ usd: number } | null> {
+  const ticker = COINGECKO_TO_TICKER[coingeckoId] ?? coingeckoId.trim().toUpperCase();
+
+  if (ticker) {
+    try {
+      const res = await fetch(
+        `${BINANCE_BASE_URL}/ticker/price?symbol=${encodeURIComponent(`${ticker}USDT`)}`,
+        { signal: AbortSignal.timeout(10_000) },
+      );
+      if (res.ok) {
+        const data = (await res.json()) as { price?: string };
+        const price = Number(data.price);
+        if (Number.isFinite(price) && price > 0) return { usd: price };
+      }
+    } catch {
+      // Fallback to CoinGecko below.
+    }
+  }
+
+  try {
+    const params = new URLSearchParams({
+      ids: coingeckoId,
+      vs_currencies: 'usd',
+    });
+    const res = await fetch(`${COINGECKO_BASE_URL}/simple/price?${params.toString()}`, {
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as CurrentPriceMap;
+    const payload = data[coingeckoId];
+    if (!payload || typeof payload.usd !== 'number') return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchHistoricalPricesCached(coingeckoId: string, days: number): Promise<HistoricalPoint[]> {
+  if (!coingeckoId) return [];
+
+  const cacheKey = historicalCacheKey(coingeckoId, days);
+  const now = Date.now();
+  const cached = historicalPriceCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.value;
+  }
+
+  const inflight = historicalPriceInflight.get(cacheKey);
+  if (inflight) return inflight;
+
+  const run = fetchHistoricalPrices(coingeckoId, days)
+    .then((points) => {
+      historicalPriceCache.set(cacheKey, {
+        value: points,
+        expiresAt: Date.now() + HISTORICAL_CACHE_TTL_MS,
+      });
+      return points;
+    })
+    .finally(() => {
+      historicalPriceInflight.delete(cacheKey);
+    });
+
+  historicalPriceInflight.set(cacheKey, run);
+  return run;
 }
 
 export function resolveCoingeckoId(ticker: string): string {

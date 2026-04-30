@@ -30,6 +30,7 @@ type SyncEntity =
   | 'portfolio_assets'
   | 'portfolio_activity_log';
 type SyncKind = 'upsert' | 'delete';
+type SyncDomain = 'base' | 'portfolio' | 'all';
 
 type SyncPayload =
   | Expense
@@ -81,6 +82,11 @@ const SYNC_COOLDOWN_MS = 20_000;
 
 const syncInflightByScope = new Map<string, Promise<SyncResult>>();
 const syncLastRunAtByScope = new Map<string, number>();
+const pushInflightByScope = new Map<string, Promise<number>>();
+
+function syncRunKey(scope: string, domain: SyncDomain): string {
+  return `${scope}::${domain}`;
+}
 
 function queueStorageKey(scope: string): string {
   return scopedDataKey(QUEUE_KEY, scope);
@@ -477,6 +483,17 @@ async function pushQueue(scope: string, client: SupabaseClient): Promise<number>
   return pushed;
 }
 
+async function pushQueueOnce(scope: string, client: SupabaseClient): Promise<number> {
+  const existing = pushInflightByScope.get(scope);
+  if (existing) return existing;
+
+  const runPromise = pushQueue(scope, client).finally(() => {
+    pushInflightByScope.delete(scope);
+  });
+  pushInflightByScope.set(scope, runPromise);
+  return runPromise;
+}
+
 interface RemoteExpenseRow extends Expense {
   updated_at?: string;
   deleted_at?: string | null;
@@ -496,6 +513,12 @@ interface PullResult {
   pulled: number;
   changed: boolean;
   cursor?: string;
+}
+
+interface DomainPullResult {
+  pulled: number;
+  changed: boolean;
+  cursorPatch: Partial<Record<SyncEntity, string>>;
 }
 
 function expenseStorageKey(scope: string): string {
@@ -823,45 +846,75 @@ async function pullRecurring(scope: string, client: SupabaseClient, cursor?: str
   return { pulled, changed, cursor: serializeCursor(currentCursor) ?? cursor };
 }
 
-async function pullFromRemote(scope: string, client: SupabaseClient): Promise<{ pulled: number; changed: boolean }> {
-  const meta = await readMeta(scope);
-
+async function pullBaseFromRemote(scope: string, client: SupabaseClient, meta: SyncMeta): Promise<DomainPullResult> {
   const expensesResult = await pullExpenses(scope, client, meta.cursorByEntity.expenses);
   const categoriesResult = await pullCategories(scope, client, meta.cursorByEntity.categories);
   const recurringResult = await pullRecurring(scope, client, meta.cursorByEntity.recurring);
+  const cursorPatch: Partial<Record<SyncEntity, string>> = {};
+
+  if (expensesResult.cursor) cursorPatch.expenses = expensesResult.cursor;
+  if (categoriesResult.cursor) cursorPatch.categories = categoriesResult.cursor;
+  if (recurringResult.cursor) cursorPatch.recurring = recurringResult.cursor;
+
+  return {
+    pulled: expensesResult.pulled + categoriesResult.pulled + recurringResult.pulled,
+    changed: expensesResult.changed || categoriesResult.changed || recurringResult.changed,
+    cursorPatch,
+  };
+}
+
+async function pullPortfolioFromRemote(scope: string, client: SupabaseClient, meta: SyncMeta): Promise<DomainPullResult> {
   const pocketsResult = await pullPortfolioPockets(scope, client, meta.cursorByEntity.portfolio_pockets);
   const assetsResult = await pullPortfolioAssets(scope, client, meta.cursorByEntity.portfolio_assets);
   const activityResult = await pullPortfolioActivityLog(scope, client, meta.cursorByEntity.portfolio_activity_log);
   const activityReconcileResult = await reconcilePortfolioActivityLogSnapshot(scope, client);
+  const cursorPatch: Partial<Record<SyncEntity, string>> = {};
 
-  if (expensesResult.cursor) meta.cursorByEntity.expenses = expensesResult.cursor;
-  if (categoriesResult.cursor) meta.cursorByEntity.categories = categoriesResult.cursor;
-  if (recurringResult.cursor) meta.cursorByEntity.recurring = recurringResult.cursor;
-  if (pocketsResult.cursor) meta.cursorByEntity.portfolio_pockets = pocketsResult.cursor;
-  if (assetsResult.cursor) meta.cursorByEntity.portfolio_assets = assetsResult.cursor;
-  if (activityResult.cursor) meta.cursorByEntity.portfolio_activity_log = activityResult.cursor;
-  await writeMeta(scope, meta);
+  if (pocketsResult.cursor) cursorPatch.portfolio_pockets = pocketsResult.cursor;
+  if (assetsResult.cursor) cursorPatch.portfolio_assets = assetsResult.cursor;
+  if (activityResult.cursor) cursorPatch.portfolio_activity_log = activityResult.cursor;
 
   return {
-    pulled: expensesResult.pulled
-      + categoriesResult.pulled
-      + recurringResult.pulled
-      + pocketsResult.pulled
+    pulled: pocketsResult.pulled
       + assetsResult.pulled
       + activityResult.pulled
       + activityReconcileResult.pulled,
-    changed: expensesResult.changed
-      || categoriesResult.changed
-      || recurringResult.changed
-      || pocketsResult.changed
+    changed: pocketsResult.changed
       || assetsResult.changed
       || activityResult.changed
       || activityReconcileResult.changed,
+    cursorPatch,
   };
 }
 
-async function runSync(scope: string, client: SupabaseClient): Promise<SyncResult> {
-  const pushed = await pushQueue(scope, client);
+async function pullFromRemote(scope: string, client: SupabaseClient, domain: SyncDomain): Promise<{ pulled: number; changed: boolean }> {
+  const meta = await readMeta(scope);
+  const shouldPullBase = domain === 'base' || domain === 'all';
+  const shouldPullPortfolio = domain === 'portfolio' || domain === 'all';
+
+  const baseResult = shouldPullBase
+    ? await pullBaseFromRemote(scope, client, meta)
+    : { pulled: 0, changed: false, cursorPatch: {} };
+  const portfolioResult = shouldPullPortfolio
+    ? await pullPortfolioFromRemote(scope, client, meta)
+    : { pulled: 0, changed: false, cursorPatch: {} };
+  const latestMeta = await readMeta(scope);
+  await writeMeta(scope, {
+    cursorByEntity: {
+      ...latestMeta.cursorByEntity,
+      ...baseResult.cursorPatch,
+      ...portfolioResult.cursorPatch,
+    },
+  });
+
+  return {
+    pulled: baseResult.pulled + portfolioResult.pulled,
+    changed: baseResult.changed || portfolioResult.changed,
+  };
+}
+
+async function runSync(scope: string, client: SupabaseClient, domain: SyncDomain): Promise<SyncResult> {
+  const pushed = await pushQueueOnce(scope, client);
   const queueRemaining = (await readQueue(scope)).length;
 
   if (queueRemaining > 0) {
@@ -875,7 +928,7 @@ async function runSync(scope: string, client: SupabaseClient): Promise<SyncResul
     };
   }
 
-  const pull = await pullFromRemote(scope, client);
+  const pull = await pullFromRemote(scope, client, domain);
   return {
     pushed,
     pulled: pull.pulled,
@@ -890,12 +943,16 @@ export async function resetSyncStateForScope(scope: string): Promise<void> {
     writeQueue(scope, []),
     writeMeta(scope, { cursorByEntity: {} }),
   ]);
-  syncInflightByScope.delete(scope);
-  syncLastRunAtByScope.delete(scope);
+  for (const domain of ['base', 'portfolio', 'all'] satisfies SyncDomain[]) {
+    syncInflightByScope.delete(syncRunKey(scope, domain));
+    syncLastRunAtByScope.delete(syncRunKey(scope, domain));
+  }
+  pushInflightByScope.delete(scope);
 }
 
-export async function syncWithSupabaseIfNeeded(options: { force?: boolean } = {}): Promise<SyncResult> {
+export async function syncWithSupabaseIfNeeded(options: { force?: boolean; domain?: SyncDomain } = {}): Promise<SyncResult> {
   const force = options.force ?? false;
+  const domain = options.domain ?? 'all';
   const scope = getActiveDataScope();
   if (scope === GUEST_DATA_SCOPE) {
     return { pushed: 0, pulled: 0, changed: false, queueRemaining: 0, skipped: true, reason: 'guest' };
@@ -915,12 +972,13 @@ export async function syncWithSupabaseIfNeeded(options: { force?: boolean } = {}
     return { pushed: 0, pulled: 0, changed: false, queueRemaining: (await readQueue(scope)).length, skipped: true, reason: 'no_client' };
   }
 
-  const existing = syncInflightByScope.get(scope);
+  const runKey = syncRunKey(scope, domain);
+  const existing = syncInflightByScope.get(runKey);
   if (existing) return existing;
 
   const queueRemaining = (await readQueue(scope)).length;
   if (!force && queueRemaining === 0) {
-    const lastRunAt = syncLastRunAtByScope.get(scope) ?? 0;
+    const lastRunAt = syncLastRunAtByScope.get(runKey) ?? 0;
     if (Date.now() - lastRunAt < SYNC_COOLDOWN_MS) {
       return {
         pushed: 0,
@@ -933,9 +991,9 @@ export async function syncWithSupabaseIfNeeded(options: { force?: boolean } = {}
     }
   }
 
-  const runPromise = runSync(scope, client)
+  const runPromise = runSync(scope, client, domain)
     .then((result) => {
-      syncLastRunAtByScope.set(scope, Date.now());
+      syncLastRunAtByScope.set(runKey, Date.now());
       return result;
     })
     .catch(async (error) => {
@@ -952,13 +1010,13 @@ export async function syncWithSupabaseIfNeeded(options: { force?: boolean } = {}
       throw error;
     })
     .finally(() => {
-      syncInflightByScope.delete(scope);
+      syncInflightByScope.delete(runKey);
     });
 
-  syncInflightByScope.set(scope, runPromise);
+  syncInflightByScope.set(runKey, runPromise);
   return runPromise;
 }
 
-export function triggerBackgroundSync(): void {
-  void syncWithSupabaseIfNeeded();
+export function triggerBackgroundSync(options: { domain?: SyncDomain } = {}): void {
+  void syncWithSupabaseIfNeeded(options);
 }

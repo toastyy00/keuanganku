@@ -279,7 +279,7 @@ export class LocalStorageExpenseRepository implements ExpenseRepository {
 
     if (isAuthenticated()) {
       await enqueueSyncUpsert('expenses', expense.id, expense);
-      triggerBackgroundSync();
+      triggerBackgroundSync({ domain: 'base' });
     }
     return expense;
   }
@@ -302,7 +302,7 @@ export class LocalStorageExpenseRepository implements ExpenseRepository {
 
     if (isAuthenticated()) {
       await enqueueSyncUpsert('expenses', updated.id, updated);
-      triggerBackgroundSync();
+      triggerBackgroundSync({ domain: 'base' });
     }
     return updated;
   }
@@ -317,7 +317,7 @@ export class LocalStorageExpenseRepository implements ExpenseRepository {
 
     if (isAuthenticated()) {
       await enqueueSyncDelete('expenses', id);
-      triggerBackgroundSync();
+      triggerBackgroundSync({ domain: 'base' });
     }
   }
 }
@@ -365,7 +365,7 @@ export class LocalStorageCategoryRepository implements CategoryRepository {
 
     if (isAuthenticated()) {
       await enqueueSyncUpsert('categories', newCategory.slug, newCategory);
-      triggerBackgroundSync();
+      triggerBackgroundSync({ domain: 'base' });
     }
     return newCategory;
   }
@@ -380,7 +380,7 @@ export class LocalStorageCategoryRepository implements CategoryRepository {
 
     if (isAuthenticated()) {
       await enqueueSyncUpsert('categories', updated.slug, updated);
-      triggerBackgroundSync();
+      triggerBackgroundSync({ domain: 'base' });
     }
     return updated;
   }
@@ -399,7 +399,7 @@ export class LocalStorageCategoryRepository implements CategoryRepository {
 
     if (isAuthenticated()) {
       await enqueueSyncDelete('categories', slug);
-      triggerBackgroundSync();
+      triggerBackgroundSync({ domain: 'base' });
     }
   }
 }
@@ -423,7 +423,7 @@ export class LocalStorageRecurringRepository implements RecurringRepository {
 
     if (isAuthenticated()) {
       await enqueueSyncUpsert('recurring', template.id, template);
-      triggerBackgroundSync();
+      triggerBackgroundSync({ domain: 'base' });
     }
     return template;
   }
@@ -442,7 +442,7 @@ export class LocalStorageRecurringRepository implements RecurringRepository {
 
     if (isAuthenticated()) {
       await enqueueSyncUpsert('recurring', updated.id, updated);
-      triggerBackgroundSync();
+      triggerBackgroundSync({ domain: 'base' });
     }
     return updated;
   }
@@ -457,7 +457,7 @@ export class LocalStorageRecurringRepository implements RecurringRepository {
 
     if (isAuthenticated()) {
       await enqueueSyncDelete('recurring', id);
-      triggerBackgroundSync();
+      triggerBackgroundSync({ domain: 'base' });
     }
   }
 }

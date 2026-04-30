@@ -8,6 +8,7 @@ import { AssetActionSheet } from './AssetActionSheet';
 import { ActivityFeed } from './ActivityFeed';
 import { HoldingsBottomSheet, type AggregatedPortfolioAsset } from './HoldingsBottomSheet';
 import { PocketSettingsSheet } from './PocketSettingsSheet';
+import { PortfolioAllocationBar } from './PortfolioAllocationBar';
 import { PortfolioChart } from './PortfolioChart';
 import type { PortfolioAsset, PortfolioPocket } from '../../types';
 
@@ -216,7 +217,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
         </div>
 
         <div className="px-4 pb-4">
-          <div className="mt-3 grid grid-cols-5 gap-1">
+          <div className="-mt-1 grid grid-cols-5 gap-1">
             {FRAMES.map((frame) => (
               <button
                 key={frame}
@@ -232,6 +233,13 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
               </button>
             ))}
           </div>
+          <PortfolioAllocationBar
+            assets={aggregatedAssets.map((asset) => ({
+              ticker: asset.ticker,
+              usdValue: asset.totalUsdValue,
+            }))}
+            colorTheme={pocket.color_theme}
+          />
         </div>
       </section>
 

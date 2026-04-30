@@ -157,7 +157,7 @@ export const useExpenseStore = create<ExpenseStore>()(
             });
 
             if (activeScope !== GUEST_DATA_SCOPE) {
-              void syncWithSupabaseIfNeeded()
+              void syncWithSupabaseIfNeeded({ domain: 'base' })
                 .then(async (result) => {
                   if (!result.changed) return;
                   if (getActiveDataScope() !== activeScope) return;

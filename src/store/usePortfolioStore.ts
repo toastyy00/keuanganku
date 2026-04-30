@@ -4,7 +4,7 @@ import { idbZustandStorage } from '../lib/idb-storage';
 import { GUEST_DATA_SCOPE, getActiveDataScope } from '../lib/dataScope';
 import { syncWithSupabaseIfNeeded } from '../lib/sync-engine';
 import { getPortfolioActivityLogRepo, getPortfolioAssetRepo, getPortfolioPocketRepo } from '../lib/portfolio-repository';
-import { clearCurrentPriceCache, computePortfolioValueSeries, daysForTimeframe, fetchCurrentPrices, fetchHistoricalPrices, resolveCoingeckoId } from '../lib/portfolio-prices';
+import { clearCurrentPriceCache, computePortfolioValueSeries, daysForTimeframe, fetchCurrentPrices, fetchHistoricalPricesCached, resolveCoingeckoId } from '../lib/portfolio-prices';
 import { roundPortfolioAmount } from '../lib/utils';
 import type { PortfolioActivityLog, PortfolioAsset, PortfolioPocket } from '../types';
 
@@ -159,7 +159,7 @@ export const usePortfolioStore = create<PortfolioStore>()(
             });
 
             if (activeScope !== GUEST_DATA_SCOPE) {
-              void syncWithSupabaseIfNeeded()
+              void syncWithSupabaseIfNeeded({ domain: 'portfolio' })
                 .then(async (result) => {
                   if (!result.changed) return;
                   if (getActiveDataScope() !== activeScope) return;
@@ -457,7 +457,7 @@ export const usePortfolioStore = create<PortfolioStore>()(
         const days = daysForTimeframe(timeframe);
         await Promise.all(
           Array.from(new Set(scopedAssets.map((asset) => asset.coingecko_id))).map(async (coingeckoId) => {
-            historicalByAsset[coingeckoId] = await fetchHistoricalPrices(coingeckoId, days);
+            historicalByAsset[coingeckoId] = await fetchHistoricalPricesCached(coingeckoId, days);
           }),
         );
 
