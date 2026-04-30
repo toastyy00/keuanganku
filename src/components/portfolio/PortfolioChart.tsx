@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 
 interface ChartPoint {
   timestamp: number;
@@ -63,7 +63,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     return { min: baseline, max: Math.max(max, baseline + 1) };
   }, [dataPoints, timeframe]);
 
-  const draw = (width: number, height: number) => {
+  const draw = useCallback((width: number, height: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -194,7 +194,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       ctx.fillStyle = '#F5F0E8';
       ctx.fillText(timeLabel, labelX + labelPadX, labelY + 14);
     }
-  };
+  }, [colorTheme, dataPoints, yRange.max, yRange.min]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -219,7 +219,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     const ro = new ResizeObserver(render);
     ro.observe(wrapper);
     return () => ro.disconnect();
-  }, [dataPoints, colorTheme, timeframe, yRange.min, yRange.max]);
+  }, [draw]);
 
   const scrubAtClientX = (clientX: number) => {
     const wrapper = wrapperRef.current;

@@ -114,7 +114,7 @@ const PocketList: React.FC<PocketListProps> = ({ onOpenPocket }) => {
                 cardTapId === pocket.id ? 'translate-x-[4px] translate-y-[4px] shadow-none' : 'shadow-[4px_4px_0_0_#969696] md:hover:-translate-y-0.5 md:hover:shadow-[6px_8px_0_0_#969696]'
               }`}
               style={{
-                background: `linear-gradient(124deg, #222326 10%, #262931 42%, ${pocket.color_theme}58 78%, ${pocket.color_theme}75 100%)`,
+                background: `linear-gradient(124deg, #222326 10%, #262931 56%, ${pocket.color_theme}2E 86%, ${pocket.color_theme}4A 100%)`,
               }}
               onPointerDown={() => setCardTapId(pocket.id)}
               onPointerUp={() => setCardTapId((current) => (current === pocket.id ? null : current))}
