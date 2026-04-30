@@ -15,6 +15,31 @@ const CHART_GAIN_COLOR = '#22C55E';
 const CHART_LOSS_COLOR = '#EF4444';
 const CHART_FLAT_COLOR = '#F5F0E8';
 
+function buildMiniSparkline(points: { timestamp: number; value: number }[]): { line: string; area: string } | null {
+  if (points.length < 2) return null;
+
+  const width = 220;
+  const height = 96;
+  const paddingLeft = 4;
+  const paddingRight = 0;
+  const paddingY = 12;
+  const values = points.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+
+  const coords = points.map((point, index) => {
+    const x = paddingLeft + (index / (points.length - 1)) * (width - paddingLeft - paddingRight);
+    const y = paddingY + (1 - (point.value - min) / range) * (height - paddingY * 2);
+    return [x, y] as const;
+  });
+
+  const line = coords.map(([x, y], index) => `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`).join(' ');
+  const area = `${line} L ${coords[coords.length - 1][0].toFixed(2)} ${height} L ${coords[0][0].toFixed(2)} ${height} Z`;
+
+  return { line, area };
+}
+
 const TotalPortfolioCard: React.FC = () => {
   const assets = usePortfolioStore((s) => s.assets);
   const prices = usePortfolioStore((s) => s.prices);
@@ -28,6 +53,7 @@ const TotalPortfolioCard: React.FC = () => {
   const [scrubPointValue, setScrubPointValue] = useState<number | null>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [isRefreshPressed, setIsRefreshPressed] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const refreshReleaseTimerRef = useRef<number | null>(null);
 
   const resetScrubState = () => {
@@ -82,21 +108,101 @@ const TotalPortfolioCard: React.FC = () => {
   const isDisplayChangePositive = changeValue >= 0;
   const changeColorClass = isDisplayChangeFlat ? 'text-[#F5F0E8]' : (isDisplayChangePositive ? 'text-[#22C55E]' : 'text-[#EF4444]');
   const chartPerformanceColor = isStableChangeFlat ? CHART_FLAT_COLOR : (isStableChangePositive ? CHART_GAIN_COLOR : CHART_LOSS_COLOR);
+  const miniSparkline = useMemo(() => buildMiniSparkline(chartData), [chartData]);
   const changeSign = changeValue >= 0 ? '+' : '-';
   const formatPortfolioIdrValue = (usdValue: number) => (
     portfolioRateInfo ? formatCurrency(usdValue * portfolioRateInfo.rate, 'IDR') : 'Rp --'
   );
   const hasAssets = aggregatedAssets.length > 0 && totalUsd > 0;
+  const toggleExpanded = () => {
+    setIsExpanded((current) => {
+      if (current) {
+        resetScrubState();
+        setTimeframe('24H');
+      }
+      return !current;
+    });
+  };
 
   return (
     <section
-      className="overflow-hidden shadow-[4px_4px_0_0_#969696]"
+      role="button"
+      tabIndex={0}
+      aria-expanded={isExpanded}
+      onClick={toggleExpanded}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          toggleExpanded();
+        }
+      }}
+      className="relative cursor-pointer overflow-hidden shadow-[4px_4px_0_0_#969696] transition-[transform,box-shadow] duration-200 md:hover:-translate-y-0.5 md:hover:shadow-[6px_8px_0_0_#969696]"
       style={{
         background: `linear-gradient(124deg, #222326 10%, #262931 42%, ${GLOBAL_ACCENT}4D 78%, ${GLOBAL_ACCENT}66 100%)`,
       }}
     >
-      <div className="px-4 pt-4">
-        <div className="mb-3 flex items-start justify-between">
+      {!isExpanded && hasAssets && miniSparkline && (
+        <div className="pointer-events-none absolute inset-y-0 -right-[1px] w-[66%] opacity-75">
+          <svg
+            className="h-full w-full"
+            viewBox="0 0 220 96"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <defs>
+              <linearGradient id="total-portfolio-mini-fill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={chartPerformanceColor} stopOpacity="0.08" />
+                <stop offset="58%" stopColor={chartPerformanceColor} stopOpacity="0.04" />
+                <stop offset="100%" stopColor={chartPerformanceColor} stopOpacity="0" />
+              </linearGradient>
+              <linearGradient id="total-portfolio-mini-depth" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor={chartPerformanceColor} stopOpacity="0" />
+                <stop offset="50%" stopColor={chartPerformanceColor} stopOpacity="0.01" />
+                <stop offset="100%" stopColor={chartPerformanceColor} stopOpacity="0.20" />
+              </linearGradient>
+              <linearGradient id="total-portfolio-mini-line" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor={chartPerformanceColor} stopOpacity="0.28" />
+                <stop offset="34%" stopColor={chartPerformanceColor} stopOpacity="0.56" />
+                <stop offset="100%" stopColor={chartPerformanceColor} stopOpacity="0.92" />
+              </linearGradient>
+              <linearGradient id="total-portfolio-mini-alpha" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="white" stopOpacity="0" />
+                <stop offset="24%" stopColor="white" stopOpacity="0.10" />
+                <stop offset="48%" stopColor="white" stopOpacity="0.82" />
+                <stop offset="100%" stopColor="white" stopOpacity="1" />
+              </linearGradient>
+              <linearGradient id="total-portfolio-mini-line-alpha" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="white" stopOpacity="0.48" />
+                <stop offset="28%" stopColor="white" stopOpacity="0.68" />
+                <stop offset="100%" stopColor="white" stopOpacity="1" />
+              </linearGradient>
+              <mask id="total-portfolio-mini-fill-mask">
+                <rect width="220" height="96" fill="url(#total-portfolio-mini-alpha)" />
+              </mask>
+              <mask id="total-portfolio-mini-line-mask">
+                <rect width="220" height="96" fill="url(#total-portfolio-mini-line-alpha)" />
+              </mask>
+            </defs>
+            <g mask="url(#total-portfolio-mini-fill-mask)">
+              <path d={miniSparkline.area} fill="url(#total-portfolio-mini-fill)" />
+              <path d={miniSparkline.area} fill="url(#total-portfolio-mini-depth)" />
+            </g>
+            <g mask="url(#total-portfolio-mini-line-mask)">
+              <path
+                d={miniSparkline.line}
+                fill="none"
+                stroke="url(#total-portfolio-mini-line)"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
+              />
+            </g>
+          </svg>
+        </div>
+      )}
+      <div className={`${isExpanded ? 'px-4 pt-4' : 'relative z-10 px-5 py-5'}`}>
+        <div className={`${isExpanded ? 'mb-3' : ''} flex items-start justify-between`}>
           <div>
             <p className="text-xs font-black uppercase text-brutal-black/50">Total Portfolio</p>
             <p className="text-2xl font-black">{formatPortfolioIdrValue(displayValue)}</p>
@@ -107,45 +213,54 @@ const TotalPortfolioCard: React.FC = () => {
               <p className="mt-1 text-sm font-black text-[#F5F0E8]">No portfolio assets yet</p>
             )}
           </div>
-          <button
-            type="button"
-            className={`inline-flex h-9 w-9 items-center justify-center border-2 transition-[transform,box-shadow] duration-150 ease-out ${isRefreshPressed ? 'translate-x-1 translate-y-1' : ''}`}
-            style={{
-              borderColor: GLOBAL_ACCENT,
-              color: GLOBAL_ACCENT,
-              backgroundColor: 'rgba(20,20,24,0.45)',
-              boxShadow: isRefreshPressed ? `inset 0 0 0 2px ${GLOBAL_ACCENT}` : `2px 2px 0 0 rgba(0,0,0,0.45), inset 0 0 0 1px ${GLOBAL_ACCENT}33`,
-            }}
-            onPointerDown={() => {
-              if (refreshReleaseTimerRef.current !== null) {
-                window.clearTimeout(refreshReleaseTimerRef.current);
-              }
-              setIsRefreshPressed(true);
-            }}
-            onPointerUp={() => {
-              if (refreshReleaseTimerRef.current !== null) {
-                window.clearTimeout(refreshReleaseTimerRef.current);
-              }
-              refreshReleaseTimerRef.current = window.setTimeout(() => {
-                setIsRefreshPressed(false);
-              }, 120);
-            }}
-            onPointerLeave={() => setIsRefreshPressed(false)}
-            onPointerCancel={() => setIsRefreshPressed(false)}
-            onBlur={() => setIsRefreshPressed(false)}
-            onClick={async () => {
-              await refreshPrices();
-              await refreshTotalChartSeries(timeframe);
-            }}
-          >
-            <RefreshCw size={14} />
-          </button>
+          {isExpanded && (
+            <button
+              type="button"
+              className={`inline-flex h-9 w-9 items-center justify-center border-2 transition-[transform,box-shadow] duration-150 ease-out ${isRefreshPressed ? 'translate-x-1 translate-y-1' : ''}`}
+              style={{
+                borderColor: GLOBAL_ACCENT,
+                color: GLOBAL_ACCENT,
+                backgroundColor: 'rgba(20,20,24,0.45)',
+                boxShadow: isRefreshPressed ? 'inset 0 0 0 2px #969696' : `2px 2px 0 0 #969696, inset 0 0 0 1px ${GLOBAL_ACCENT}33`,
+              }}
+              onClick={async (event) => {
+                event.stopPropagation();
+                await refreshPrices(undefined, { force: true });
+                await refreshTotalChartSeries(timeframe, { force: true });
+              }}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                if (refreshReleaseTimerRef.current !== null) {
+                  window.clearTimeout(refreshReleaseTimerRef.current);
+                }
+                setIsRefreshPressed(true);
+              }}
+              onPointerUp={(event) => {
+                event.stopPropagation();
+                if (refreshReleaseTimerRef.current !== null) {
+                  window.clearTimeout(refreshReleaseTimerRef.current);
+                }
+                refreshReleaseTimerRef.current = window.setTimeout(() => {
+                  setIsRefreshPressed(false);
+                }, 120);
+              }}
+              onPointerLeave={() => setIsRefreshPressed(false)}
+              onPointerCancel={() => setIsRefreshPressed(false)}
+              onBlur={() => setIsRefreshPressed(false)}
+            >
+              <RefreshCw size={14} />
+            </button>
+          )}
         </div>
       </div>
 
-      {hasAssets && (
-        <>
-          <div className="w-full">
+      <div
+        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+          isExpanded && hasAssets ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="w-full" onClick={(event) => event.stopPropagation()}>
             <PortfolioChart
               dataPoints={chartData}
               colorTheme={chartPerformanceColor}
@@ -159,7 +274,7 @@ const TotalPortfolioCard: React.FC = () => {
             />
           </div>
 
-          <div className="px-4 pb-4">
+          <div className="px-4 pb-4" onClick={(event) => event.stopPropagation()}>
             <div className="-mt-1 grid grid-cols-5 gap-1">
               {FRAMES.map((frame) => (
                 <button
@@ -185,8 +300,8 @@ const TotalPortfolioCard: React.FC = () => {
               collapsible
             />
           </div>
-        </>
-      )}
+        </div>
+      </div>
     </section>
   );
 };

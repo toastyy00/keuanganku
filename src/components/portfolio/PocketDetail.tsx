@@ -177,7 +177,10 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
               onPointerLeave={() => setIsRefreshPressed(false)}
               onPointerCancel={() => setIsRefreshPressed(false)}
               onBlur={() => setIsRefreshPressed(false)}
-              onClick={() => void refreshPrices(pocketId)}
+              onClick={async () => {
+                await refreshPrices(pocketId, { force: true });
+                await refreshChartSeries(pocketId, timeframe, { force: true });
+              }}
             >
               <RefreshCw size={14} />
             </button>

@@ -376,6 +376,28 @@ export function clearCurrentPriceCache(ids?: string[]): void {
   }
 }
 
+export function clearHistoricalPriceCache(coingeckoIds?: string[], days?: number): void {
+  if (!coingeckoIds) {
+    historicalPriceCache.clear();
+    return;
+  }
+
+  const keys = new Set(
+    coingeckoIds
+      .map((id) => id.trim())
+      .filter(Boolean)
+      .map((id) => (typeof days === 'number' ? historicalCacheKey(id, days) : id.toLowerCase())),
+  );
+  for (const key of Array.from(historicalPriceCache.keys())) {
+    if (typeof days === 'number') {
+      if (keys.has(key)) historicalPriceCache.delete(key);
+    } else {
+      const [id] = key.split('::');
+      if (keys.has(id)) historicalPriceCache.delete(key);
+    }
+  }
+}
+
 export function daysForTimeframe(timeframe: Timeframe): number {
   return timeframeToDays(timeframe);
 }
