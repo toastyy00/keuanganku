@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { TrendingUp, TrendingDown, Minus, CalendarClock, WalletCards } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, CalendarClock } from 'lucide-react';
 import { Card, CardBody } from '../components/ui/Card';
 import NumberFlow, { continuous } from '@number-flow/react';
 import { SkeletonDashboard } from '../components/SkeletonCard';
@@ -28,6 +28,14 @@ function haptic() {
 
 // Swipeable Card Carousel
 const SWIPE_HINT_KEY = 'dashboard_swipe_hint_seen';
+const PORTFOLIO_REVEAL_HINT_PX = 24;
+const PORTFOLIO_REVEAL_READY_PX = 154;
+const PORTFOLIO_REVEAL_COMMIT_PX = 146;
+const PORTFOLIO_REVEAL_CANCEL_PX = 88;
+const PORTFOLIO_REVEAL_CANCEL_PULLBACK_PX = 38;
+const PORTFOLIO_REVEAL_MIN_HOLD_MS = 240;
+const PORTFOLIO_REVEAL_SOFT_LIMIT_PX = 164;
+const PORTFOLIO_REVEAL_MAX_PX = 208;
 
 function hasSeenSwipeHint(): boolean {
   return sessionStorage.getItem(SWIPE_HINT_KEY) === '1';
@@ -301,11 +309,12 @@ const DashboardPage: React.FC = () => {
   const clearHeaderClickSuppressTimerRef = useRef<number | null>(null);
   const [dateDragging, setDateDragging] = useState(false);
   const portfolioRevealStartYRef = useRef<number | null>(null);
-  const portfolioRevealHoldStartedAtRef = useRef<number | null>(null);
-  const portfolioRevealHoldUnlockedRef = useRef(false);
-  const portfolioRevealAnchorPxRef = useRef<number | null>(null);
-  const portfolioRevealMaxPxRef = useRef(0);
+  const portfolioRevealLastYRef = useRef<number | null>(null);
+  const portfolioRevealStartedAtRef = useRef<number | null>(null);
+  const portfolioRevealPeakPxRef = useRef(0);
   const portfolioRevealBasePxRef = useRef(0);
+  const portfolioRevealReadyRef = useRef(false);
+  const portfolioRevealCancelledRef = useRef(false);
   const [portfolioRevealPx, setPortfolioRevealPx] = useState(0);
   const [portfolioRevealDragging, setPortfolioRevealDragging] = useState(false);
   const [portfolioReadyToOpen, setPortfolioReadyToOpen] = useState(false);
@@ -396,19 +405,43 @@ const DashboardPage: React.FC = () => {
     return mainEl.scrollTop + mainEl.clientHeight >= mainEl.scrollHeight - 2;
   };
 
+  const easePortfolioReveal = (rawPx: number) => {
+    if (rawPx <= PORTFOLIO_REVEAL_SOFT_LIMIT_PX) return rawPx;
+    return Math.min(
+      PORTFOLIO_REVEAL_MAX_PX,
+      PORTFOLIO_REVEAL_SOFT_LIMIT_PX + (rawPx - PORTFOLIO_REVEAL_SOFT_LIMIT_PX) * 0.42
+    );
+  };
+
+  const setPortfolioRevealReady = (ready: boolean) => {
+    portfolioRevealReadyRef.current = ready;
+    setPortfolioReadyToOpen(ready);
+  };
+
+  const resetPortfolioRevealTracking = () => {
+    portfolioRevealStartYRef.current = null;
+    portfolioRevealLastYRef.current = null;
+    portfolioRevealStartedAtRef.current = null;
+    portfolioRevealPeakPxRef.current = 0;
+    portfolioRevealBasePxRef.current = 0;
+    portfolioRevealCancelledRef.current = false;
+    setPortfolioRevealDragging(false);
+    setPortfolioRevealReady(false);
+  };
+
   const startPortfolioReveal = (clientY: number) => {
     if (!isAtDashboardBottom()) {
       portfolioRevealStartYRef.current = null;
       return;
     }
     portfolioRevealStartYRef.current = clientY;
-    portfolioRevealHoldStartedAtRef.current = null;
-    portfolioRevealHoldUnlockedRef.current = false;
-    portfolioRevealAnchorPxRef.current = null;
-    portfolioRevealMaxPxRef.current = 0;
+    portfolioRevealLastYRef.current = clientY;
+    portfolioRevealStartedAtRef.current = Date.now();
+    portfolioRevealPeakPxRef.current = portfolioRevealPx;
     portfolioRevealBasePxRef.current = portfolioRevealPx;
+    portfolioRevealCancelledRef.current = false;
     setPortfolioRevealDragging(true);
-    setPortfolioReadyToOpen(false);
+    setPortfolioRevealReady(portfolioRevealPx >= PORTFOLIO_REVEAL_READY_PX);
   };
 
   const movePortfolioReveal = (clientY: number) => {
@@ -416,45 +449,50 @@ const DashboardPage: React.FC = () => {
 
     const delta = portfolioRevealStartYRef.current - clientY;
     const rawPx = Math.max(0, portfolioRevealBasePxRef.current + delta);
-    const easedPx = rawPx <= 68 ? rawPx : 68 + (rawPx - 68) ** 0.65;
+    const easedPx = easePortfolioReveal(rawPx);
+    const lastY = portfolioRevealLastYRef.current ?? clientY;
+    const isSwipingDown = clientY > lastY;
 
-    portfolioRevealMaxPxRef.current = Math.max(portfolioRevealMaxPxRef.current, easedPx);
+    portfolioRevealPeakPxRef.current = Math.max(portfolioRevealPeakPxRef.current, easedPx);
 
-    if (easedPx >= 22 && portfolioRevealHoldStartedAtRef.current === null) {
-      portfolioRevealHoldStartedAtRef.current = Date.now();
-    }
+    const pulledBackFromPeak = portfolioRevealPeakPxRef.current - easedPx;
+    const shouldCancelReady =
+      portfolioRevealReadyRef.current
+      && isSwipingDown
+      && (
+        easedPx <= PORTFOLIO_REVEAL_CANCEL_PX
+        || (
+          pulledBackFromPeak >= PORTFOLIO_REVEAL_CANCEL_PULLBACK_PX
+          && easedPx < PORTFOLIO_REVEAL_READY_PX + 6
+        )
+      );
 
-    if (easedPx < 16) {
-      portfolioRevealHoldStartedAtRef.current = null;
-      portfolioRevealHoldUnlockedRef.current = false;
-      portfolioRevealAnchorPxRef.current = null;
-      setPortfolioReadyToOpen(false);
-    }
-
-    if (
-      !portfolioRevealHoldUnlockedRef.current
-      && portfolioRevealHoldStartedAtRef.current !== null
-      && Date.now() - portfolioRevealHoldStartedAtRef.current >= 220
+    if (shouldCancelReady) {
+      portfolioRevealCancelledRef.current = true;
+      setPortfolioRevealReady(false);
+    } else if (
+      !portfolioRevealCancelledRef.current
+      && easedPx >= PORTFOLIO_REVEAL_READY_PX
     ) {
-      portfolioRevealHoldUnlockedRef.current = true;
-      portfolioRevealAnchorPxRef.current = easedPx;
+      setPortfolioRevealReady(true);
+    } else if (easedPx <= PORTFOLIO_REVEAL_CANCEL_PX) {
+      portfolioRevealCancelledRef.current = false;
+      setPortfolioRevealReady(false);
     }
 
-    if (
-      portfolioRevealHoldUnlockedRef.current
-      && portfolioRevealAnchorPxRef.current !== null
-      && Math.max(0, easedPx - portfolioRevealAnchorPxRef.current) >= 20
-    ) {
-      setPortfolioReadyToOpen(true);
-    }
-
+    portfolioRevealLastYRef.current = clientY;
     setPortfolioRevealPx(easedPx);
   };
 
   const endPortfolioReveal = () => {
     if (portfolioRevealStartYRef.current === null) return;
 
-    const shouldOpen = portfolioReadyToOpen && portfolioRevealMaxPxRef.current >= 42 && portfolioRevealPx >= 40;
+    const shouldOpen =
+      portfolioRevealReadyRef.current
+      && !portfolioRevealCancelledRef.current
+      && Date.now() - (portfolioRevealStartedAtRef.current ?? Date.now()) >= PORTFOLIO_REVEAL_MIN_HOLD_MS
+      && portfolioRevealPx >= PORTFOLIO_REVEAL_COMMIT_PX;
+
     setPortfolioRevealPx(0);
 
     if (shouldOpen) {
@@ -462,14 +500,7 @@ const DashboardPage: React.FC = () => {
       navigate('/portfolio');
     }
 
-    portfolioRevealStartYRef.current = null;
-    portfolioRevealHoldStartedAtRef.current = null;
-    portfolioRevealHoldUnlockedRef.current = false;
-    portfolioRevealAnchorPxRef.current = null;
-    portfolioRevealMaxPxRef.current = 0;
-    portfolioRevealBasePxRef.current = 0;
-    setPortfolioRevealDragging(false);
-    setPortfolioReadyToOpen(false);
+    resetPortfolioRevealTracking();
   };
 
   // Month prefixes used for filtering
@@ -603,6 +634,13 @@ const DashboardPage: React.FC = () => {
 
   if (isLoading && expenses.length === 0) return <SkeletonDashboard />;
 
+  const portfolioRevealProgress = Math.min(1, portfolioRevealPx / PORTFOLIO_REVEAL_READY_PX);
+  const portfolioRevealHintVisible = portfolioRevealDragging && portfolioRevealPx >= PORTFOLIO_REVEAL_HINT_PX;
+  const portfolioRevealIsCancelling = portfolioRevealDragging && portfolioRevealCancelledRef.current;
+  const portfolioRevealBarVisible = portfolioRevealHintVisible || portfolioRevealIsCancelling;
+  const portfolioRevealBarProgress = portfolioRevealProgress;
+  const portfolioRevealAccent = portfolioRevealIsCancelling ? '#F5F0E8' : '#B8F55A';
+
   return (
     <div
       className="section-pad space-y-5 max-w-2xl mx-auto pt-5 pb-1"
@@ -614,8 +652,8 @@ const DashboardPage: React.FC = () => {
       onMouseUp={endPortfolioReveal}
       onMouseLeave={endPortfolioReveal}
       style={{
-        transform: `translateY(${-Math.min(22, portfolioRevealPx * 0.34)}px)`,
-        transition: portfolioRevealDragging ? 'none' : 'transform 180ms cubic-bezier(0.16, 1, 0.3, 1)',
+        transform: `translateY(${-Math.min(30, portfolioRevealPx * 0.32)}px)`,
+        transition: portfolioRevealDragging ? 'none' : 'transform 220ms cubic-bezier(0.16, 1, 0.3, 1)',
         touchAction: portfolioRevealDragging ? 'none' : 'pan-y',
       }}
     >
@@ -1062,59 +1100,29 @@ const DashboardPage: React.FC = () => {
         )}
       </div>
 
-      <div className="pb-0 pt-0 md:hidden">
+      <div className="relative h-0 pb-0 pt-0 md:hidden">
         <div
-          className="relative overflow-hidden"
-          style={{ height: `${14 + Math.min(110, portfolioRevealPx * 1.45)}px` }}
+          className="pointer-events-none absolute inset-x-0 bottom-1 flex h-5 items-center justify-center overflow-visible"
+          style={{
+            opacity: portfolioRevealBarVisible ? 1 : 0,
+            transform: `translateY(${8 - portfolioRevealBarProgress * 8}px)`,
+            transition: 'opacity 180ms ease, transform 220ms cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+          aria-hidden="true"
         >
-          {portfolioRevealDragging && portfolioRevealPx >= 22 && (
-            <div className="pointer-events-none absolute inset-x-0 top-1.5 flex items-center justify-center">
+          {portfolioRevealBarVisible ? (
               <div
-                className="h-1 rounded-full bg-[#B8F55A] transition-all duration-150"
+                className="h-[2px] rounded-full transition-[background-color,box-shadow,width,opacity] duration-200 ease-out"
                 style={{
-                  width: `${28 + Math.min(90, Math.max(0, portfolioRevealPx - 22) * 2.7)}px`,
-                  boxShadow: portfolioReadyToOpen
-                    ? '0 0 0 1px #1A1A1A, 0 0 14px #B8F55A88'
-                    : '0 0 0 1px #1A1A1A, 0 0 10px #B8F55A55',
+                  width: `${32 + portfolioRevealBarProgress * 176}px`,
+                  opacity: portfolioRevealIsCancelling ? 0.25 + portfolioRevealBarProgress * 0.45 : 0.45 + portfolioRevealBarProgress * 0.55,
+                  backgroundColor: portfolioRevealAccent,
+                  boxShadow: portfolioReadyToOpen && !portfolioRevealIsCancelling
+                    ? '0 0 0 1px #1A1A1A, 0 0 18px #B8F55A99'
+                    : `0 0 0 1px #1A1A1A, 0 0 ${6 + portfolioRevealBarProgress * 8}px ${portfolioRevealAccent}66`,
                 }}
               />
-            </div>
-          )}
-
-          <div
-            className="pointer-events-none absolute inset-x-0 bottom-0"
-            style={{
-              bottom: '14px',
-              transform: `translateY(${68 - Math.min(68, portfolioRevealPx)}px)`,
-              transition: portfolioRevealDragging ? 'none' : 'transform 180ms cubic-bezier(0.16, 1, 0.3, 1)',
-              opacity: portfolioReadyToOpen ? 1 : 0,
-            }}
-          >
-            <div
-              className="border border-dashed border-[#F5F0E8]/14 bg-[#202020]/45 px-4 py-2.5 text-[#F5F0E8]/50"
-              aria-hidden="true"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#F5F0E8]/35">
-                    Portfolio
-                  </p>
-                  <div className="mt-1 flex min-w-0 items-center gap-3">
-                    <WalletCards size={14} strokeWidth={2.3} className="shrink-0" />
-                    <div className="min-w-0">
-                      <p className="truncate text-[10px] font-black uppercase tracking-[0.14em]">
-                        Kantong Portofolio
-                      </p>
-                      <p className="truncate text-[9px] font-medium opacity-55">
-                        Web3, CEX, wallet, dan tracker aset manual
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <span className="text-[10px] font-black opacity-35">{'\u25B8'}</span>
-              </div>
-            </div>
-          </div>
+          ) : null}
         </div>
       </div>
     </div>

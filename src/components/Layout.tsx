@@ -95,7 +95,11 @@ const Layout: React.FC = () => {
   const isRestoringScrollRef = useRef(false);
 
   React.useEffect(() => {
+    document.documentElement.classList.add('app-shell-active');
+
     return () => {
+      document.documentElement.classList.remove('app-shell-active');
+
       if (restoreFrameRef.current !== null) {
         cancelAnimationFrame(restoreFrameRef.current);
       }
@@ -329,7 +333,7 @@ const Layout: React.FC = () => {
       <main
         id="main-content"
         ref={mainContentRef}
-        className={`flex-1 min-w-0 ${location.pathname === '/history' ? 'overflow-hidden' : 'overflow-y-auto'}`}
+        className={`app-scroll-container flex-1 min-w-0 ${location.pathname === '/history' ? 'overflow-hidden' : 'overflow-y-auto'}`}
         onScroll={(e) => {
           if (isRestoringScrollRef.current) return;
           if (location.pathname === '/history') return; // history manages its own scroll
