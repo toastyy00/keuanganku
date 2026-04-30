@@ -12,6 +12,13 @@ const currentPriceCache = new Map<string, { value: { usd: number }; expiresAt: n
 const TICKER_TO_COINGECKO_ID: Record<string, string> = {
   BTC: 'bitcoin',
   ETH: 'ethereum',
+  USDT: 'tether',
+  USDC: 'usd-coin',
+  DAI: 'dai',
+  BUSD: 'binance-usd',
+  FDUSD: 'first-digital-usd',
+  TUSD: 'true-usd',
+  USDP: 'paxos-standard',
   SOL: 'solana',
   BNB: 'binancecoin',
   JUP: 'jupiter-exchange-solana',
@@ -33,6 +40,16 @@ const TICKER_TO_COINGECKO_ID: Record<string, string> = {
 const COINGECKO_TO_TICKER: Record<string, string> = Object.fromEntries(
   Object.entries(TICKER_TO_COINGECKO_ID).map(([ticker, id]) => [id, ticker])
 );
+
+const STABLECOIN_IDS = new Set([
+  'tether',
+  'usd-coin',
+  'dai',
+  'binance-usd',
+  'first-digital-usd',
+  'true-usd',
+  'paxos-standard',
+]);
 
 function chunk<T>(items: T[], size: number): T[][] {
   const result: T[][] = [];
@@ -65,6 +82,19 @@ function historicalQueryForDays(days: number): { interval: '15m' | '1h' | '4h' |
   if (days <= 30) return { interval: '4h', limit: 180 };
   if (days <= 365) return { interval: '1d', limit: 365 };
   return { interval: '1w', limit: 520 };
+}
+
+function isStablecoinId(coingeckoId: string): boolean {
+  return STABLECOIN_IDS.has(coingeckoId.trim().toLowerCase());
+}
+
+function buildStablecoinHistoricalPrices(days: number): HistoricalPoint[] {
+  const { limit } = historicalQueryForDays(days);
+  const end = Date.now();
+  const start = end - days * 24 * 60 * 60 * 1000;
+  const count = Math.max(2, limit);
+  const step = (end - start) / (count - 1);
+  return Array.from({ length: count }, (_, index) => [Math.round(start + step * index), 1] as HistoricalPoint);
 }
 
 async function fetchBinanceWithBackoff(path: string, attempts = 3): Promise<Response> {
@@ -157,6 +187,14 @@ export async function fetchCurrentPrices(coingeckoIds: string[]): Promise<Curren
   const missing: string[] = [];
 
   for (const id of uniqueIds) {
+    if (isStablecoinId(id)) {
+      result[id] = { usd: 1 };
+      currentPriceCache.set(id, {
+        value: { usd: 1 },
+        expiresAt: now + PRICE_CACHE_TTL_MS,
+      });
+      continue;
+    }
     const cached = currentPriceCache.get(id);
     if (cached && cached.expiresAt > now) {
       result[id] = cached.value;
@@ -226,6 +264,7 @@ export async function fetchCurrentPrices(coingeckoIds: string[]): Promise<Curren
 
 export async function fetchHistoricalPrices(coingeckoId: string, days: number): Promise<HistoricalPoint[]> {
   if (!coingeckoId) return [];
+  if (isStablecoinId(coingeckoId)) return buildStablecoinHistoricalPrices(days);
 
   const ticker = COINGECKO_TO_TICKER[coingeckoId] ?? coingeckoId.trim().toUpperCase();
   const { interval, limit } = historicalQueryForDays(days);

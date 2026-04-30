@@ -1,6 +1,7 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { formatCurrency, formatPortfolioAmount, roundPortfolioAmount } from '../../lib/utils';
+import { getCachedPortfolioIdrRate, getPortfolioIdrRate, type PortfolioRateResult } from '../../lib/exchangeRate';
 import { usePortfolioStore } from '../../store/usePortfolioStore';
 import { AddAssetSheet } from './AddAssetSheet';
 import { AssetActionSheet } from './AssetActionSheet';
@@ -16,6 +17,9 @@ interface PocketDetailProps {
 }
 
 const FRAMES: Array<'24H' | '1W' | '1M' | '1Y' | 'ALL'> = ['24H', '1W', '1M', '1Y', 'ALL'];
+const CHART_GAIN_COLOR = '#22C55E';
+const CHART_LOSS_COLOR = '#EF4444';
+const CHART_FLAT_COLOR = '#F5F0E8';
 
 const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const pockets = usePortfolioStore((s) => s.pockets);
@@ -43,6 +47,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const [scrubPointValue, setScrubPointValue] = useState<number | null>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [isRefreshPressed, setIsRefreshPressed] = useState(false);
+  const [portfolioRateInfo, setPortfolioRateInfo] = useState<PortfolioRateResult | null>(() => getCachedPortfolioIdrRate());
   const refreshReleaseTimerRef = useRef<number | null>(null);
   const resetScrubState = () => {
     setIsScrubbing(false);
@@ -78,11 +83,25 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
     return Array.from(map.values()).sort((a, b) => b.totalUsdValue - a.totalUsdValue);
   }, [pocketAssets, prices]);
   const selectedAggregate = useMemo(() => aggregatedAssets.find((item) => item.key === selectedAggregateKey) ?? null, [aggregatedAssets, selectedAggregateKey]);
+  const selectedHoldingLogs = useMemo(() => {
+    if (!assetAction) return [];
+    return pocketLogs.filter((log) => log.asset_id === assetAction.id);
+  }, [assetAction, pocketLogs]);
 
   useEffect(() => {
     void fetchPrices(pocketId);
     void refreshChartSeries(pocketId, timeframe);
   }, [pocketId, timeframe, fetchPrices, refreshChartSeries, pocketAssets.length]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    getPortfolioIdrRate().then((rateInfo) => {
+      if (!isCancelled && rateInfo) setPortfolioRateInfo(rateInfo);
+    });
+    return () => {
+      isCancelled = true;
+    };
+  }, [pocketId]);
 
   useEffect(() => {
     return () => {
@@ -103,9 +122,14 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const endPointValue = isScrubbing ? (scrubPointValue ?? chartData[chartData.length - 1]?.value ?? 0) : (chartData[chartData.length - 1]?.value ?? 0);
   const changeValue = endPointValue - firstPointValue;
   const changePct = firstPointValue === 0 ? 0 : (changeValue / firstPointValue) * 100;
+  const isChangeFlat = Math.abs(changeValue) < 0.005 && Math.abs(changePct) < 0.005;
   const isChangePositive = changeValue >= 0;
-  const changeColorClass = isChangePositive ? 'text-[#8FE06A]' : 'text-[#FF6B6B]';
+  const changeColorClass = isChangeFlat ? 'text-[#F5F0E8]' : (isChangePositive ? 'text-[#22C55E]' : 'text-[#EF4444]');
+  const chartPerformanceColor = isChangeFlat ? CHART_FLAT_COLOR : (isChangePositive ? CHART_GAIN_COLOR : CHART_LOSS_COLOR);
   const changeSign = isChangePositive ? '+' : '-';
+  const formatPortfolioIdrValue = (usdValue: number) => (
+    portfolioRateInfo ? formatCurrency(usdValue * portfolioRateInfo.rate, 'IDR') : 'Rp --'
+  );
 
   if (!pocket) return null;
 
@@ -135,7 +159,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
           <div className="mb-3 flex items-start justify-between">
             <div>
               <p className="text-xs font-black uppercase text-brutal-black/50">Total Assets</p>
-              <p className="text-2xl font-black">{formatCurrency(displayValue * 16000, 'IDR')}</p>
+              <p className="text-2xl font-black">{formatPortfolioIdrValue(displayValue)}</p>
               <p className="text-sm font-bold text-brutal-black/60">${displayValue.toFixed(2)}</p>
               <p className={`mt-1 text-sm font-black ${changeColorClass}`}>{`${changeSign}$${Math.abs(changeValue).toFixed(2)} (${changeSign}${Math.abs(changePct).toFixed(2)}%) ${timeframe}`}</p>
             </div>
@@ -175,7 +199,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
         <div className="w-full">
           <PortfolioChart
             dataPoints={chartData}
-            colorTheme={pocket.color_theme}
+            colorTheme={chartPerformanceColor}
             timeframe={timeframe}
             onScrub={(point) => {
               setIsScrubbing(true);
@@ -208,7 +232,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
 
       <section className="space-y-2">
         <div className="flex items-center gap-2">
-          <p className="shrink-0 text-xs font-black uppercase text-brutal-black/60">Active Balance</p>
+          <p className="shrink-0 text-xs font-black uppercase text-brutal-black/60">Assets</p>
           <div
             className="h-px flex-1"
             style={{ backgroundColor: `${pocket.color_theme}73` }}
@@ -239,12 +263,15 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
               onClick={() => setSelectedAggregateKey(asset.key)}
             >
               <div>
-                <p className="text-sm font-black">{asset.ticker}</p>
+                <p className="flex items-baseline gap-1.5 text-sm font-black">
+                  <span>{asset.ticker}</span>
+                  <span className="text-[10px] font-bold text-brutal-black/55">≈ ${price.toFixed(4)}</span>
+                </p>
                 <p className="text-xs font-medium text-brutal-black/60">
-                  {formatPortfolioAmount(asset.totalAmount)} · ${price.toFixed(4)}
+                  {formatPortfolioAmount(asset.totalAmount)}
                 </p>
               </div>
-              <p className="text-sm font-black">{formatCurrency(asset.totalUsdValue * 16000, 'IDR')}</p>
+              <p className="text-sm font-black">{formatPortfolioIdrValue(asset.totalUsdValue)}</p>
             </button>
           );
         })}
@@ -258,6 +285,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
       <AddAssetSheet
         isOpen={isAddOpen}
         onClose={() => setIsAddOpen(false)}
+        colorTheme={pocket.color_theme}
         onAdd={async (input) => {
           await addAsset({
             pocket_id: pocketId,
@@ -279,6 +307,8 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
         onClose={() => setSelectedAggregateKey(null)}
         aggregate={selectedAggregate}
         currentPriceUsd={selectedAggregate ? prices[selectedAggregate.coingecko_id ?? '']?.usd : undefined}
+        idrRate={portfolioRateInfo?.rate}
+        colorTheme={pocket.color_theme}
         onAddHolding={async (input) => {
           if (!selectedAggregate) return;
           await addHolding(
@@ -318,7 +348,9 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
           setReturnAggregateKey(null);
         }}
         asset={assetAction}
+        activityLogs={selectedHoldingLogs}
         currentPriceUsd={assetAction ? prices[assetAction.coingecko_id ?? '']?.usd : undefined}
+        colorTheme={pocket.color_theme}
         onApply={async (assetId, newAmount, action, note) => {
           await updateAssetAmount(assetId, newAmount, action, note);
           await refreshPrices(pocketId);

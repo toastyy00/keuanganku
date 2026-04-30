@@ -14,16 +14,16 @@ interface PocketSettingsSheetProps {
 }
 
 const COLORS = [
-  '#B8F55A',
-  '#60A5FA',
-  '#14B8A6',
+  '#3B82F6',
+  '#06B6D4',
   '#F97316',
-  '#EC4899',
-  '#8B5CF6',
-  '#22C55E',
-  '#EAB308',
-  '#F43F5E',
-  '#0EA5E9',
+  '#DB2777',
+  '#7C3AED',
+  '#FACC15',
+  '#0F766E',
+  '#C084FC',
+  '#F59E0B',
+  '#64748B',
 ];
 const ICONS = ['briefcase', 'wallet', 'bank', 'shield', 'link'] as const;
 const SOURCES: Array<PortfolioPocket['source_type']> = ['CEX', 'WEB3', 'WALLET', 'LAINNYA'];
@@ -64,7 +64,10 @@ const PocketSettingsSheet: React.FC<PocketSettingsSheetProps> = ({ isOpen, onClo
         title={pocket ? 'POCKET SETTINGS' : 'NEW POCKET'}
         containPageOverscroll
       >
-        <div className="space-y-5">
+        <div
+          className="portfolio-theme-sheet space-y-5"
+          style={{ '--portfolio-pocket-accent': colorTheme } as React.CSSProperties}
+        >
           <Input
             label="Name"
             value={name}
@@ -83,11 +86,8 @@ const PocketSettingsSheet: React.FC<PocketSettingsSheetProps> = ({ isOpen, onClo
                   key={item}
                   type="button"
                   onClick={() => setSourceType(item)}
-                  className={`border-2 px-2 py-2 text-[11px] font-black uppercase transition-colors ${
-                    sourceType === item
-                      ? 'border-[#B8F55A] bg-[#B8F55A] text-[#1A1A1A]'
-                      : 'border-[#F5F0E8] bg-transparent text-[#F5F0E8]'
-                  }`}
+                  className={`border-2 px-2 py-2 text-[11px] font-black uppercase transition-colors ${sourceType === item ? 'text-[#1A1A1A]' : 'border-[#F5F0E8] bg-transparent text-[#F5F0E8]'}`}
+                  style={sourceType === item ? { borderColor: colorTheme, backgroundColor: colorTheme } : undefined}
                 >
                   {item}
                 </button>
@@ -117,11 +117,8 @@ const PocketSettingsSheet: React.FC<PocketSettingsSheetProps> = ({ isOpen, onClo
                   key={item}
                   type="button"
                   onClick={() => setIcon(item)}
-                  className={`flex h-10 items-center justify-center border-2 transition-colors ${
-                    icon === item
-                      ? 'border-[#B8F55A] text-[#B8F55A]'
-                      : 'border-[#F5F0E8] text-[#F5F0E8]'
-                  }`}
+                  className={`flex h-10 items-center justify-center border-2 transition-colors ${icon === item ? '' : 'border-[#F5F0E8] text-[#F5F0E8]'}`}
+                  style={icon === item ? { borderColor: colorTheme, color: colorTheme } : undefined}
                 >
                   {renderIcon(item)}
                 </button>
@@ -131,7 +128,8 @@ const PocketSettingsSheet: React.FC<PocketSettingsSheetProps> = ({ isOpen, onClo
           <button
             type="button"
             disabled={saving}
-            className="w-full border-2 border-[#B8F55A] bg-[#B8F55A] py-3 text-sm font-black uppercase text-[#1A1A1A] shadow-[4px_4px_0_0_#000] transition-transform active:translate-x-1 active:translate-y-1 active:shadow-none disabled:opacity-60"
+            className="w-full border-2 py-3 text-sm font-black uppercase text-[#1A1A1A] shadow-[4px_4px_0_0_#000] transition-transform active:translate-x-1 active:translate-y-1 active:shadow-none disabled:opacity-60"
+            style={{ borderColor: colorTheme, backgroundColor: colorTheme }}
             onClick={async () => {
               const nextErrors = {
                 name: !name.trim() ? 'Name wajib diisi' : undefined,

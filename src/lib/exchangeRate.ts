@@ -2,9 +2,11 @@
 //  EXCHANGE RATE — Fetches USD/IDR rate with caching
 // ============================================================
 
-const CACHE_KEY = 'exchange_rate_cache';
+const CACHE_KEY = 'shared_usd_idr_rate_cache';
+const LEGACY_EXPENSE_CACHE_KEY = 'exchange_rate_cache';
+const LEGACY_PORTFOLIO_CACHE_KEY = 'portfolio_idr_rate_cache';
 const FALLBACK_RATE = 16000;
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 export interface RateResult {
   rate: number;
@@ -14,14 +16,21 @@ export interface RateResult {
   fetchedAt?: string;
 }
 
+export interface PortfolioRateResult {
+  rate: number;
+  source: 'binance' | 'frankfurter' | 'cache';
+  fetchedAt: string;
+  isStale: boolean;
+}
+
 interface RateCache {
   rate: number;
   fetchedAt: string;
+  source?: PortfolioRateResult['source'];
 }
 
-function readCache(): RateCache | null {
+function parseRateCache(raw: string | null): RateCache | null {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as RateCache;
     if (!parsed.rate || !parsed.fetchedAt) return null;
@@ -31,10 +40,20 @@ function readCache(): RateCache | null {
   }
 }
 
-function writeCache(rate: number): RateCache {
-  const entry: RateCache = { rate, fetchedAt: new Date().toISOString() };
+function readCache(): RateCache | null {
+  return (
+    parseRateCache(localStorage.getItem(CACHE_KEY))
+    ?? parseRateCache(localStorage.getItem(LEGACY_PORTFOLIO_CACHE_KEY))
+    ?? parseRateCache(localStorage.getItem(LEGACY_EXPENSE_CACHE_KEY))
+  );
+}
+
+function writeCache(rate: number, source: 'binance' | 'frankfurter'): RateCache {
+  const entry: RateCache = { rate, source, fetchedAt: new Date().toISOString() };
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(entry));
+    localStorage.removeItem(LEGACY_PORTFOLIO_CACHE_KEY);
+    localStorage.removeItem(LEGACY_EXPENSE_CACHE_KEY);
   } catch {
     // Ignore storage errors (e.g., private mode)
   }
@@ -46,46 +65,97 @@ function isCacheFresh(cache: RateCache): boolean {
   return age < CACHE_TTL_MS;
 }
 
+async function fetchBinanceUsdtIdrRate(): Promise<number> {
+  const res = await fetch(
+    'https://api.binance.com/api/v3/ticker/price?symbol=USDTIDR',
+    { signal: AbortSignal.timeout(8000) }
+  );
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = (await res.json()) as { price?: string };
+  const rate = Number(data.price);
+  if (!Number.isFinite(rate) || rate <= 0) throw new Error('Invalid Binance rate data');
+  return rate;
+}
+
+async function fetchFrankfurterUsdIdrRate(): Promise<number> {
+  const res = await fetch(
+    'https://api.frankfurter.dev/v2/rate/USD/IDR',
+    { signal: AbortSignal.timeout(8000) }
+  );
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = (await res.json()) as { rate?: number };
+  const rate = data.rate;
+  if (!Number.isFinite(rate) || !rate || rate <= 0) throw new Error('Invalid Frankfurter rate data');
+  return rate;
+}
+
 /**
- * Returns the current USD → IDR exchange rate.
+ * Returns the portfolio USD/USDT -> IDR display rate.
  *
- * - Uses frankfurter.dev (v2) as data source.
- * - Caches result in localStorage for 6 hours.
- * - Falls back to cached value if network fails.
- * - Falls back to 16000 if no cache is available.
- *
- * v2 API: GET https://api.frankfurter.dev/v2/rates?base=USD&quotes=IDR
- * Response shape: [{ "base": "USD", "date": "...", "rates": { "IDR": 16350 } }]
+ * Fallback order:
+ * 1. Binance USDTIDR
+ * 2. Frankfurter USD/IDR
+ * 3. Stale local cache
  */
-export async function getExchangeRate(): Promise<RateResult> {
+export async function getPortfolioIdrRate(): Promise<PortfolioRateResult | null> {
   const cached = readCache();
 
-  // Return fresh cache without a network request
-  // Skip if rate == FALLBACK_RATE (means previous fetch failed, not a real API rate)
-  if (cached && isCacheFresh(cached) && cached.rate !== FALLBACK_RATE) {
-    return { rate: cached.rate, isFallback: false, fetchedAt: cached.fetchedAt };
+  if (cached && isCacheFresh(cached)) {
+    return {
+      rate: cached.rate,
+      source: cached.source ?? 'cache',
+      fetchedAt: cached.fetchedAt,
+      isStale: false,
+    };
   }
 
   try {
-    const res = await fetch(
-      'https://api.frankfurter.dev/v2/rates?base=USD&quotes=IDR',
-      { signal: AbortSignal.timeout(8000) }
-    );
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    // v2 returns an array: [{"date":"...","base":"USD","quote":"IDR","rate":17012}]
-    const data = (await res.json()) as Array<{ rate: number }>;
-    const rate = data[0]?.rate;
-    if (!rate || typeof rate !== 'number') throw new Error('Invalid rate data');
-    const written = writeCache(rate);
-    return { rate, isFallback: false, fetchedAt: written.fetchedAt };
+    const rate = await fetchBinanceUsdtIdrRate();
+    const written = writeCache(rate, 'binance');
+    return { rate, source: 'binance', fetchedAt: written.fetchedAt, isStale: false };
   } catch {
-    // Fallback to stale cache if available
-    if (cached) {
-      return { rate: cached.rate, isFallback: false, fetchedAt: cached.fetchedAt };
-    }
-    // Last resort: hardcoded fallback
-    return { rate: FALLBACK_RATE, isFallback: true };
+    // Continue to the official USD/IDR reference-rate fallback.
   }
+
+  try {
+    const rate = await fetchFrankfurterUsdIdrRate();
+    const written = writeCache(rate, 'frankfurter');
+    return { rate, source: 'frankfurter', fetchedAt: written.fetchedAt, isStale: false };
+  } catch {
+    if (!cached) return null;
+    return {
+      rate: cached.rate,
+      source: 'cache',
+      fetchedAt: cached.fetchedAt,
+      isStale: true,
+    };
+  }
+}
+
+export function getCachedPortfolioIdrRate(): PortfolioRateResult | null {
+  const cached = readCache();
+  if (!cached) return null;
+  return {
+    rate: cached.rate,
+    source: cached.source ?? 'cache',
+    fetchedAt: cached.fetchedAt,
+    isStale: !isCacheFresh(cached),
+  };
+}
+
+/**
+ * Returns the current USD → IDR exchange rate.
+ *
+ * - Shares the same cache used by portfolio.
+ * - Uses Binance USDTIDR first, then Frankfurter USD/IDR.
+ * - Falls back to stale cache if both requests fail.
+ */
+export async function getExchangeRate(): Promise<RateResult> {
+  const result = await getPortfolioIdrRate();
+  if (result) {
+    return { rate: result.rate, isFallback: result.isStale, fetchedAt: result.fetchedAt };
+  }
+  return { rate: FALLBACK_RATE, isFallback: true };
 }
 
 /**
@@ -93,6 +163,8 @@ export async function getExchangeRate(): Promise<RateResult> {
  */
 export async function forceRefreshRate(): Promise<RateResult> {
   localStorage.removeItem(CACHE_KEY);
+  localStorage.removeItem(LEGACY_EXPENSE_CACHE_KEY);
+  localStorage.removeItem(LEGACY_PORTFOLIO_CACHE_KEY);
   return getExchangeRate();
 }
 
@@ -119,4 +191,3 @@ export function convertAmount(amount: number, from: string, to: string, rate: nu
   if (from === 'IDR' && to === 'USD') return amount / rate;
   return amount * rate; // USD → IDR
 }
-

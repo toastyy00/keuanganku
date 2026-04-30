@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Coins, LockKeyhole, Sprout } from 'lucide-react';
 import { BottomSheet } from '../ui/BottomSheet';
 import { Button } from '../ui/Button';
 import { Input, Textarea } from '../ui/Input';
@@ -9,6 +10,7 @@ interface AddAssetSheetProps {
   onClose: () => void;
   lockedTicker?: string;
   title?: string;
+  colorTheme?: string;
   onAdd: (input: {
     ticker: string;
     amount: number;
@@ -21,13 +23,13 @@ interface AddAssetSheetProps {
 
 const SUGGESTIONS = ['BTC', 'ETH', 'SOL', 'JUP', 'PYTH', 'WEN', 'TNSR'];
 
-const HOLDING_TYPES: Array<{ value: PortfolioAsset['holding_type']; label: string }> = [
-  { value: 'liquid', label: 'Liquid' },
-  { value: 'staked', label: 'Staked' },
-  { value: 'locked', label: 'Locked' },
+const HOLDING_TYPES: Array<{ value: PortfolioAsset['holding_type']; label: string; icon: React.ReactNode }> = [
+  { value: 'liquid', label: 'Liquid', icon: <Coins size={13} strokeWidth={3} /> },
+  { value: 'staked', label: 'Staked', icon: <Sprout size={13} strokeWidth={3} /> },
+  { value: 'locked', label: 'Locked', icon: <LockKeyhole size={13} strokeWidth={3} /> },
 ];
 
-const AddAssetSheet: React.FC<AddAssetSheetProps> = ({ isOpen, onClose, lockedTicker, title, onAdd }) => {
+const AddAssetSheet: React.FC<AddAssetSheetProps> = ({ isOpen, onClose, lockedTicker, title, colorTheme = '#B8F55A', onAdd }) => {
   const [ticker, setTicker] = useState('');
   const [amount, setAmount] = useState('');
   const [location, setLocation] = useState('');
@@ -49,7 +51,10 @@ const AddAssetSheet: React.FC<AddAssetSheetProps> = ({ isOpen, onClose, lockedTi
       title={title ?? (lockedTicker ? 'ADD HOLDING' : 'ADD ASSET')}
       containPageOverscroll
     >
-      <div className="space-y-4">
+      <div
+        className="portfolio-theme-sheet space-y-4"
+        style={{ '--portfolio-pocket-accent': colorTheme } as React.CSSProperties}
+      >
         {lockedTicker ? (
           <div className="neo-card flex items-center justify-between px-3 py-2">
             <p className="text-xs font-black uppercase text-brutal-black/50">Ticker Locked</p>
@@ -113,10 +118,14 @@ const AddAssetSheet: React.FC<AddAssetSheetProps> = ({ isOpen, onClose, lockedTi
               <button
                 key={type.value}
                 type="button"
-                className={`neo-btn-secondary px-2 py-2 !text-xs !font-black leading-tight ${holdingType === type.value ? '!bg-[#B8F55A] !text-[#1A1A1A]' : '!text-[#F5F0E8]'}`}
+                className={`neo-btn-secondary px-2 py-2 !text-xs !font-black leading-tight ${holdingType === type.value ? '!text-[#1A1A1A]' : '!text-[#F5F0E8]'}`}
+                style={holdingType === type.value ? { backgroundColor: colorTheme } : undefined}
                 onClick={() => setHoldingType(type.value)}
               >
-                {type.label}
+                <span className="inline-flex items-center justify-center gap-1">
+                  {type.icon}
+                  {type.label}
+                </span>
               </button>
             ))}
           </div>
@@ -126,6 +135,7 @@ const AddAssetSheet: React.FC<AddAssetSheetProps> = ({ isOpen, onClose, lockedTi
           fullWidth
           loading={saving}
           className="!font-black"
+          style={{ backgroundColor: colorTheme, borderColor: '#2A2A2A', color: '#1A1A1A' }}
           onClick={async () => {
             const parsed = Number(amount);
             const nextErrors = {

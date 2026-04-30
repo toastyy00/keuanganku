@@ -64,6 +64,19 @@ function buildAssetFingerprint(assets: Array<{ coingecko_id: string; amount: num
     .join('|');
 }
 
+function aggregateChartAssets(assets: PortfolioAsset[]): Array<{ coingecko_id: string; amount: number }> {
+  const byId = new Map<string, number>();
+  for (const asset of assets) {
+    const coingeckoId = asset.coingecko_id ?? resolveCoingeckoId(asset.ticker);
+    if (!coingeckoId) continue;
+    byId.set(coingeckoId, (byId.get(coingeckoId) ?? 0) + asset.amount);
+  }
+  return Array.from(byId.entries()).map(([coingecko_id, amount]) => ({
+    coingecko_id,
+    amount: roundPortfolioAmount(amount),
+  }));
+}
+
 function invalidatePocketCacheMeta(pocketId: string): void {
   _priceMetaByPocket.delete(pocketId);
   for (const key of Array.from(_chartMetaByPocketFrame.keys())) {
@@ -423,13 +436,7 @@ export const usePortfolioStore = create<PortfolioStore>()(
       },
 
       refreshChartSeries: async (pocketId, timeframe) => {
-        const scopedAssets = get()
-          .assets.filter((item) => item.pocket_id === pocketId)
-          .map((item) => ({
-            coingecko_id: item.coingecko_id ?? resolveCoingeckoId(item.ticker),
-            amount: item.amount,
-          }))
-          .filter((item) => !!item.coingecko_id);
+        const scopedAssets = aggregateChartAssets(get().assets.filter((item) => item.pocket_id === pocketId));
         const now = Date.now();
         const fingerprint = buildAssetFingerprint(scopedAssets);
         const metaKey = chartMetaKey(pocketId, timeframe);
@@ -449,8 +456,8 @@ export const usePortfolioStore = create<PortfolioStore>()(
         const historicalByAsset: Record<string, [number, number][]> = {};
         const days = daysForTimeframe(timeframe);
         await Promise.all(
-          scopedAssets.map(async (asset) => {
-            historicalByAsset[asset.coingecko_id] = await fetchHistoricalPrices(asset.coingecko_id, days);
+          Array.from(new Set(scopedAssets.map((asset) => asset.coingecko_id))).map(async (coingeckoId) => {
+            historicalByAsset[coingeckoId] = await fetchHistoricalPrices(coingeckoId, days);
           }),
         );
 
