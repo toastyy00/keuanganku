@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ArrowLeft, BriefcaseBusiness, Ellipsis, Landmark, Link2, Shield, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { usePortfolioStore } from '../../store/usePortfolioStore';
 import type { PortfolioPocket } from '../../types';
 import { PocketSettingsSheet } from './PocketSettingsSheet';
+import { TotalPortfolioCard } from './TotalPortfolioCard';
 
 interface PocketListProps {
   onOpenPocket: (pocket: PortfolioPocket) => void;
@@ -32,6 +33,7 @@ const PocketList: React.FC<PocketListProps> = ({ onOpenPocket }) => {
   const navigate = useNavigate();
   const pockets = usePortfolioStore((s) => s.pockets);
   const assets = usePortfolioStore((s) => s.assets);
+  const prices = usePortfolioStore((s) => s.prices);
   const addPocket = usePortfolioStore((s) => s.addPocket);
   const updatePocket = usePortfolioStore((s) => s.updatePocket);
   const deletePocket = usePortfolioStore((s) => s.deletePocket);
@@ -40,10 +42,24 @@ const PocketList: React.FC<PocketListProps> = ({ onOpenPocket }) => {
   const [settingsPressedId, setSettingsPressedId] = useState<string | null>(null);
   const [settingsTapId, setSettingsTapId] = useState<string | null>(null);
   const [cardTapId, setCardTapId] = useState<string | null>(null);
+  const sortedPockets = useMemo(() => {
+    const valueByPocket = new Map<string, number>();
+
+    for (const asset of assets) {
+      const price = prices[asset.coingecko_id ?? '']?.usd ?? 0;
+      valueByPocket.set(asset.pocket_id, (valueByPocket.get(asset.pocket_id) ?? 0) + asset.amount * price);
+    }
+
+    return [...pockets].sort((a, b) => {
+      const valueDiff = (valueByPocket.get(b.id) ?? 0) - (valueByPocket.get(a.id) ?? 0);
+      if (Math.abs(valueDiff) > 0.000001) return valueDiff;
+      return b.created_at.localeCompare(a.created_at);
+    });
+  }, [assets, pockets, prices]);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between pt-0.5">
+      <div className="sticky top-0 z-30 -mx-4 -mt-6 flex items-start justify-between bg-[#1A1A1A] px-4 pb-3 pt-6 md:-mx-6 md:px-6">
         <button
           type="button"
           onClick={() => navigate('/')}
@@ -56,6 +72,8 @@ const PocketList: React.FC<PocketListProps> = ({ onOpenPocket }) => {
           <p className="mt-[-6px] text-[24px] font-black uppercase tracking-[-0.01em] text-[#F5F0E8]">Tracker</p>
         </div>
       </div>
+
+      <TotalPortfolioCard />
 
       <div className="flex items-center gap-3 pt-2">
         <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#E9E5DD]">My Pockets</p>
@@ -76,7 +94,7 @@ const PocketList: React.FC<PocketListProps> = ({ onOpenPocket }) => {
       </div>
 
       <div className="space-y-2.5">
-        {pockets.map((pocket) => {
+        {sortedPockets.map((pocket) => {
           const count = assets.filter((item) => item.pocket_id === pocket.id).length;
           const sourceLine = `${pocket.source_type}${pocket.source ? ` - ${pocket.source.toUpperCase()}` : ''} - ${count} ASSETS`;
 

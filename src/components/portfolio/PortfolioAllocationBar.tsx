@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 
 interface AllocationAsset {
   ticker: string;
@@ -8,6 +8,7 @@ interface AllocationAsset {
 interface PortfolioAllocationBarProps {
   assets: AllocationAsset[];
   colorTheme: string;
+  collapsible?: boolean;
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
@@ -57,7 +58,8 @@ function buildThemeShades(colorTheme: string): string[] {
   });
 }
 
-const PortfolioAllocationBar: React.FC<PortfolioAllocationBarProps> = ({ assets, colorTheme }) => {
+const PortfolioAllocationBar: React.FC<PortfolioAllocationBarProps> = ({ assets, colorTheme, collapsible = false }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
   const allocation = useMemo(() => {
     const sortedAssets = assets
       .filter((asset) => Number.isFinite(asset.usdValue) && asset.usdValue > 0)
@@ -77,8 +79,21 @@ const PortfolioAllocationBar: React.FC<PortfolioAllocationBarProps> = ({ assets,
 
   if (allocation.total <= 0 || allocation.assets.length === 0) return null;
 
+  const isCollapsed = collapsible && !isExpanded;
+
   return (
-    <div className="mt-3">
+    <div
+      className={collapsible ? 'mt-3 cursor-pointer select-none' : 'mt-3'}
+      role={collapsible ? 'button' : undefined}
+      tabIndex={collapsible ? 0 : undefined}
+      onClick={collapsible ? () => setIsExpanded((current) => !current) : undefined}
+      onKeyDown={collapsible ? (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          setIsExpanded((current) => !current);
+        }
+      } : undefined}
+    >
       <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-brutal-black/60">Allocation</p>
       <div className="flex h-[10px] w-full gap-[3px] overflow-hidden rounded-full bg-transparent">
         {allocation.assets.map((asset, index) => (
@@ -97,9 +112,13 @@ const PortfolioAllocationBar: React.FC<PortfolioAllocationBarProps> = ({ assets,
           />
         ))}
       </div>
-      <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+      <div
+        className={`mt-2.5 flex items-center gap-x-2 gap-y-1.5 overflow-hidden transition-[max-height,opacity,transform] duration-300 ease-out ${
+          isCollapsed ? 'max-h-[10px] flex-nowrap opacity-90 translate-y-0' : 'max-h-28 flex-wrap opacity-100 translate-y-0.5'
+        }`}
+      >
         {allocation.assets.map((asset) => (
-          <div key={asset.ticker} className="flex items-center leading-none">
+          <div key={asset.ticker} className="flex shrink-0 items-center leading-none">
             <span
               className="mr-0.5 text-[8px] leading-none"
               style={{ color: asset.color }}

@@ -4,8 +4,9 @@ type Timeframe = '24H' | '1W' | '1M' | '1Y' | 'ALL';
 
 const COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3';
 const BINANCE_BASE_URL = 'https://api.binance.com/api/v3';
-const PRICE_CACHE_TTL_MS = 60_000;
-const HISTORICAL_CACHE_TTL_MS = 2 * 60_000;
+const PRICE_CACHE_TTL_MS = 2 * 60_000;
+const HISTORICAL_CACHE_TTL_MS = 5 * 60_000;
+const HISTORICAL_CACHE_MAX_ENTRIES = 100;
 
 const currentPriceCache = new Map<string, { value: { usd: number }; expiresAt: number }>();
 const currentPriceInflight = new Map<string, Promise<{ usd: number } | null>>();
@@ -94,6 +95,25 @@ function buildStablecoinHistoricalPrices(days: number): HistoricalPoint[] {
 
 function historicalCacheKey(coingeckoId: string, days: number): string {
   return `${coingeckoId.trim().toLowerCase()}::${days}`;
+}
+
+function pruneHistoricalPriceCache(now = Date.now()): void {
+  for (const [key, entry] of historicalPriceCache.entries()) {
+    if (entry.expiresAt <= now) historicalPriceCache.delete(key);
+  }
+
+  while (historicalPriceCache.size > HISTORICAL_CACHE_MAX_ENTRIES) {
+    let oldestKey: string | null = null;
+    let oldestExpiresAt = Number.POSITIVE_INFINITY;
+    for (const [key, entry] of historicalPriceCache.entries()) {
+      if (entry.expiresAt < oldestExpiresAt) {
+        oldestExpiresAt = entry.expiresAt;
+        oldestKey = key;
+      }
+    }
+    if (!oldestKey) break;
+    historicalPriceCache.delete(oldestKey);
+  }
 }
 
 async function fetchBinanceWithBackoff(path: string, attempts = 3): Promise<Response> {
@@ -312,6 +332,7 @@ export async function fetchHistoricalPricesCached(coingeckoId: string, days: num
 
   const cacheKey = historicalCacheKey(coingeckoId, days);
   const now = Date.now();
+  pruneHistoricalPriceCache(now);
   const cached = historicalPriceCache.get(cacheKey);
   if (cached && cached.expiresAt > now) {
     return cached.value;
@@ -326,6 +347,7 @@ export async function fetchHistoricalPricesCached(coingeckoId: string, days: num
         value: points,
         expiresAt: Date.now() + HISTORICAL_CACHE_TTL_MS,
       });
+      pruneHistoricalPriceCache();
       return points;
     })
     .finally(() => {
@@ -342,8 +364,16 @@ export function resolveCoingeckoId(ticker: string): string {
   return TICKER_TO_COINGECKO_ID[key] ?? key.toLowerCase();
 }
 
-export function clearCurrentPriceCache(): void {
-  currentPriceCache.clear();
+export function clearCurrentPriceCache(ids?: string[]): void {
+  if (!ids) {
+    currentPriceCache.clear();
+    return;
+  }
+
+  for (const id of ids) {
+    const key = id.trim();
+    if (key) currentPriceCache.delete(key);
+  }
 }
 
 export function daysForTimeframe(timeframe: Timeframe): number {

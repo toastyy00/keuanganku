@@ -1,7 +1,8 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
-import { formatCurrency, formatPortfolioAmount, roundPortfolioAmount } from '../../lib/utils';
+import { formatCurrency, formatPortfolioAmount } from '../../lib/utils';
 import { getCachedPortfolioIdrRate, getPortfolioIdrRate, type PortfolioRateResult } from '../../lib/exchangeRate';
+import { aggregateHoldingsByTicker, buildPortfolioAssetFingerprint } from '../../lib/portfolio-aggregation';
 import { usePortfolioStore } from '../../store/usePortfolioStore';
 import { AddAssetSheet } from './AddAssetSheet';
 import { AssetActionSheet } from './AssetActionSheet';
@@ -59,30 +60,8 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const pocket = pockets.find((item) => item.id === pocketId) as PortfolioPocket | undefined;
   const pocketAssets = useMemo(() => assets.filter((item) => item.pocket_id === pocketId), [assets, pocketId]);
   const pocketLogs = useMemo(() => logs.filter((item) => item.pocket_id === pocketId).sort((a, b) => b.created_at.localeCompare(a.created_at)), [logs, pocketId]);
-  const aggregatedAssets = useMemo<AggregatedPortfolioAsset[]>(() => {
-    const map = new Map<string, AggregatedPortfolioAsset>();
-    for (const asset of pocketAssets) {
-      const key = `${asset.ticker}::${asset.coingecko_id ?? ''}`;
-      const price = prices[asset.coingecko_id ?? '']?.usd ?? 0;
-      const current = map.get(key);
-      if (current) {
-        current.totalAmount = roundPortfolioAmount(current.totalAmount + asset.amount);
-        current.totalUsdValue += asset.amount * price;
-        current.holdings.push(asset);
-        continue;
-      }
-      map.set(key, {
-        key,
-        pocket_id: asset.pocket_id,
-        ticker: asset.ticker,
-        coingecko_id: asset.coingecko_id,
-        totalAmount: asset.amount,
-        totalUsdValue: asset.amount * price,
-        holdings: [asset],
-      });
-    }
-    return Array.from(map.values()).sort((a, b) => b.totalUsdValue - a.totalUsdValue);
-  }, [pocketAssets, prices]);
+  const aggregatedAssets = useMemo<AggregatedPortfolioAsset[]>(() => aggregateHoldingsByTicker(pocketAssets, prices), [pocketAssets, prices]);
+  const pocketAssetFingerprint = useMemo(() => buildPortfolioAssetFingerprint(pocketAssets), [pocketAssets]);
   const selectedAggregate = useMemo(() => aggregatedAssets.find((item) => item.key === selectedAggregateKey) ?? null, [aggregatedAssets, selectedAggregateKey]);
   const selectedHoldingLogs = useMemo(() => {
     if (!assetAction) return [];
@@ -91,8 +70,11 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
 
   useEffect(() => {
     void fetchPrices(pocketId);
+  }, [pocketId, fetchPrices, pocketAssetFingerprint]);
+
+  useEffect(() => {
     void refreshChartSeries(pocketId, timeframe);
-  }, [pocketId, timeframe, fetchPrices, refreshChartSeries, pocketAssets.length]);
+  }, [pocketId, timeframe, refreshChartSeries, pocketAssetFingerprint]);
 
   useEffect(() => {
     let isCancelled = false;
