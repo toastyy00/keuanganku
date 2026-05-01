@@ -69,6 +69,7 @@ const Layout: React.FC = () => {
   const isPortfolioRoute =
     location.pathname === '/pockets'
     || location.pathname.startsWith('/pockets/');
+  const isDashboardRoute = location.pathname === '/';
   const demoMode = isDemoMode();
   const sidebarUserName = (() => {
     const fromMeta = typeof user?.user_metadata?.display_name === 'string'
@@ -90,6 +91,7 @@ const Layout: React.FC = () => {
   const mainContentRef = useRef<HTMLElement | null>(null);
   const scrollPositions = useRef<Record<string, number>>({});
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const scrollBoundaryTouchStartRef = useRef<{ x: number; y: number } | null>(null);
   const touchGestureMetaRef = useRef<{ startedAt: number; maxAbsX: number; maxAbsY: number } | null>(null);
   const isPinchGestureRef = useRef(false);
   const activeScrollPathRef = useRef(location.pathname);
@@ -103,6 +105,61 @@ const Layout: React.FC = () => {
       }
     };
   }, []);
+
+  React.useEffect(() => {
+    const mainEl = mainContentRef.current;
+    if (!mainEl) return;
+
+    const shouldGuardScrollBoundary = isDashboardRoute || isPortfolioRoute;
+
+    const onTouchStart = (event: TouchEvent) => {
+      if (!shouldGuardScrollBoundary || event.touches.length !== 1) {
+        scrollBoundaryTouchStartRef.current = null;
+        return;
+      }
+
+      const touch = event.touches[0];
+      scrollBoundaryTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    };
+
+    const onTouchMove = (event: TouchEvent) => {
+      if (!shouldGuardScrollBoundary) return;
+      if (document.body.dataset.bottomSheetOpen === 'true') return;
+      if (event.touches.length !== 1 || !scrollBoundaryTouchStartRef.current) return;
+
+      const touch = event.touches[0];
+      const deltaX = touch.clientX - scrollBoundaryTouchStartRef.current.x;
+      const deltaY = touch.clientY - scrollBoundaryTouchStartRef.current.y;
+      const absX = Math.abs(deltaX);
+      const absY = Math.abs(deltaY);
+      const isMostlyVertical = absY > 4 && absY > absX * 1.15;
+      if (!isMostlyVertical) return;
+
+      const isAtBottom = mainEl.scrollTop + mainEl.clientHeight >= mainEl.scrollHeight - 1;
+      const isPushingPastBottom = isAtBottom && deltaY < 0;
+
+      if (isPushingPastBottom && event.cancelable) {
+        mainEl.scrollTop = Math.max(0, mainEl.scrollHeight - mainEl.clientHeight);
+        event.preventDefault();
+      }
+    };
+
+    const onTouchEnd = () => {
+      scrollBoundaryTouchStartRef.current = null;
+    };
+
+    mainEl.addEventListener('touchstart', onTouchStart, { passive: true });
+    mainEl.addEventListener('touchmove', onTouchMove, { passive: false });
+    mainEl.addEventListener('touchend', onTouchEnd, { passive: true });
+    mainEl.addEventListener('touchcancel', onTouchEnd, { passive: true });
+
+    return () => {
+      mainEl.removeEventListener('touchstart', onTouchStart);
+      mainEl.removeEventListener('touchmove', onTouchMove);
+      mainEl.removeEventListener('touchend', onTouchEnd);
+      mainEl.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, [isDashboardRoute, isPortfolioRoute]);
 
   React.useLayoutEffect(() => {
     const mainEl = mainContentRef.current;
@@ -347,8 +404,18 @@ const Layout: React.FC = () => {
       <main
         id="main-content"
         ref={mainContentRef}
-        className={`flex-1 min-w-0 ${location.pathname === '/history' ? 'overflow-hidden' : 'overflow-y-auto'}`}
+        className={cn(
+          'flex-1 min-w-0',
+          location.pathname === '/history' ? 'overflow-hidden' : 'overflow-y-auto',
+        )}
         onScroll={(e) => {
+          if (isDashboardRoute || isPortfolioRoute) {
+            const maxScrollTop = Math.max(0, e.currentTarget.scrollHeight - e.currentTarget.clientHeight);
+            if (e.currentTarget.scrollTop > maxScrollTop) {
+              e.currentTarget.scrollTop = maxScrollTop;
+              return;
+            }
+          }
           if (isRestoringScrollRef.current) return;
           if (location.pathname === '/history') return; // history manages its own scroll
           scrollPositions.current[activeScrollPathRef.current] = e.currentTarget.scrollTop;
