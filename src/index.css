@@ -34,21 +34,6 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  html.app-shell-active,
-  html.app-shell-active body,
-  html.app-shell-active #root {
-    height: 100%;
-    overflow: hidden;
-    overscroll-behavior: none;
-  }
-
-  html.app-shell-active body {
-    min-height: 100%;
-    position: fixed;
-    inset: 0;
-    width: 100%;
-  }
-
   h1,
   h2,
   h3,
@@ -335,11 +320,6 @@
 }
 
 @layer utilities {
-
-  .app-scroll-container {
-    overscroll-behavior-y: contain;
-    -webkit-overflow-scrolling: touch;
-  }
 
   .overflow-y-auto {
     scrollbar-gutter: stable;

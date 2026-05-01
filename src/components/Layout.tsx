@@ -95,11 +95,7 @@ const Layout: React.FC = () => {
   const isRestoringScrollRef = useRef(false);
 
   React.useEffect(() => {
-    document.documentElement.classList.add('app-shell-active');
-
     return () => {
-      document.documentElement.classList.remove('app-shell-active');
-
       if (restoreFrameRef.current !== null) {
         cancelAnimationFrame(restoreFrameRef.current);
       }
@@ -209,6 +205,22 @@ const Layout: React.FC = () => {
   const clearSwipeTracking = () => {
     touchStartRef.current = null;
     touchGestureMetaRef.current = null;
+  };
+  const shouldContainPortfolioBottomOverscroll = (e: React.TouchEvent<HTMLElement>) => {
+    if (!isPortfolioRoute) return false;
+    if (!mainContentRef.current || !touchStartRef.current || e.touches.length !== 1) return false;
+
+    const touch = e.touches[0];
+    const deltaX = touch.clientX - touchStartRef.current.x;
+    const deltaY = touch.clientY - touchStartRef.current.y;
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
+    const mainEl = mainContentRef.current;
+    const isAtBottom = mainEl.scrollTop + mainEl.clientHeight >= mainEl.scrollHeight - 2;
+    const isTryingToScrollBelowBottom = deltaY < -6;
+    const isMostlyVertical = absY > absX * 1.2;
+
+    return isAtBottom && isTryingToScrollBelowBottom && isMostlyVertical;
   };
   const getSwipeMinDistance = () => {
     if (typeof window === 'undefined') return SWIPE_MIN_DISTANCE_BASE;
@@ -333,7 +345,7 @@ const Layout: React.FC = () => {
       <main
         id="main-content"
         ref={mainContentRef}
-        className={`app-scroll-container flex-1 min-w-0 ${location.pathname === '/history' ? 'overflow-hidden' : 'overflow-y-auto'}`}
+        className={`flex-1 min-w-0 ${location.pathname === '/history' ? 'overflow-hidden' : 'overflow-y-auto'}`}
         onScroll={(e) => {
           if (isRestoringScrollRef.current) return;
           if (location.pathname === '/history') return; // history manages its own scroll
@@ -371,6 +383,9 @@ const Layout: React.FC = () => {
             return;
           }
           if (!touchStartRef.current || !touchGestureMetaRef.current) return;
+          if (shouldContainPortfolioBottomOverscroll(e)) {
+            e.preventDefault();
+          }
           const deltaX = e.touches[0].clientX - touchStartRef.current.x;
           const deltaY = e.touches[0].clientY - touchStartRef.current.y;
           touchGestureMetaRef.current.maxAbsX = Math.max(touchGestureMetaRef.current.maxAbsX, Math.abs(deltaX));
