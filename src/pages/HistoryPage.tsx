@@ -1309,7 +1309,7 @@ const HistoryPage: React.FC = () => {
 
 
   return (
-    <div className="flex flex-col h-full max-w-2xl mx-auto w-full">
+    <div className="flex h-full min-h-0 w-full max-w-2xl flex-col mx-auto">
       {/* -- Sticky filter bar ------------------------------- */}
       <div className="sticky top-0 z-20 border-b-2 flex-shrink-0" style={{ backgroundColor: '#1A1A1A', borderColor: '#F5F0E8' }}>
         {/* Month navigator */}
@@ -1497,7 +1497,7 @@ const HistoryPage: React.FC = () => {
       </div>
 
       {/* -- Scrollable content area (scrollbar starts here, below sticky header) -- */}
-      <div ref={listScrollContainerRef} className="flex-1 overflow-y-auto">
+      <div ref={listScrollContainerRef} className="min-h-0 flex-1 overflow-y-auto">
 
         {/* -- Flow view (Sankey diagram) -------------------- */}
         {viewMode === 'flow' && (

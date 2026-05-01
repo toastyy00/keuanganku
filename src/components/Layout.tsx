@@ -304,7 +304,7 @@ const Layout: React.FC = () => {
 
 
   return (
-    <div className="flex h-dvh overflow-hidden" style={{ backgroundColor: '#1A1A1A' }}>
+    <div className="flex h-dvh min-h-0 overflow-hidden" style={{ backgroundColor: '#1A1A1A' }}>
 
       {/*
         ── Desktop sidebar ──────────────────────────────────────
@@ -405,7 +405,7 @@ const Layout: React.FC = () => {
         id="main-content"
         ref={mainContentRef}
         className={cn(
-          'flex-1 min-w-0',
+          'flex-1 min-h-0 min-w-0',
           location.pathname === '/history' ? 'overflow-hidden' : 'overflow-y-auto',
         )}
         onScroll={(e) => {
@@ -512,7 +512,7 @@ const Layout: React.FC = () => {
           }
         }}
       >
-        <div key={location.pathname} className={location.pathname === '/history' ? `${pageTransitionClass} h-full` : pageTransitionClass}>
+        <div key={location.pathname} className={location.pathname === '/history' ? `${pageTransitionClass} h-full min-h-0` : pageTransitionClass}>
           <Outlet />
         </div>
         {/* Spacer so mobile content clears the bottom nav/FAB — not needed for /history which manages its own */}

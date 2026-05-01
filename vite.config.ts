@@ -94,6 +94,9 @@ export default defineConfig(({ mode }) => {
   server: {
     port: 5173,
   },
+  preview: {
+    allowedHosts: ['.trycloudflare.com'],
+  },
   build: {
     target: 'es2020',
     sourcemap: false,
