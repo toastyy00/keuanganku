@@ -318,6 +318,7 @@ const DashboardPage: React.FC = () => {
   const [portfolioRevealPx, setPortfolioRevealPx] = useState(0);
   const [portfolioRevealDragging, setPortfolioRevealDragging] = useState(false);
   const [portfolioReadyToOpen, setPortfolioReadyToOpen] = useState(false);
+  const [portfolioRevealCancelled, setPortfolioRevealCancelled] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -418,13 +419,18 @@ const DashboardPage: React.FC = () => {
     setPortfolioReadyToOpen(ready);
   };
 
+  const setPortfolioRevealCancelledState = (cancelled: boolean) => {
+    portfolioRevealCancelledRef.current = cancelled;
+    setPortfolioRevealCancelled(cancelled);
+  };
+
   const resetPortfolioRevealTracking = () => {
     portfolioRevealStartYRef.current = null;
     portfolioRevealLastYRef.current = null;
     portfolioRevealStartedAtRef.current = null;
     portfolioRevealPeakPxRef.current = 0;
     portfolioRevealBasePxRef.current = 0;
-    portfolioRevealCancelledRef.current = false;
+    setPortfolioRevealCancelledState(false);
     setPortfolioRevealDragging(false);
     setPortfolioRevealReady(false);
   };
@@ -439,7 +445,7 @@ const DashboardPage: React.FC = () => {
     portfolioRevealStartedAtRef.current = Date.now();
     portfolioRevealPeakPxRef.current = portfolioRevealPx;
     portfolioRevealBasePxRef.current = portfolioRevealPx;
-    portfolioRevealCancelledRef.current = false;
+    setPortfolioRevealCancelledState(false);
     setPortfolioRevealDragging(true);
     setPortfolioRevealReady(portfolioRevealPx >= PORTFOLIO_REVEAL_READY_PX);
   };
@@ -468,7 +474,7 @@ const DashboardPage: React.FC = () => {
       );
 
     if (shouldCancelReady) {
-      portfolioRevealCancelledRef.current = true;
+      setPortfolioRevealCancelledState(true);
       setPortfolioRevealReady(false);
     } else if (
       !portfolioRevealCancelledRef.current
@@ -476,7 +482,7 @@ const DashboardPage: React.FC = () => {
     ) {
       setPortfolioRevealReady(true);
     } else if (easedPx <= PORTFOLIO_REVEAL_CANCEL_PX) {
-      portfolioRevealCancelledRef.current = false;
+      setPortfolioRevealCancelledState(false);
       setPortfolioRevealReady(false);
     }
 
@@ -497,7 +503,7 @@ const DashboardPage: React.FC = () => {
 
     if (shouldOpen) {
       haptic();
-      navigate('/portfolio');
+      navigate('/pockets');
     }
 
     resetPortfolioRevealTracking();
@@ -636,7 +642,7 @@ const DashboardPage: React.FC = () => {
 
   const portfolioRevealProgress = Math.min(1, portfolioRevealPx / PORTFOLIO_REVEAL_READY_PX);
   const portfolioRevealHintVisible = portfolioRevealDragging && portfolioRevealPx >= PORTFOLIO_REVEAL_HINT_PX;
-  const portfolioRevealIsCancelling = portfolioRevealDragging && portfolioRevealCancelledRef.current;
+  const portfolioRevealIsCancelling = portfolioRevealDragging && portfolioRevealCancelled;
   const portfolioRevealBarVisible = portfolioRevealHintVisible || portfolioRevealIsCancelling;
   const portfolioRevealBarProgress = portfolioRevealProgress;
   const portfolioRevealAccent = portfolioRevealIsCancelling ? '#F5F0E8' : '#B8F55A';

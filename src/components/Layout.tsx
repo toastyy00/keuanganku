@@ -66,7 +66,9 @@ const Layout: React.FC = () => {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const isPortfolioRoute = location.pathname === '/portfolio' || location.pathname.startsWith('/portfolio/');
+  const isPortfolioRoute =
+    location.pathname === '/pockets'
+    || location.pathname.startsWith('/pockets/');
   const demoMode = isDemoMode();
   const sidebarUserName = (() => {
     const fromMeta = typeof user?.user_metadata?.display_name === 'string'

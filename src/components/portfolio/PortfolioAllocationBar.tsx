@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 
 interface AllocationAsset {
+  key: string;
   ticker: string;
   usdValue: number;
 }
@@ -9,6 +10,7 @@ interface PortfolioAllocationBarProps {
   assets: AllocationAsset[];
   colorTheme: string;
   collapsible?: boolean;
+  tone?: 'default' | 'dark';
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
@@ -45,27 +47,28 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function buildThemeShades(colorTheme: string): string[] {
+function buildThemeShades(colorTheme: string, tone: 'default' | 'dark' = 'default'): string[] {
   const rgb = hexToRgb(colorTheme) ?? { r: 184, g: 245, b: 90 };
   const { h, s, l } = rgbToHsl(rgb.r, rgb.g, rgb.b);
-  const baseLightness = clamp(l, 0.42, 0.62);
-  const lightnessSteps = [0.26, 0.16, 0.04, -0.08, -0.2];
+  const isDarkTone = tone === 'dark';
+  const baseLightness = isDarkTone ? clamp(l - 0.14, 0.24, 0.42) : clamp(l, 0.42, 0.62);
+  const lightnessSteps = isDarkTone ? [0.1, 0.03, -0.04, -0.1, -0.16] : [0.26, 0.16, 0.04, -0.08, -0.2];
 
   return lightnessSteps.map((shift) => {
-    const lightness = clamp(baseLightness + shift, 0.28, 0.82) * 100;
-    const saturation = clamp(s, 0.46, 0.9) * 100;
+    const lightness = clamp(baseLightness + shift, isDarkTone ? 0.18 : 0.28, isDarkTone ? 0.54 : 0.82) * 100;
+    const saturation = clamp(isDarkTone ? s * 0.78 : s, isDarkTone ? 0.34 : 0.46, isDarkTone ? 0.72 : 0.9) * 100;
     return `hsl(${Math.round(h)} ${Math.round(saturation)}% ${Math.round(lightness)}%)`;
   });
 }
 
-const PortfolioAllocationBar: React.FC<PortfolioAllocationBarProps> = ({ assets, colorTheme, collapsible = false }) => {
+const PortfolioAllocationBar: React.FC<PortfolioAllocationBarProps> = ({ assets, colorTheme, collapsible = false, tone = 'default' }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const allocation = useMemo(() => {
     const sortedAssets = assets
       .filter((asset) => Number.isFinite(asset.usdValue) && asset.usdValue > 0)
       .sort((a, b) => b.usdValue - a.usdValue);
     const total = sortedAssets.reduce((sum, asset) => sum + asset.usdValue, 0);
-    const shades = buildThemeShades(colorTheme);
+    const shades = buildThemeShades(colorTheme, tone);
 
     return {
       total,
@@ -75,7 +78,7 @@ const PortfolioAllocationBar: React.FC<PortfolioAllocationBarProps> = ({ assets,
         percentage: total > 0 ? (asset.usdValue / total) * 100 : 0,
       })),
     };
-  }, [assets, colorTheme]);
+  }, [assets, colorTheme, tone]);
 
   if (allocation.total <= 0 || allocation.assets.length === 0) return null;
 
@@ -95,10 +98,10 @@ const PortfolioAllocationBar: React.FC<PortfolioAllocationBarProps> = ({ assets,
       } : undefined}
     >
       <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-brutal-black/60">Allocation</p>
-      <div className="flex h-[10px] w-full gap-[3px] overflow-hidden rounded-full bg-transparent">
+      <div className="flex h-[10px] w-full overflow-hidden rounded-full bg-transparent">
         {allocation.assets.map((asset, index) => (
           <div
-            key={asset.ticker}
+            key={asset.key}
             className="h-full min-w-[3px]"
             style={{
               width: `${asset.percentage}%`,
@@ -118,7 +121,7 @@ const PortfolioAllocationBar: React.FC<PortfolioAllocationBarProps> = ({ assets,
         }`}
       >
         {allocation.assets.map((asset) => (
-          <div key={asset.ticker} className="flex shrink-0 items-center leading-none">
+          <div key={asset.key} className="flex shrink-0 items-center leading-none">
             <span
               className="mr-0.5 text-[8px] leading-none"
               style={{ color: asset.color }}

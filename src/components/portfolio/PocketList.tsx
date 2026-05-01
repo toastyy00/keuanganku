@@ -8,6 +8,8 @@ import { TotalPortfolioCard } from './TotalPortfolioCard';
 
 interface PocketListProps {
   onOpenPocket: (pocket: PortfolioPocket) => void;
+  shouldAnimateTotalSparkline?: boolean;
+  onTotalSparklineRevealComplete?: () => void;
 }
 
 function withAlpha(hex: string, alphaHex: string): string {
@@ -29,7 +31,11 @@ function renderPocketIcon(icon?: string) {
   return <BriefcaseBusiness size={26} strokeWidth={2.4} />;
 }
 
-const PocketList: React.FC<PocketListProps> = ({ onOpenPocket }) => {
+const PocketList: React.FC<PocketListProps> = ({
+  onOpenPocket,
+  shouldAnimateTotalSparkline,
+  onTotalSparklineRevealComplete,
+}) => {
   const navigate = useNavigate();
   const pockets = usePortfolioStore((s) => s.pockets);
   const assets = usePortfolioStore((s) => s.assets);
@@ -68,12 +74,15 @@ const PocketList: React.FC<PocketListProps> = ({ onOpenPocket }) => {
           <ArrowLeft size={16} strokeWidth={3.2} />
         </button>
         <div className="flex flex-col items-end gap-0 pt-0.5 text-right leading-none">
-          <p className="text-[12px] font-black uppercase tracking-[0.18em] text-[#B8F55A]">Portfolio</p>
+          <p className="text-[12px] font-black uppercase tracking-[0.18em] text-[#B8F55A]">Pockets</p>
           <p className="mt-[-6px] text-[24px] font-black uppercase tracking-[-0.01em] text-[#F5F0E8]">Tracker</p>
         </div>
       </div>
 
-      <TotalPortfolioCard />
+      <TotalPortfolioCard
+        shouldAnimateMiniSparkline={shouldAnimateTotalSparkline}
+        onMiniSparklineRevealComplete={onTotalSparklineRevealComplete}
+      />
 
       <div className="flex items-center gap-3 pt-2">
         <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#E9E5DD]">My Pockets</p>
@@ -84,7 +93,7 @@ const PocketList: React.FC<PocketListProps> = ({ onOpenPocket }) => {
             setEditing(null);
             setIsSheetOpen(true);
           }}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#5E8F2A] bg-[linear-gradient(145deg,#1A2315_0%,#23311B_48%,#2E4220_100%)] text-[#B8F55A] shadow-[2px_2px_0_0_#37551E] transition-[transform,box-shadow] duration-150 md:hover:-translate-y-0.5 md:hover:shadow-[3px_5px_0_0_#37551E] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none md:active:translate-x-[3px] md:active:translate-y-[3px] md:active:shadow-none"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#E9E5DD] bg-[linear-gradient(145deg,#1B1B1E_0%,#23252A_52%,#2E3138_100%)] text-[#E9E5DD] shadow-[1px_1px_0_0_rgba(233,229,221,0.82)] transition-[transform,box-shadow] duration-150 md:hover:-translate-y-px md:hover:shadow-[2px_2px_0_0_rgba(233,229,221,0.82)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none md:active:translate-x-[1px] md:active:translate-y-[1px] md:active:shadow-none"
           aria-label="Create new pocket"
           title="Create new pocket"
         >

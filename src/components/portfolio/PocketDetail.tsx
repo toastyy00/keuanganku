@@ -132,7 +132,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
           <ArrowLeft size={16} strokeWidth={3.2} />
         </button>
         <div className="flex max-w-[70%] flex-col items-end gap-0 pt-0.5 text-right leading-none">
-          <p className="text-[12px] font-black uppercase tracking-[0.18em] text-[#B8F55A]">Portfolio</p>
+          <p className="text-[12px] font-black uppercase tracking-[0.18em] text-[#B8F55A]">Pockets</p>
           <p className="mt-[-6px] w-full truncate text-[24px] font-black uppercase tracking-[-0.01em] text-[#F5F0E8]">{pocket.name}</p>
         </div>
       </div>
@@ -220,6 +220,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
           </div>
           <PortfolioAllocationBar
             assets={aggregatedAssets.map((asset) => ({
+              key: asset.key,
               ticker: asset.ticker,
               usdValue: asset.totalUsdValue,
             }))}
