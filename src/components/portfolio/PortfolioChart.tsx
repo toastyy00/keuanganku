@@ -11,6 +11,9 @@ interface PortfolioChartProps {
   timeframe: '24H' | '1W' | '1M' | '1Y' | 'ALL';
   onScrub?: (point: ChartPoint) => void;
   onScrubEnd?: () => void;
+  revealFromProgress?: number | null;
+  revealDurationMs?: number;
+  revealKey?: string;
 }
 
 const SCRUB_GAIN_COLOR = '#22C55E';
@@ -40,11 +43,16 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
   timeframe,
   onScrub,
   onScrubEnd,
+  revealFromProgress = null,
+  revealDurationMs = 0,
+  revealKey,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const scrubXRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
+  const revealRafRef = useRef<number | null>(null);
+  const revealProgressRef = useRef(1);
   const isScrubbingRef = useRef(false);
 
   const yRange = useMemo(() => {
@@ -85,16 +93,15 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     const toX = (timestamp: number) => padX + ((timestamp - minTs) / spanTs) * plotW;
     const toY = (value: number) => padY + (1 - (value - yRange.min) / spanY) * plotH;
 
-    ctx.beginPath();
-    dataPoints.forEach((point, idx) => {
-      const x = toX(point.timestamp);
-      const y = toY(point.value);
-      if (idx === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = colorTheme;
-    ctx.stroke();
+    const revealProgress = scrubXRef.current === null ? Math.max(0, Math.min(1, revealProgressRef.current)) : 1;
+    const shouldClipReveal = revealProgress < 1;
+
+    if (shouldClipReveal) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, width * revealProgress, height);
+      ctx.clip();
+    }
 
     const gradient = ctx.createLinearGradient(0, padY, 0, height);
     gradient.addColorStop(0, hexToRgba(colorTheme, 0.28));
@@ -114,6 +121,21 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     ctx.closePath();
     ctx.fillStyle = gradient;
     ctx.fill();
+
+    ctx.beginPath();
+    dataPoints.forEach((point, idx) => {
+      const x = toX(point.timestamp);
+      const y = toY(point.value);
+      if (idx === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = colorTheme;
+    ctx.stroke();
+
+    if (shouldClipReveal) {
+      ctx.restore();
+    }
 
     if (scrubXRef.current !== null) {
       const x = Math.min(width - padX, Math.max(padX, scrubXRef.current));
@@ -196,30 +218,75 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     }
   }, [colorTheme, dataPoints, yRange.max, yRange.min]);
 
-  useEffect(() => {
+  const renderChart = useCallback(() => {
     const canvas = canvasRef.current;
     const wrapper = wrapperRef.current;
     if (!canvas || !wrapper) return;
 
-    const render = () => {
-      const dpr = window.devicePixelRatio || 1;
-      const width = wrapper.clientWidth;
-      const height = 200;
-      canvas.width = Math.floor(width * dpr);
-      canvas.height = Math.floor(height * dpr);
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      draw(width, height);
-    };
+    const dpr = window.devicePixelRatio || 1;
+    const width = wrapper.clientWidth;
+    const height = 200;
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw(width, height);
+  }, [draw]);
 
-    render();
-    const ro = new ResizeObserver(render);
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    renderChart();
+    const ro = new ResizeObserver(renderChart);
     ro.observe(wrapper);
     return () => ro.disconnect();
-  }, [draw]);
+  }, [renderChart]);
+
+  useEffect(() => {
+    if (revealRafRef.current !== null) {
+      cancelAnimationFrame(revealRafRef.current);
+      revealRafRef.current = null;
+    }
+
+    if (revealFromProgress === null || revealFromProgress >= 1 || revealDurationMs <= 0) {
+      revealProgressRef.current = 1;
+      renderChart();
+      return;
+    }
+
+    const startProgress = Math.max(0, Math.min(1, revealFromProgress));
+    const duration = Math.max(80, revealDurationMs * (1 - startProgress));
+    const startedAt = performance.now();
+    revealProgressRef.current = startProgress;
+    renderChart();
+
+    const easeOut = (value: number) => 1 - Math.pow(1 - value, 3);
+    const tick = (now: number) => {
+      const elapsed = now - startedAt;
+      const progress = Math.min(1, elapsed / duration);
+      revealProgressRef.current = startProgress + (1 - startProgress) * easeOut(progress);
+      renderChart();
+
+      if (progress < 1) {
+        revealRafRef.current = requestAnimationFrame(tick);
+      } else {
+        revealRafRef.current = null;
+      }
+    };
+
+    revealRafRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (revealRafRef.current !== null) {
+        cancelAnimationFrame(revealRafRef.current);
+        revealRafRef.current = null;
+      }
+    };
+  }, [renderChart, revealDurationMs, revealFromProgress, revealKey]);
 
   const scrubAtClientX = (clientX: number) => {
     const wrapper = wrapperRef.current;

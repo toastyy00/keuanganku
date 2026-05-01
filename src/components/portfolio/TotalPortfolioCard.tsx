@@ -17,6 +17,8 @@ const CHART_FLAT_COLOR = '#F5F0E8';
 const CARD_LOSS_ACCENT = '#F87171';
 const MINI_SPARKLINE_VIEWBOX_WIDTH = 220;
 const MINI_SPARKLINE_VIEWBOX_HEIGHT = 96;
+const MINI_SPARKLINE_REVEAL_DELAY_MS = 140;
+const MINI_SPARKLINE_REVEAL_DURATION_MS = 2100;
 const EMPTY_CHART_DATA: { timestamp: number; value: number }[] = [];
 
 interface TotalPortfolioCardProps {
@@ -67,7 +69,9 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
   const [isRefreshPressed, setIsRefreshPressed] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [fullChartReveal, setFullChartReveal] = useState<{ fromProgress: number; key: string } | null>(null);
   const refreshReleaseTimerRef = useRef<number | null>(null);
+  const miniSparklineRevealStartedAtRef = useRef<number | null>(null);
 
   const resetScrubState = () => {
     setIsScrubbing(false);
@@ -143,22 +147,45 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
     if (!hasAssets || !miniSparkline || !shouldAnimateMiniSparklineProp) return;
 
     if (prefersReducedMotion) {
+      miniSparklineRevealStartedAtRef.current = null;
       onMiniSparklineRevealComplete?.();
       return;
     }
 
+    miniSparklineRevealStartedAtRef.current = performance.now();
     const revealTimer = window.setTimeout(() => {
+      miniSparklineRevealStartedAtRef.current = null;
       onMiniSparklineRevealComplete?.();
     }, 2900);
 
-    return () => window.clearTimeout(revealTimer);
+    return () => {
+      window.clearTimeout(revealTimer);
+      miniSparklineRevealStartedAtRef.current = null;
+    };
   }, [hasAssets, miniSparkline, onMiniSparklineRevealComplete, prefersReducedMotion, shouldAnimateMiniSparklineProp]);
+
+  const getMiniSparklineRevealProgress = () => {
+    const startedAt = miniSparklineRevealStartedAtRef.current;
+    if (startedAt === null) return 1;
+
+    const elapsed = performance.now() - startedAt - MINI_SPARKLINE_REVEAL_DELAY_MS;
+    return Math.max(0, Math.min(1, elapsed / MINI_SPARKLINE_REVEAL_DURATION_MS));
+  };
 
   const toggleExpanded = () => {
     setIsExpanded((current) => {
+      if (!current) {
+        const fromProgress = shouldAnimateMiniSparkline ? getMiniSparklineRevealProgress() : 1;
+        setFullChartReveal(
+          fromProgress < 1
+            ? { fromProgress, key: `${timeframe}-${chartData.length}-${chartData[0]?.timestamp ?? 0}-${chartData[chartData.length - 1]?.timestamp ?? 0}` }
+            : null
+        );
+      }
       if (current) {
         resetScrubState();
         setTimeframe('24H');
+        setFullChartReveal(null);
       }
       return !current;
     });
@@ -236,8 +263,8 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
                       <animate
                         attributeName="width"
                         values={`0;${MINI_SPARKLINE_VIEWBOX_WIDTH}`}
-                        dur="2.1s"
-                        begin="140ms"
+                        dur={`${MINI_SPARKLINE_REVEAL_DURATION_MS / 1000}s`}
+                        begin={`${MINI_SPARKLINE_REVEAL_DELAY_MS}ms`}
                         fill="freeze"
                         calcMode="spline"
                         keyTimes="0;1"
@@ -270,7 +297,7 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
                         values="0;0.38;0.38;0.26;0"
                         keyTimes="0;0.11;0.76;0.88;1"
                         dur="2.7s"
-                        begin="140ms"
+                        begin={`${MINI_SPARKLINE_REVEAL_DELAY_MS}ms`}
                         fill="freeze"
                         calcMode="spline"
                         keySplines="0.22 0.61 0.36 1;0.4 0 0.2 1;0.22 0.61 0.36 1;0.4 0 0.2 1"
@@ -377,6 +404,9 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
                 setScrubPointValue(point.value);
               }}
               onScrubEnd={resetScrubState}
+              revealFromProgress={fullChartReveal?.fromProgress ?? null}
+              revealDurationMs={MINI_SPARKLINE_REVEAL_DURATION_MS}
+              revealKey={fullChartReveal?.key}
             />
           </div>
 
@@ -409,6 +439,7 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
               colorTheme={GLOBAL_ACCENT}
               collapsible
               tone="dark"
+              minSegmentPercentage={1.6}
             />
           </div>
         </div>

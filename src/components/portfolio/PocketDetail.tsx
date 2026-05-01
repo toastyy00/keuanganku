@@ -225,6 +225,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
               usdValue: asset.totalUsdValue,
             }))}
             colorTheme={pocket.color_theme}
+            minSegmentPercentage={1.6}
           />
         </div>
       </section>
