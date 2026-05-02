@@ -11,5 +11,6 @@ services:
       - NODE_ENV=production
       - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
       - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+      - VITE_COINGECKO_DEMO_API_KEY=${VITE_COINGECKO_DEMO_API_KEY}
     logging:
       driver: "none"

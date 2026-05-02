@@ -1,3 +1,5 @@
+import { appConfig } from './appConfig';
+
 type CurrentPriceMap = Record<string, { usd: number }>;
 type HistoricalPoint = [number, number];
 type Timeframe = '24H' | '1W' | '1M' | '1Y' | 'ALL';
@@ -16,6 +18,7 @@ const PRICE_CACHE_TTL_MS = 2 * 60_000;
 const HISTORICAL_CACHE_TTL_MS = 5 * 60_000;
 const HISTORICAL_CACHE_MAX_ENTRIES = 100;
 const COINGECKO_RESOLVER_CACHE_TTL_MS = 15 * 60_000;
+const COINGECKO_HISTORICAL_RATE_LIMIT_COOLDOWN_MS = 60_000;
 const BINANCE_INVALID_SYMBOL_CACHE_TTL_MS = 30 * 24 * 60 * 60_000;
 const BINANCE_INVALID_SYMBOL_STORAGE_KEY = 'keuanganku-binance-invalid-symbols';
 const BINANCE_SYMBOL_REGISTRY_CACHE_TTL_MS = 24 * 60 * 60_000;
@@ -32,6 +35,7 @@ const binanceInvalidSymbolCache = new Map<string, number>();
 let binanceSymbolRegistry: { symbols: Set<string>; expiresAt: number } | null = null;
 let binanceSymbolRegistryInflight: Promise<Set<string> | null> | null = null;
 let hasHydratedBinanceInvalidSymbolCache = false;
+let coingeckoHistoricalCooldownUntil = 0;
 
 const TICKER_TO_COINGECKO_ID: Record<string, string> = {
   BTC: 'bitcoin',
@@ -122,6 +126,25 @@ function storageAvailable(): boolean {
   } catch {
     return false;
   }
+}
+
+function coingeckoFetch(path: string, init?: RequestInit): Promise<Response> {
+  const headers = new Headers(init?.headers);
+  if (appConfig.coingeckoDemoApiKey) {
+    headers.set('x-cg-demo-api-key', appConfig.coingeckoDemoApiKey);
+  }
+  return fetch(`${COINGECKO_BASE_URL}${path}`, {
+    ...init,
+    headers,
+  });
+}
+
+function isCoingeckoHistoricalCoolingDown(now = Date.now()): boolean {
+  return coingeckoHistoricalCooldownUntil > now;
+}
+
+function startCoingeckoHistoricalCooldown(): void {
+  coingeckoHistoricalCooldownUntil = Date.now() + COINGECKO_HISTORICAL_RATE_LIMIT_COOLDOWN_MS;
 }
 
 function hydrateBinanceInvalidSymbolCache(now = Date.now()): void {
@@ -441,7 +464,7 @@ export async function searchCoinGeckoTickerOptions(ticker: string): Promise<Coin
 
   try {
     const params = new URLSearchParams({ query: key });
-    const res = await fetch(`${COINGECKO_BASE_URL}/search?${params.toString()}`, {
+    const res = await coingeckoFetch(`/search?${params.toString()}`, {
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) return cache([]);
@@ -634,9 +657,13 @@ export async function fetchHistoricalPrices(coingeckoId: string, days: number, t
     vs_currency: 'usd',
     days: String(days),
   });
-  const res = await fetch(`${COINGECKO_BASE_URL}/coins/${encodeURIComponent(coingeckoId)}/market_chart?${params.toString()}`, {
+  const res = await coingeckoFetch(`/coins/${encodeURIComponent(coingeckoId)}/market_chart?${params.toString()}`, {
     signal: AbortSignal.timeout(12_000),
   });
+  if (res.status === 429) {
+    startCoingeckoHistoricalCooldown();
+    return [];
+  }
   if (!res.ok) throw new Error(`Failed historical price fetch: HTTP ${res.status}`);
   const data = (await res.json()) as { prices?: [number, number][] };
   const prices = data.prices ?? [];
@@ -675,7 +702,7 @@ async function fetchCurrentPriceSingle(coingeckoId: string, tickerHint?: string)
       ids: coingeckoId,
       vs_currencies: 'usd',
     });
-    const res = await fetch(`${COINGECKO_BASE_URL}/simple/price?${params.toString()}`, {
+    const res = await coingeckoFetch(`/simple/price?${params.toString()}`, {
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) return null;
@@ -693,17 +720,22 @@ export async function fetchHistoricalPricesCached(coingeckoId: string, days: num
 
   const cacheKey = historicalCacheKey(coingeckoId, days, tickerHint);
   const now = Date.now();
-  pruneHistoricalPriceCache(now);
   const cached = historicalPriceCache.get(cacheKey);
   if (cached && cached.expiresAt > now) {
     return cached.value;
   }
+  if (isCoingeckoHistoricalCoolingDown(now)) {
+    return cached?.value ?? [];
+  }
+
+  pruneHistoricalPriceCache(now);
 
   const inflight = historicalPriceInflight.get(cacheKey);
   if (inflight) return inflight;
 
   const run = fetchHistoricalPrices(coingeckoId, days, tickerHint)
     .then((points) => {
+      if (points.length === 0 && cached) return cached.value;
       historicalPriceCache.set(cacheKey, {
         value: points,
         expiresAt: Date.now() + HISTORICAL_CACHE_TTL_MS,

@@ -187,7 +187,18 @@ const PocketList: React.FC<PocketListProps> = ({
         })}
       </div>
 
-      <p className="pt-2 text-center text-[10px] font-black uppercase tracking-[0.24em] text-[#44474D]">Prices refresh inside each pocket.</p>
+      <p className="pt-2 text-center text-[10px] font-black uppercase tracking-[0.18em] text-[#44474D]">
+        Powered by{' '}
+        <a
+          href="https://www.coingecko.com/?utm_source=keuanganku&utm_medium=referral"
+          target="_blank"
+          rel="noreferrer"
+          className="underline decoration-[#44474D]/50 underline-offset-2"
+          onClick={(event) => event.stopPropagation()}
+        >
+          CoinGecko API
+        </a>
+      </p>
 
       <PocketSettingsSheet
         isOpen={isSheetOpen}

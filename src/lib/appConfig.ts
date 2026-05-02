@@ -3,6 +3,7 @@ declare global {
     __APP_CONFIG__?: {
       VITE_SUPABASE_URL?: string;
       VITE_SUPABASE_ANON_KEY?: string;
+      VITE_COINGECKO_DEMO_API_KEY?: string;
       VITE_APP_MODE?: string;
       VITE_APP_BASE_PATH?: string;
     };
@@ -28,6 +29,10 @@ export const appConfig = {
   supabaseAnonKey: readConfigValue(
     runtimeConfig?.VITE_SUPABASE_ANON_KEY,
     import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+  ),
+  coingeckoDemoApiKey: readConfigValue(
+    runtimeConfig?.VITE_COINGECKO_DEMO_API_KEY,
+    import.meta.env.VITE_COINGECKO_DEMO_API_KEY as string | undefined
   ),
   appMode: readConfigValue(
     runtimeConfig?.VITE_APP_MODE,

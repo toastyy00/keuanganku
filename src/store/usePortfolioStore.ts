@@ -533,11 +533,16 @@ export const usePortfolioStore = create<PortfolioStore>()(
         if (force) clearHistoricalPriceCache(coingeckoIds, days);
         await Promise.all(
           scopedAssets.map(async (asset) => {
-            historicalByAsset[asset.coingecko_id] = await fetchHistoricalPricesCached(asset.coingecko_id, days, asset.ticker);
+            try {
+              historicalByAsset[asset.coingecko_id] = await fetchHistoricalPricesCached(asset.coingecko_id, days, asset.ticker);
+            } catch {
+              historicalByAsset[asset.coingecko_id] = [];
+            }
           }),
         );
 
-        const series = computePortfolioValueSeries(scopedAssets, historicalByAsset, timeframe);
+        const computedSeries = computePortfolioValueSeries(scopedAssets, historicalByAsset, timeframe);
+        const series = computedSeries.length > 0 || cachedSeries.length === 0 ? computedSeries : cachedSeries;
         set((state) => ({
           chartSeriesByPocket: {
             ...state.chartSeriesByPocket,
@@ -580,11 +585,16 @@ export const usePortfolioStore = create<PortfolioStore>()(
         if (force) clearHistoricalPriceCache(coingeckoIds, days);
         await Promise.all(
           scopedAssets.map(async (asset) => {
-            historicalByAsset[asset.coingecko_id] = await fetchHistoricalPricesCached(asset.coingecko_id, days, asset.ticker);
+            try {
+              historicalByAsset[asset.coingecko_id] = await fetchHistoricalPricesCached(asset.coingecko_id, days, asset.ticker);
+            } catch {
+              historicalByAsset[asset.coingecko_id] = [];
+            }
           }),
         );
 
-        const series = computePortfolioValueSeries(scopedAssets, historicalByAsset, timeframe);
+        const computedSeries = computePortfolioValueSeries(scopedAssets, historicalByAsset, timeframe);
+        const series = computedSeries.length > 0 || cachedSeries.length === 0 ? computedSeries : cachedSeries;
         set((state) => ({
           chartSeriesByPocket: {
             ...state.chartSeriesByPocket,
