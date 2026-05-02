@@ -1,10 +1,17 @@
 const APP_VIEWPORT_HEIGHT_VAR = '--app-viewport-height';
 
+function isPinchZoomActive(): boolean {
+  const scale = window.visualViewport?.scale;
+  return typeof scale === 'number' && Number.isFinite(scale) && Math.abs(scale - 1) > 0.01;
+}
+
 function getViewportHeight(): number {
   return window.visualViewport?.height ?? window.innerHeight;
 }
 
 function applyViewportHeight(): void {
+  if (isPinchZoomActive()) return;
+
   const height = getViewportHeight();
   if (!Number.isFinite(height) || height <= 0) return;
 
