@@ -16,6 +16,7 @@ export interface AggregatedPortfolioAssetValue {
 
 export interface AggregatedChartAsset {
   coingecko_id: string;
+  ticker: string;
   amount: number;
 }
 
@@ -60,23 +61,28 @@ export function aggregateHoldingsByTicker(
 }
 
 export function aggregateHoldingsByCoingeckoId(assets: PortfolioAsset[]): AggregatedChartAsset[] {
-  const byId = new Map<string, number>();
+  const byId = new Map<string, { ticker: string; amount: number }>();
 
   for (const asset of assets) {
     const coingeckoId = assetCoingeckoId(asset);
     if (!coingeckoId) continue;
-    byId.set(coingeckoId, (byId.get(coingeckoId) ?? 0) + asset.amount);
+    const current = byId.get(coingeckoId);
+    byId.set(coingeckoId, {
+      ticker: current?.ticker ?? asset.ticker,
+      amount: (current?.amount ?? 0) + asset.amount,
+    });
   }
 
-  return Array.from(byId.entries()).map(([coingecko_id, amount]) => ({
+  return Array.from(byId.entries()).map(([coingecko_id, asset]) => ({
     coingecko_id,
-    amount: roundPortfolioAmount(amount),
+    ticker: asset.ticker,
+    amount: roundPortfolioAmount(asset.amount),
   }));
 }
 
 export function buildChartAssetFingerprint(assets: AggregatedChartAsset[]): string {
   return assets
-    .map((asset) => `${asset.coingecko_id}:${asset.amount}`)
+    .map((asset) => `${asset.coingecko_id}:${asset.ticker}:${asset.amount}`)
     .sort()
     .join('|');
 }

@@ -4,7 +4,7 @@ import { idbZustandStorage } from '../lib/idb-storage';
 import { GUEST_DATA_SCOPE, getActiveDataScope } from '../lib/dataScope';
 import { syncWithSupabaseIfNeeded } from '../lib/sync-engine';
 import { getPortfolioActivityLogRepo, getPortfolioAssetRepo, getPortfolioPocketRepo } from '../lib/portfolio-repository';
-import { clearCurrentPriceCache, clearHistoricalPriceCache, computePortfolioValueSeries, daysForTimeframe, fetchCurrentPrices, fetchHistoricalPricesCached, resolveCoingeckoId } from '../lib/portfolio-prices';
+import { clearCurrentPriceCache, clearHistoricalPriceCache, computePortfolioValueSeries, daysForTimeframe, fetchCurrentAssetPrices, fetchHistoricalPricesCached, resolveCoingeckoId } from '../lib/portfolio-prices';
 import { aggregateHoldingsByCoingeckoId, buildChartAssetFingerprint } from '../lib/portfolio-aggregation';
 import { roundPortfolioAmount } from '../lib/utils';
 import type { PortfolioActivityLog, PortfolioAsset, PortfolioPocket } from '../types';
@@ -66,19 +66,23 @@ function chartMetaKey(pocketId: string, timeframe: Timeframe): string {
   return `${pocketId}::${timeframe}`;
 }
 
-function collectPriceIds(assets: PortfolioAsset[]): string[] {
+function assetPriceId(asset: Pick<PortfolioAsset, 'ticker' | 'coingecko_id'>): string {
+  return asset.coingecko_id ?? resolveCoingeckoId(asset.ticker);
+}
+
+function collectPriceIds(assets: Pick<PortfolioAsset, 'ticker' | 'coingecko_id'>[]): string[] {
   return Array.from(
     new Set(
       assets
-        .map((item) => item.coingecko_id ?? resolveCoingeckoId(item.ticker))
+        .map((item) => assetPriceId(item))
         .filter(Boolean),
     ),
   );
 }
 
-function buildPriceIdsFingerprint(ids: string[]): string {
-  return ids
-    .map((id) => id.trim())
+function buildPriceAssetFingerprint(assets: Pick<PortfolioAsset, 'ticker' | 'coingecko_id'>[]): string {
+  return assets
+    .map((asset) => `${asset.ticker.trim().toUpperCase()}:${assetPriceId(asset)}`)
     .filter(Boolean)
     .sort()
     .join('|');
@@ -302,7 +306,7 @@ export const usePortfolioStore = create<PortfolioStore>()(
           };
           const created = await getPortfolioAssetRepo().create(payload);
 
-          const prices = await fetchCurrentPrices([created.coingecko_id ?? '']);
+          const prices = await fetchCurrentAssetPrices([created]);
           const priceAtTime = prices[created.coingecko_id ?? '']?.usd ?? 0;
           const log = await getPortfolioActivityLogRepo().create(toActivityLogInput(created, 'ADD', created.amount, created.amount, priceAtTime, note));
 
@@ -370,7 +374,7 @@ export const usePortfolioStore = create<PortfolioStore>()(
           const roundedAmount = roundPortfolioAmount(newAmount);
           const updated = await getPortfolioAssetRepo().update(id, { amount: roundedAmount });
           const amountChange = roundPortfolioAmount(Math.abs(roundedAmount - asset.amount));
-          const prices = await fetchCurrentPrices([asset.coingecko_id ?? resolveCoingeckoId(asset.ticker)]);
+          const prices = await fetchCurrentAssetPrices([asset]);
           const coingeckoId = asset.coingecko_id ?? resolveCoingeckoId(asset.ticker);
           const priceAtTime = prices[coingeckoId]?.usd ?? 0;
           const log = await getPortfolioActivityLogRepo().create(toActivityLogInput({ ...asset, coingecko_id: coingeckoId }, action, amountChange, roundedAmount, priceAtTime, note));
@@ -402,7 +406,7 @@ export const usePortfolioStore = create<PortfolioStore>()(
           let log: PortfolioActivityLog | null = null;
           if (asset) {
             const coingeckoId = asset.coingecko_id ?? resolveCoingeckoId(asset.ticker);
-            const prices = await fetchCurrentPrices([coingeckoId]);
+            const prices = await fetchCurrentAssetPrices([{ ...asset, coingecko_id: coingeckoId }]);
             const priceAtTime = prices[coingeckoId]?.usd ?? 0;
             log = await getPortfolioActivityLogRepo().create(toActivityLogInput({ ...asset, coingecko_id: coingeckoId }, 'REDUCE', asset.amount, 0, priceAtTime, `Removed ${asset.chain ? `${asset.chain} · ` : ''}${asset.location}`));
           }
@@ -422,16 +426,16 @@ export const usePortfolioStore = create<PortfolioStore>()(
 
       fetchPrices: async (pocketId) => {
         const now = Date.now();
-        const ids = collectPriceIds(get().assets.filter((item) => item.pocket_id === pocketId));
-        const idsFingerprint = buildPriceIdsFingerprint(ids);
-        if (ids.length === 0) return {};
+        const assetsToFetch = get().assets.filter((item) => item.pocket_id === pocketId);
+        const idsFingerprint = buildPriceAssetFingerprint(assetsToFetch);
+        if (assetsToFetch.length === 0) return {};
 
         const cachedMeta = get().priceCacheMetaByScope[pocketId];
         if (cachedMeta && cachedMeta.idsFingerprint === idsFingerprint && now - cachedMeta.fetchedAt < PRICE_TTL_MS) {
           return get().prices;
         }
 
-        const prices = await fetchCurrentPrices(ids);
+        const prices = await fetchCurrentAssetPrices(assetsToFetch);
         const currentPrices = get().prices;
         const nextPrices = mergePricesIfChanged(currentPrices, prices);
         if (nextPrices !== currentPrices) set({ prices: nextPrices });
@@ -446,15 +450,15 @@ export const usePortfolioStore = create<PortfolioStore>()(
 
       fetchAllPrices: async () => {
         const now = Date.now();
-        const ids = collectPriceIds(get().assets);
-        if (ids.length === 0) return {};
-        const idsFingerprint = buildPriceIdsFingerprint(ids);
+        const assetsToFetch = get().assets;
+        if (assetsToFetch.length === 0) return {};
+        const idsFingerprint = buildPriceAssetFingerprint(assetsToFetch);
         const cachedMeta = get().priceCacheMetaByScope[TOTAL_PRICE_CACHE_KEY];
         if (cachedMeta && cachedMeta.idsFingerprint === idsFingerprint && now - cachedMeta.fetchedAt < PRICE_TTL_MS) {
           return get().prices;
         }
 
-        const prices = await fetchCurrentPrices(ids);
+        const prices = await fetchCurrentAssetPrices(assetsToFetch);
         const currentPrices = get().prices;
         const nextPrices = mergePricesIfChanged(currentPrices, prices);
         if (nextPrices !== currentPrices) set({ prices: nextPrices });
@@ -486,7 +490,7 @@ export const usePortfolioStore = create<PortfolioStore>()(
           set({ priceCacheMetaByScope: {} });
         }
         if (!force) return get().fetchAllPrices();
-        const prices = await fetchCurrentPrices(ids);
+        const prices = await fetchCurrentAssetPrices(assetsToRefresh);
         const now = Date.now();
         const currentPrices = get().prices;
         const nextPrices = mergePricesIfChanged(currentPrices, prices);
@@ -494,11 +498,11 @@ export const usePortfolioStore = create<PortfolioStore>()(
         const touchedPocketIds = Array.from(new Set(get().assets.map((item) => item.pocket_id)));
         const nextMeta: Record<string, PriceCacheMeta> = {
           ...(force ? {} : get().priceCacheMetaByScope),
-          [TOTAL_PRICE_CACHE_KEY]: { fetchedAt: now, idsFingerprint: buildPriceIdsFingerprint(ids) },
+          [TOTAL_PRICE_CACHE_KEY]: { fetchedAt: now, idsFingerprint: buildPriceAssetFingerprint(assetsToRefresh) },
         };
         touchedPocketIds.forEach((id) => {
-          const pocketIds = collectPriceIds(get().assets.filter((item) => item.pocket_id === id));
-          nextMeta[id] = { fetchedAt: now, idsFingerprint: buildPriceIdsFingerprint(pocketIds) };
+          const pocketAssets = get().assets.filter((item) => item.pocket_id === id);
+          nextMeta[id] = { fetchedAt: now, idsFingerprint: buildPriceAssetFingerprint(pocketAssets) };
         });
         set({ priceCacheMetaByScope: nextMeta });
         return prices;
@@ -528,8 +532,8 @@ export const usePortfolioStore = create<PortfolioStore>()(
         const coingeckoIds = Array.from(new Set(scopedAssets.map((asset) => asset.coingecko_id)));
         if (force) clearHistoricalPriceCache(coingeckoIds, days);
         await Promise.all(
-          coingeckoIds.map(async (coingeckoId) => {
-            historicalByAsset[coingeckoId] = await fetchHistoricalPricesCached(coingeckoId, days);
+          scopedAssets.map(async (asset) => {
+            historicalByAsset[asset.coingecko_id] = await fetchHistoricalPricesCached(asset.coingecko_id, days, asset.ticker);
           }),
         );
 
@@ -575,8 +579,8 @@ export const usePortfolioStore = create<PortfolioStore>()(
         const coingeckoIds = Array.from(new Set(scopedAssets.map((asset) => asset.coingecko_id)));
         if (force) clearHistoricalPriceCache(coingeckoIds, days);
         await Promise.all(
-          coingeckoIds.map(async (coingeckoId) => {
-            historicalByAsset[coingeckoId] = await fetchHistoricalPricesCached(coingeckoId, days);
+          scopedAssets.map(async (asset) => {
+            historicalByAsset[asset.coingecko_id] = await fetchHistoricalPricesCached(asset.coingecko_id, days, asset.ticker);
           }),
         );
 

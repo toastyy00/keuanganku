@@ -291,7 +291,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
             pocket_id: pocketId,
             ticker: input.ticker,
             amount: input.amount,
-            coingecko_id: undefined,
+            coingecko_id: input.coingecko_id,
             location: input.location,
             holding_type: input.holding_type,
             chain: input.chain,
