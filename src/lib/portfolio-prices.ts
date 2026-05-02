@@ -19,6 +19,11 @@ const HISTORICAL_CACHE_TTL_MS = 5 * 60_000;
 const HISTORICAL_CACHE_MAX_ENTRIES = 100;
 const COINGECKO_RESOLVER_CACHE_TTL_MS = 15 * 60_000;
 const COINGECKO_HISTORICAL_RATE_LIMIT_COOLDOWN_MS = 60_000;
+const BINANCE_CURRENT_PRICE_BATCH_SIZE = 50;
+const COINGECKO_CURRENT_PRICE_BATCH_SIZE = 100;
+const HISTORICAL_NETWORK_BURST_THRESHOLD = 30;
+const BINANCE_HISTORICAL_BURST_INTERVAL_MS = 250;
+const COINGECKO_HISTORICAL_BURST_INTERVAL_MS = Math.ceil(60_000 / 25);
 const BINANCE_INVALID_SYMBOL_CACHE_TTL_MS = 30 * 24 * 60 * 60_000;
 const BINANCE_INVALID_SYMBOL_STORAGE_KEY = 'keuanganku-binance-invalid-symbols';
 const BINANCE_SYMBOL_REGISTRY_CACHE_TTL_MS = 24 * 60 * 60_000;
@@ -36,6 +41,10 @@ let binanceSymbolRegistry: { symbols: Set<string>; expiresAt: number } | null = 
 let binanceSymbolRegistryInflight: Promise<Set<string> | null> | null = null;
 let hasHydratedBinanceInvalidSymbolCache = false;
 let coingeckoHistoricalCooldownUntil = 0;
+let binanceHistoricalBurstQueue: Promise<void> = Promise.resolve();
+let coingeckoHistoricalBurstQueue: Promise<void> = Promise.resolve();
+let lastBinanceHistoricalBurstAt = 0;
+let lastCoingeckoHistoricalBurstAt = 0;
 
 const TICKER_TO_COINGECKO_ID: Record<string, string> = {
   BTC: 'bitcoin',
@@ -126,6 +135,46 @@ function storageAvailable(): boolean {
   } catch {
     return false;
   }
+}
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function scheduleBinanceHistoricalBurst<T>(task: () => Promise<T>): Promise<T> {
+  const run = binanceHistoricalBurstQueue.then(async () => {
+    const waitMs = Math.max(0, lastBinanceHistoricalBurstAt + BINANCE_HISTORICAL_BURST_INTERVAL_MS - Date.now());
+    if (waitMs > 0) await delay(waitMs);
+    lastBinanceHistoricalBurstAt = Date.now();
+    return task();
+  });
+  binanceHistoricalBurstQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+function scheduleCoingeckoHistoricalBurst<T>(task: () => Promise<T>): Promise<T> {
+  const run = coingeckoHistoricalBurstQueue.then(async () => {
+    const waitMs = Math.max(0, lastCoingeckoHistoricalBurstAt + COINGECKO_HISTORICAL_BURST_INTERVAL_MS - Date.now());
+    if (waitMs > 0) await delay(waitMs);
+    lastCoingeckoHistoricalBurstAt = Date.now();
+    return task();
+  });
+  coingeckoHistoricalBurstQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
 }
 
 function coingeckoBaseUrl(): string {
@@ -380,6 +429,71 @@ async function fetchBinanceWithBackoff(path: string, attempts = 3): Promise<Resp
   throw lastError ?? new Error('Binance request failed');
 }
 
+async function fetchBinanceCurrentPriceBatch(symbols: string[]): Promise<Record<string, number>> {
+  const uniqueSymbols = Array.from(new Set(symbols.map(normalizeBinanceSymbol).filter(Boolean)));
+  if (uniqueSymbols.length === 0) return {};
+
+  const prices: Record<string, number> = {};
+  for (const chunk of chunkArray(uniqueSymbols, BINANCE_CURRENT_PRICE_BATCH_SIZE)) {
+    try {
+      const params = new URLSearchParams({
+        symbols: JSON.stringify(chunk),
+      });
+      const res = await fetch(`${BINANCE_BASE_URL}/ticker/price?${params.toString()}`, {
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) {
+        if (chunk.length === 1 && await isInvalidBinanceSymbolResponse(res)) {
+          markBinanceSymbolInvalid(chunk[0]);
+        }
+        continue;
+      }
+      const data = (await res.json()) as Array<{ symbol?: string; price?: string }>;
+      for (const item of data) {
+        const symbol = normalizeBinanceSymbol(item.symbol ?? '');
+        const price = Number(item.price);
+        if (symbol && Number.isFinite(price) && price > 0) {
+          prices[symbol] = price;
+        }
+      }
+    } catch {
+      // Leave unresolved symbols for the CoinGecko fallback.
+    }
+  }
+
+  return prices;
+}
+
+async function fetchCoinGeckoCurrentPriceBatch(ids: string[]): Promise<CurrentPriceMap> {
+  const uniqueIds = Array.from(new Set(ids.map(normalizeCoingeckoId).filter(Boolean)));
+  if (uniqueIds.length === 0) return {};
+
+  const prices: CurrentPriceMap = {};
+  for (const chunk of chunkArray(uniqueIds, COINGECKO_CURRENT_PRICE_BATCH_SIZE)) {
+    try {
+      const params = new URLSearchParams({
+        ids: chunk.join(','),
+        vs_currencies: 'usd',
+      });
+      const res = await coingeckoFetch(`/simple/price?${params.toString()}`, {
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) continue;
+      const data = (await res.json()) as CurrentPriceMap;
+      for (const id of chunk) {
+        const payload = data[id];
+        if (payload && typeof payload.usd === 'number' && Number.isFinite(payload.usd) && payload.usd > 0) {
+          prices[id] = payload;
+        }
+      }
+    } catch {
+      // A later refresh can retry; current callers handle missing prices.
+    }
+  }
+
+  return prices;
+}
+
 function targetPointCount(timeframe: Timeframe, maxAvailable: number): number {
   switch (timeframe) {
     case '24H':
@@ -568,7 +682,8 @@ export async function fetchCurrentAssetPrices(assets: PriceAssetRef[]): Promise<
 
   const now = Date.now();
   const result: CurrentPriceMap = {};
-  const pending: Array<Promise<void>> = [];
+  const pendingRefs: Array<{ id: string; ticker: string }> = [];
+  const inflightEntries: Array<Promise<void>> = [];
 
   for (const [id, asset] of refsByPriceId.entries()) {
     if (isStablecoinId(id)) {
@@ -583,34 +698,92 @@ export async function fetchCurrentAssetPrices(assets: PriceAssetRef[]): Promise<
     if (cached && cached.expiresAt > now) {
       result[id] = cached.value;
     } else {
-      const inflightKey = `${id}::${normalizeTicker(asset.ticker)}`;
-      let inflight = currentPriceInflight.get(inflightKey);
-      if (!inflight) {
-        inflight = fetchCurrentPriceSingle(id, asset.ticker)
-          .then((price) => {
-            if (price) {
-              currentPriceCache.set(id, {
-                value: price,
-                expiresAt: Date.now() + PRICE_CACHE_TTL_MS,
-              });
-            }
-            return price;
-          })
-          .finally(() => {
-            currentPriceInflight.delete(inflightKey);
-          });
-        currentPriceInflight.set(inflightKey, inflight);
+      const inflight = currentPriceInflight.get(id);
+      if (inflight) {
+        inflightEntries.push(
+          inflight.then((price) => {
+            if (price) result[id] = price;
+          }),
+        );
+      } else {
+        pendingRefs.push({ id, ticker: normalizeTicker(asset.ticker) });
       }
-
-      pending.push(
-        inflight.then((price) => {
-          if (price) result[id] = price;
-        }),
-      );
     }
   }
 
-  await Promise.all(pending);
+  if (pendingRefs.length === 0) {
+    await Promise.all(inflightEntries);
+    return result;
+  }
+
+  const batchRun = (async () => {
+    const batchResult: CurrentPriceMap = {};
+    const binanceEntriesBySymbol = new Map<string, Array<{ id: string }>>();
+    await Promise.all(
+      pendingRefs.map(async (asset) => {
+        const ticker = asset.ticker || resolveTickerForBinance(asset.id);
+        if (!ticker) return;
+        const symbol = buildUsdtSymbol(ticker);
+        try {
+          const symbolSupport = await isBinanceSpotSymbolSupported(symbol);
+          if (symbolSupport !== false && !isBinanceSymbolInvalid(symbol)) {
+            const entries = binanceEntriesBySymbol.get(symbol) ?? [];
+            entries.push({ id: asset.id });
+            binanceEntriesBySymbol.set(symbol, entries);
+          }
+        } catch {
+          const entries = binanceEntriesBySymbol.get(symbol) ?? [];
+          entries.push({ id: asset.id });
+          binanceEntriesBySymbol.set(symbol, entries);
+        }
+      }),
+    );
+
+    const binancePrices = await fetchBinanceCurrentPriceBatch(Array.from(binanceEntriesBySymbol.keys()));
+    for (const [symbol, entries] of binanceEntriesBySymbol.entries()) {
+      const price = binancePrices[symbol];
+      if (!Number.isFinite(price) || price <= 0) continue;
+      for (const entry of entries) {
+        const payload = { usd: price };
+        batchResult[entry.id] = payload;
+        currentPriceCache.set(entry.id, {
+          value: payload,
+          expiresAt: Date.now() + PRICE_CACHE_TTL_MS,
+        });
+      }
+    }
+
+    const coingeckoFallbackIds = pendingRefs
+      .map((asset) => asset.id)
+      .filter((id) => !batchResult[id]);
+    const coingeckoPrices = await fetchCoinGeckoCurrentPriceBatch(coingeckoFallbackIds);
+    for (const [id, payload] of Object.entries(coingeckoPrices)) {
+      batchResult[id] = payload;
+      currentPriceCache.set(id, {
+        value: payload,
+        expiresAt: Date.now() + PRICE_CACHE_TTL_MS,
+      });
+    }
+
+    return batchResult;
+  })();
+
+  for (const asset of pendingRefs) {
+    currentPriceInflight.set(
+      asset.id,
+      batchRun
+        .then((prices) => prices[asset.id] ?? null)
+        .finally(() => {
+          currentPriceInflight.delete(asset.id);
+        }),
+    );
+  }
+
+  const [batchResult] = await Promise.all([
+    batchRun,
+    ...inflightEntries,
+  ]);
+  Object.assign(result, batchResult);
 
   return result;
 }
@@ -626,7 +799,7 @@ export async function fetchCurrentPrices(coingeckoIds: string[]): Promise<Curren
   );
 }
 
-export async function fetchHistoricalPrices(coingeckoId: string, days: number, tickerHint?: string): Promise<HistoricalPoint[]> {
+export async function fetchHistoricalPrices(coingeckoId: string, days: number, tickerHint?: string, options?: { burstGuard?: boolean }): Promise<HistoricalPoint[]> {
   if (!coingeckoId) return [];
   if (isStablecoinId(coingeckoId)) return buildStablecoinHistoricalPrices(days);
 
@@ -642,7 +815,8 @@ export async function fetchHistoricalPrices(coingeckoId: string, days: number, t
       });
       const symbolSupport = await isBinanceSpotSymbolSupported(symbol);
       if (symbolSupport !== false && !isBinanceSymbolInvalid(symbol)) {
-        const res = await fetchBinanceWithBackoff(`/klines?${params.toString()}`);
+        const fetchKlines = () => fetchBinanceWithBackoff(`/klines?${params.toString()}`);
+        const res = options?.burstGuard ? await scheduleBinanceHistoricalBurst(fetchKlines) : await fetchKlines();
         if (res.ok) {
           const klines = (await res.json()) as Array<[number, string, string, string, string, string, number]>;
           const points = klines
@@ -662,9 +836,16 @@ export async function fetchHistoricalPrices(coingeckoId: string, days: number, t
     vs_currency: 'usd',
     days: String(days),
   });
-  const res = await coingeckoFetch(`/coins/${encodeURIComponent(coingeckoId)}/market_chart?${params.toString()}`, {
-    signal: AbortSignal.timeout(12_000),
-  });
+  if (isCoingeckoHistoricalCoolingDown()) return [];
+  const fetchMarketChart = () => {
+    if (isCoingeckoHistoricalCoolingDown()) {
+      return Promise.resolve(new Response(JSON.stringify({ prices: [] }), { status: 200 }));
+    }
+    return coingeckoFetch(`/coins/${encodeURIComponent(coingeckoId)}/market_chart?${params.toString()}`, {
+      signal: AbortSignal.timeout(12_000),
+    });
+  };
+  const res = options?.burstGuard ? await scheduleCoingeckoHistoricalBurst(fetchMarketChart) : await fetchMarketChart();
   if (res.status === 429) {
     startCoingeckoHistoricalCooldown();
     return [];
@@ -677,50 +858,7 @@ export async function fetchHistoricalPrices(coingeckoId: string, days: number, t
     .map(([ts, price]) => [Math.round(ts), Number(price)] as HistoricalPoint);
 }
 
-async function fetchCurrentPriceSingle(coingeckoId: string, tickerHint?: string): Promise<{ usd: number } | null> {
-  const ticker = normalizeTicker(tickerHint ?? '') || resolveTickerForBinance(coingeckoId);
-
-  if (ticker) {
-    const symbol = buildUsdtSymbol(ticker);
-    try {
-      const symbolSupport = await isBinanceSpotSymbolSupported(symbol);
-      if (symbolSupport !== false && !isBinanceSymbolInvalid(symbol)) {
-        const res = await fetch(
-          `${BINANCE_BASE_URL}/ticker/price?symbol=${encodeURIComponent(symbol)}`,
-          { signal: AbortSignal.timeout(10_000) },
-        );
-        if (res.ok) {
-          const data = (await res.json()) as { price?: string };
-          const price = Number(data.price);
-          if (Number.isFinite(price) && price > 0) return { usd: price };
-        } else if (await isInvalidBinanceSymbolResponse(res)) {
-          markBinanceSymbolInvalid(symbol);
-        }
-      }
-    } catch {
-      // Fallback to CoinGecko below.
-    }
-  }
-
-  try {
-    const params = new URLSearchParams({
-      ids: coingeckoId,
-      vs_currencies: 'usd',
-    });
-    const res = await coingeckoFetch(`/simple/price?${params.toString()}`, {
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as CurrentPriceMap;
-    const payload = data[coingeckoId];
-    if (!payload || typeof payload.usd !== 'number') return null;
-    return payload;
-  } catch {
-    return null;
-  }
-}
-
-export async function fetchHistoricalPricesCached(coingeckoId: string, days: number, tickerHint?: string): Promise<HistoricalPoint[]> {
+export async function fetchHistoricalPricesCached(coingeckoId: string, days: number, tickerHint?: string, options?: { burstGuard?: boolean }): Promise<HistoricalPoint[]> {
   if (!coingeckoId) return [];
 
   const cacheKey = historicalCacheKey(coingeckoId, days, tickerHint);
@@ -738,7 +876,7 @@ export async function fetchHistoricalPricesCached(coingeckoId: string, days: num
   const inflight = historicalPriceInflight.get(cacheKey);
   if (inflight) return inflight;
 
-  const run = fetchHistoricalPrices(coingeckoId, days, tickerHint)
+  const run = fetchHistoricalPrices(coingeckoId, days, tickerHint, options)
     .then((points) => {
       if (points.length === 0 && cached) return cached.value;
       historicalPriceCache.set(cacheKey, {
@@ -754,6 +892,44 @@ export async function fetchHistoricalPricesCached(coingeckoId: string, days: num
 
   historicalPriceInflight.set(cacheKey, run);
   return run;
+}
+
+export async function fetchHistoricalPricesForAssets(assets: PriceAssetRef[], days: number): Promise<Record<string, HistoricalPoint[]>> {
+  const refsByPriceId = new Map<string, PriceAssetRef>();
+  for (const asset of assets) {
+    const priceId = priceIdForRef(asset);
+    if (priceId && !refsByPriceId.has(priceId)) {
+      refsByPriceId.set(priceId, {
+        ticker: normalizeTicker(asset.ticker),
+        coingecko_id: priceId,
+      });
+    }
+  }
+  if (refsByPriceId.size === 0) return {};
+
+  const now = Date.now();
+  pruneHistoricalPriceCache(now);
+  let networkCount = 0;
+  for (const [id, asset] of refsByPriceId.entries()) {
+    if (isStablecoinId(id)) continue;
+    const cacheKey = historicalCacheKey(id, days, asset.ticker);
+    const cached = historicalPriceCache.get(cacheKey);
+    if (!cached || cached.expiresAt <= now) networkCount += 1;
+  }
+  const burstGuard = networkCount > HISTORICAL_NETWORK_BURST_THRESHOLD;
+
+  const entries = await Promise.all(
+    Array.from(refsByPriceId.entries()).map(async ([id, asset]) => {
+      try {
+        const points = await fetchHistoricalPricesCached(id, days, asset.ticker, { burstGuard });
+        return [id, points] as const;
+      } catch {
+        return [id, []] as const;
+      }
+    }),
+  );
+
+  return Object.fromEntries(entries);
 }
 
 export function resolveCoingeckoId(ticker: string): string {
