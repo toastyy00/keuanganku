@@ -4,6 +4,7 @@ declare global {
       VITE_SUPABASE_URL?: string;
       VITE_SUPABASE_ANON_KEY?: string;
       VITE_COINGECKO_DEMO_API_KEY?: string;
+      VITE_COINGECKO_PROXY_BASE_URL?: string;
       VITE_APP_MODE?: string;
       VITE_APP_BASE_PATH?: string;
     };
@@ -33,6 +34,10 @@ export const appConfig = {
   coingeckoDemoApiKey: readConfigValue(
     runtimeConfig?.VITE_COINGECKO_DEMO_API_KEY,
     import.meta.env.VITE_COINGECKO_DEMO_API_KEY as string | undefined
+  ),
+  coingeckoProxyBaseUrl: readConfigValue(
+    runtimeConfig?.VITE_COINGECKO_PROXY_BASE_URL,
+    import.meta.env.VITE_COINGECKO_PROXY_BASE_URL as string | undefined
   ),
   appMode: readConfigValue(
     runtimeConfig?.VITE_APP_MODE,

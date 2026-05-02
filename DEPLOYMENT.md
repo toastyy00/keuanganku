@@ -18,10 +18,13 @@ Minimal `.env` example:
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_COINGECKO_PROXY_BASE_URL=https://cg-proxy.your-domain.com/api/v3
 IMAGE_NAME=toastty/keuanganku:latest
 ```
 
 You also need to run `supabase/init.sql` in the Supabase SQL editor.
+
+`VITE_COINGECKO_PROXY_BASE_URL` is optional. For production, point it at a Cloudflare Worker proxy so the CoinGecko Demo API key stays in a Worker secret and does not appear in `/config.js` or browser request headers. The Worker starter file is `cloudflare/coingecko-proxy-worker.js`.
 
 ## Deploy on ARM64 Devices
 

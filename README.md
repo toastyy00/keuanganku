@@ -63,6 +63,7 @@ Then edit `.env` beside `docker-compose.yml`:
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_COINGECKO_PROXY_BASE_URL=https://cg-proxy.your-domain.com/api/v3
 IMAGE_NAME=toastty/keuanganku:latest
 ```
 
@@ -70,6 +71,7 @@ Notes:
 
 - `IMAGE_NAME` is optional because the compose file already defaults to `toastty/keuanganku:latest`
 - `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are still required
+- `VITE_COINGECKO_PROXY_BASE_URL` is optional, but recommended for production so the CoinGecko Demo API key can stay inside a Cloudflare Worker secret instead of the browser runtime config. A starter Worker is available at `cloudflare/coingecko-proxy-worker.js`
 
 ### 4. Apply Supabase schema
 

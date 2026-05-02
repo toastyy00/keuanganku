@@ -128,12 +128,17 @@ function storageAvailable(): boolean {
   }
 }
 
+function coingeckoBaseUrl(): string {
+  return (appConfig.coingeckoProxyBaseUrl ?? COINGECKO_BASE_URL).replace(/\/+$/, '');
+}
+
 function coingeckoFetch(path: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers);
-  if (appConfig.coingeckoDemoApiKey) {
+  if (!appConfig.coingeckoProxyBaseUrl && appConfig.coingeckoDemoApiKey) {
     headers.set('x-cg-demo-api-key', appConfig.coingeckoDemoApiKey);
   }
-  return fetch(`${COINGECKO_BASE_URL}${path}`, {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return fetch(`${coingeckoBaseUrl()}${normalizedPath}`, {
     ...init,
     headers,
   });
