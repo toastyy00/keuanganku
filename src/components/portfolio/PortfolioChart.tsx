@@ -39,6 +39,22 @@ function getScrubPerformanceColor(firstValue: number, currentValue: number): str
   return changeValue >= 0 ? SCRUB_GAIN_COLOR : SCRUB_LOSS_COLOR;
 }
 
+function fillRoundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number): void {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  ctx.fill();
+}
+
 const PortfolioChart: React.FC<PortfolioChartProps> = ({
   dataPoints,
   colorTheme,
@@ -54,6 +70,8 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
   const scrubXRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
   const revealRafRef = useRef<number | null>(null);
+  const pulseRafRef = useRef<number | null>(null);
+  const pulseStartedAtRef = useRef(0);
   const revealProgressRef = useRef(1);
   const isScrubbingRef = useRef(false);
 
@@ -192,9 +210,28 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       ctx.beginPath();
       ctx.moveTo(x, padTop);
       ctx.lineTo(x, height - padBottom);
-      ctx.strokeStyle = hexToRgba('#F5F0E8', 0.8);
-      ctx.lineWidth = 1;
+      ctx.setLineDash([1.4, 1.8]);
+      ctx.lineDashOffset = -((performance.now() / 120) % 3.2);
+      ctx.strokeStyle = hexToRgba(scrubColor, 0.62);
+      ctx.lineWidth = 0.8;
       ctx.stroke();
+      ctx.setLineDash([]);
+
+      const pulseElapsed = performance.now() - pulseStartedAtRef.current;
+      const pulsePhase = (pulseElapsed % 1200) / 1200;
+      const pulseRadius = 5.8 + pulsePhase * 9;
+      const pulseAlpha = Math.max(0, 0.28 * (1 - pulsePhase));
+
+      ctx.beginPath();
+      ctx.arc(x, dotY, pulseRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = hexToRgba(scrubColor, pulseAlpha);
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(x, dotY, 7.5, 0, Math.PI * 2);
+      ctx.fillStyle = hexToRgba(scrubColor, 0.12);
+      ctx.fill();
 
       ctx.beginPath();
       ctx.arc(x, dotY, 4.5, 0, Math.PI * 2);
@@ -215,12 +252,9 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       const isNearTop = dotY <= (padTop + labelH + 10);
       const labelY = isNearTop ? bottomY : topY;
 
-      ctx.fillStyle = 'rgba(15, 15, 18, 0.88)';
-      ctx.fillRect(labelX, labelY, labelW, labelH);
-      ctx.strokeStyle = hexToRgba('#F5F0E8', 0.35);
-      ctx.lineWidth = 1;
-      ctx.strokeRect(labelX, labelY, labelW, labelH);
-      ctx.fillStyle = '#F5F0E8';
+      ctx.fillStyle = 'rgba(245, 240, 232, 0.96)';
+      fillRoundedRect(ctx, labelX, labelY, labelW, labelH, 6);
+      ctx.fillStyle = '#1A1A1A';
       ctx.fillText(timeLabel, labelX + labelPadX, labelY + 14);
     }
   }, [colorTheme, dataPoints, yRange.max, yRange.min]);
@@ -311,6 +345,21 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       onScrub?.(dataPoints[idx]);
       draw(rect.width, 200);
     });
+
+    if (pulseRafRef.current === null) {
+      pulseStartedAtRef.current = performance.now();
+      const tickPulse = () => {
+        const pulseWrapper = wrapperRef.current;
+        if (!isScrubbingRef.current || scrubXRef.current === null || !pulseWrapper) {
+          pulseRafRef.current = null;
+          return;
+        }
+
+        draw(pulseWrapper.clientWidth, 200);
+        pulseRafRef.current = requestAnimationFrame(tickPulse);
+      };
+      pulseRafRef.current = requestAnimationFrame(tickPulse);
+    }
   };
 
   const endScrub = () => {
@@ -318,6 +367,10 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
+    }
+    if (pulseRafRef.current !== null) {
+      cancelAnimationFrame(pulseRafRef.current);
+      pulseRafRef.current = null;
     }
     scrubXRef.current = null;
     onScrubEnd?.();
@@ -334,6 +387,14 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       window.removeEventListener('mouseup', end);
       window.removeEventListener('touchend', end);
       window.removeEventListener('touchcancel', end);
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      if (pulseRafRef.current !== null) {
+        cancelAnimationFrame(pulseRafRef.current);
+        pulseRafRef.current = null;
+      }
     };
   });
 
