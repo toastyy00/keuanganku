@@ -247,10 +247,13 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       const labelH = 20;
       const labelW = textWidth + labelPadX * 2;
       const labelX = Math.min(width - labelW - 4, Math.max(4, x - labelW / 2));
-      const topY = 6;
-      const bottomY = Math.max(6, height - labelH - 8);
-      const isNearTop = dotY <= (padTop + labelH + 10);
-      const labelY = isNearTop ? bottomY : topY;
+      const labelGap = 11;
+      const minLabelY = 6;
+      const maxLabelY = Math.max(minLabelY, height - labelH - 8);
+      const labelAboveY = dotY - labelH - labelGap;
+      const labelBelowY = dotY + labelGap;
+      const preferredLabelY = labelAboveY >= minLabelY ? labelAboveY : labelBelowY;
+      const labelY = Math.min(maxLabelY, Math.max(minLabelY, preferredLabelY));
 
       ctx.fillStyle = 'rgba(245, 240, 232, 0.96)';
       fillRoundedRect(ctx, labelX, labelY, labelW, labelH, 6);
