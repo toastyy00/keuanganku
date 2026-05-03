@@ -7,9 +7,9 @@ import { aggregateHoldingsByTicker, buildPortfolioAssetFingerprint } from '../..
 import { PortfolioAllocationBar } from './PortfolioAllocationBar';
 import { PortfolioChart } from './PortfolioChart';
 
-type Timeframe = '24H' | '1W' | '1M' | '1Y' | 'ALL';
+type Timeframe = '24H' | '1W' | '1M' | '1Y';
 
-const FRAMES: Timeframe[] = ['24H', '1W', '1M', '1Y', 'ALL'];
+const FRAMES: Timeframe[] = ['24H', '1W', '1M', '1Y'];
 const GLOBAL_ACCENT = '#B8F55A';
 const CHART_GAIN_COLOR = '#22C55E';
 const CHART_LOSS_COLOR = '#EF4444';
@@ -414,16 +414,17 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
             className={`px-4 pb-4 transition-[opacity,transform] duration-200 ease-out ${isExpanded && hasAssets ? 'translate-y-0 opacity-100 delay-100' : '-translate-y-1 opacity-0 delay-0'}`}
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="-mt-1 grid grid-cols-5 gap-1">
+            <div className="-mt-1 grid grid-cols-4 gap-1.5" role="tablist" aria-label="Chart timeframe">
               {FRAMES.map((frame) => (
                 <button
                   key={frame}
                   type="button"
+                  aria-pressed={timeframe === frame}
                   onClick={() => {
                     resetScrubState();
                     setTimeframe(frame);
                   }}
-                  className="neo-btn-secondary px-2 py-1 text-[10px]"
+                  className="neo-btn-secondary h-8 w-full border border-[#555555] px-0 text-center text-[10px] font-black uppercase leading-none transition-colors"
                   style={timeframe === frame ? { backgroundColor: GLOBAL_ACCENT, color: '#1A1A1A' } : undefined}
                 >
                   {frame}

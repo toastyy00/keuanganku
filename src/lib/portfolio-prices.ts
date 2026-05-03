@@ -501,7 +501,7 @@ function targetPointCount(timeframe: Timeframe, maxAvailable: number): number {
     case '1W':
       return Math.min(168, maxAvailable);
     case '1M':
-      return Math.min(30, maxAvailable);
+      return Math.min(180, maxAvailable);
     case '1Y':
       return Math.min(365, maxAvailable);
     case 'ALL':

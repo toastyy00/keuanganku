@@ -18,7 +18,7 @@ interface PocketDetailProps {
   onBack: () => void;
 }
 
-const FRAMES: Array<'24H' | '1W' | '1M' | '1Y' | 'ALL'> = ['24H', '1W', '1M', '1Y', 'ALL'];
+const FRAMES: Array<'24H' | '1W' | '1M' | '1Y'> = ['24H', '1W', '1M', '1Y'];
 const CHART_GAIN_COLOR = '#22C55E';
 const CHART_LOSS_COLOR = '#EF4444';
 const CHART_FLAT_COLOR = '#F5F0E8';
@@ -202,16 +202,17 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
         </div>
 
         <div className="px-4 pb-4">
-          <div className="-mt-1 grid grid-cols-5 gap-1">
+          <div className="-mt-1 grid grid-cols-4 gap-1.5" role="tablist" aria-label="Chart timeframe">
             {FRAMES.map((frame) => (
               <button
                 key={frame}
                 type="button"
+                aria-pressed={timeframe === frame}
                 onClick={() => {
                   resetScrubState();
                   setTimeframe(frame);
                 }}
-                className="neo-btn-secondary px-2 py-1 text-[10px]"
+                className="neo-btn-secondary h-8 w-full border border-[#555555] px-0 text-center text-[10px] font-black uppercase leading-none transition-colors"
                 style={timeframe === frame ? { backgroundColor: pocket.color_theme, color: '#1A1A1A' } : undefined}
               >
                 {frame}
