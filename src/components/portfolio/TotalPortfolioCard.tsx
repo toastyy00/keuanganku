@@ -51,6 +51,20 @@ function buildMiniSparkline(points: { timestamp: number; value: number }[]): { l
   return { line, area };
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function easeSparklineReveal(value: number): number {
+  const t = clamp(value, 0, 1);
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function easeFullChartReveal(value: number): number {
+  const t = clamp(value, 0, 1);
+  return 1 - Math.pow(1 - t, 3);
+}
+
 const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
   shouldAnimateMiniSparkline: shouldAnimateMiniSparklineProp = true,
   onMiniSparklineRevealComplete,
@@ -70,8 +84,12 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [fullChartReveal, setFullChartReveal] = useState<{ fromProgress: number; key: string } | null>(null);
+  const [miniSparklineRevealProgress, setMiniSparklineRevealProgress] = useState(1);
+  const [fullChartRevealProgress, setFullChartRevealProgress] = useState(1);
   const refreshReleaseTimerRef = useRef<number | null>(null);
   const miniSparklineRevealStartedAtRef = useRef<number | null>(null);
+  const miniSparklineRevealFrameRef = useRef<number | null>(null);
+  const fullChartRevealFrameRef = useRef<number | null>(null);
 
   const resetScrubState = () => {
     setIsScrubbing(false);
@@ -106,6 +124,14 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
       if (refreshReleaseTimerRef.current !== null) {
         window.clearTimeout(refreshReleaseTimerRef.current);
       }
+      if (miniSparklineRevealFrameRef.current !== null) {
+        window.cancelAnimationFrame(miniSparklineRevealFrameRef.current);
+        miniSparklineRevealFrameRef.current = null;
+      }
+      if (fullChartRevealFrameRef.current !== null) {
+        window.cancelAnimationFrame(fullChartRevealFrameRef.current);
+        fullChartRevealFrameRef.current = null;
+      }
     };
   }, []);
 
@@ -125,7 +151,11 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
   const displayValue = isScrubbing ? (scrubValue ?? totalUsd) : totalUsd;
   const firstPointValue = chartData[0]?.value ?? 0;
   const latestPointValue = chartData[chartData.length - 1]?.value ?? 0;
-  const endPointValue = isScrubbing ? (scrubPointValue ?? latestPointValue) : latestPointValue;
+  const displayedChangeProgress = isExpanded ? fullChartRevealProgress : easeSparklineReveal(miniSparklineRevealProgress);
+  const shouldAnimateDisplayedChange = !isScrubbing && displayedChangeProgress < 1 && chartData.length > 1;
+  const animatedPointIndex = shouldAnimateDisplayedChange ? Math.max(0, Math.min(chartData.length - 1, Math.round(displayedChangeProgress * (chartData.length - 1)))) : chartData.length - 1;
+  const animatedPointValue = chartData[animatedPointIndex]?.value ?? latestPointValue;
+  const endPointValue = isScrubbing ? (scrubPointValue ?? latestPointValue) : shouldAnimateDisplayedChange ? animatedPointValue : latestPointValue;
   const stableChangeValue = latestPointValue - firstPointValue;
   const stableChangePct = firstPointValue === 0 ? 0 : (stableChangeValue / firstPointValue) * 100;
   const changeValue = endPointValue - firstPointValue;
@@ -144,25 +174,84 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
   const shouldAnimateMiniSparkline = hasAssets && !!miniSparkline && shouldAnimateMiniSparklineProp && !prefersReducedMotion;
 
   useEffect(() => {
-    if (!hasAssets || !miniSparkline || !shouldAnimateMiniSparklineProp) return;
+    if (!hasAssets || !miniSparkline || !shouldAnimateMiniSparklineProp) {
+      const resetFrame = window.requestAnimationFrame(() => setMiniSparklineRevealProgress(1));
+      return () => window.cancelAnimationFrame(resetFrame);
+    }
 
     if (prefersReducedMotion) {
       miniSparklineRevealStartedAtRef.current = null;
+      const resetFrame = window.requestAnimationFrame(() => setMiniSparklineRevealProgress(1));
       onMiniSparklineRevealComplete?.();
-      return;
+      return () => window.cancelAnimationFrame(resetFrame);
     }
 
     miniSparklineRevealStartedAtRef.current = performance.now();
+
+    const animateProgress = () => {
+      const startedAt = miniSparklineRevealStartedAtRef.current;
+      if (startedAt === null) return;
+
+      const elapsed = performance.now() - startedAt - MINI_SPARKLINE_REVEAL_DELAY_MS;
+      const progress = clamp(elapsed / MINI_SPARKLINE_REVEAL_DURATION_MS, 0, 1);
+      setMiniSparklineRevealProgress(progress);
+
+      if (progress < 1) {
+        miniSparklineRevealFrameRef.current = window.requestAnimationFrame(animateProgress);
+      } else {
+        miniSparklineRevealFrameRef.current = null;
+      }
+    };
+
+    miniSparklineRevealFrameRef.current = window.requestAnimationFrame(animateProgress);
+
     const revealTimer = window.setTimeout(() => {
       miniSparklineRevealStartedAtRef.current = null;
+      setMiniSparklineRevealProgress(1);
       onMiniSparklineRevealComplete?.();
     }, 2900);
 
     return () => {
       window.clearTimeout(revealTimer);
       miniSparklineRevealStartedAtRef.current = null;
+      if (miniSparklineRevealFrameRef.current !== null) {
+        window.cancelAnimationFrame(miniSparklineRevealFrameRef.current);
+        miniSparklineRevealFrameRef.current = null;
+      }
     };
   }, [hasAssets, miniSparkline, onMiniSparklineRevealComplete, prefersReducedMotion, shouldAnimateMiniSparklineProp]);
+
+  useEffect(() => {
+    if (!fullChartReveal || fullChartReveal.fromProgress >= 1 || MINI_SPARKLINE_REVEAL_DURATION_MS <= 0) {
+      const resetFrame = window.requestAnimationFrame(() => setFullChartRevealProgress(1));
+      return () => window.cancelAnimationFrame(resetFrame);
+    }
+
+    const startProgress = clamp(fullChartReveal.fromProgress, 0, 1);
+    const duration = Math.max(80, MINI_SPARKLINE_REVEAL_DURATION_MS * (1 - startProgress));
+    const startedAt = performance.now();
+
+    const animateProgress = (now: number) => {
+      const elapsed = now - startedAt;
+      const progress = clamp(elapsed / duration, 0, 1);
+      setFullChartRevealProgress(startProgress + (1 - startProgress) * easeFullChartReveal(progress));
+
+      if (progress < 1) {
+        fullChartRevealFrameRef.current = window.requestAnimationFrame(animateProgress);
+      } else {
+        fullChartRevealFrameRef.current = null;
+      }
+    };
+
+    fullChartRevealFrameRef.current = window.requestAnimationFrame(animateProgress);
+
+    return () => {
+      if (fullChartRevealFrameRef.current !== null) {
+        window.cancelAnimationFrame(fullChartRevealFrameRef.current);
+        fullChartRevealFrameRef.current = null;
+      }
+    };
+  }, [fullChartReveal]);
 
   const getMiniSparklineRevealProgress = () => {
     const startedAt = miniSparklineRevealStartedAtRef.current;
@@ -176,6 +265,7 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
     setIsExpanded((current) => {
       if (!current) {
         const fromProgress = shouldAnimateMiniSparkline ? getMiniSparklineRevealProgress() : 1;
+        setFullChartRevealProgress(fromProgress);
         setFullChartReveal(
           fromProgress < 1
             ? { fromProgress, key: `${timeframe}-${chartData.length}-${chartData[0]?.timestamp ?? 0}-${chartData[chartData.length - 1]?.timestamp ?? 0}` }
@@ -186,6 +276,7 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
         resetScrubState();
         setTimeframe('24H');
         setFullChartReveal(null);
+        setFullChartRevealProgress(1);
       }
       return !current;
     });
@@ -393,7 +484,28 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
 
       <div className={`grid transition-[grid-template-rows,opacity] duration-[360ms] ease-out ${isExpanded && hasAssets ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
         <div className={`overflow-hidden transition-[transform,filter] duration-300 ease-out ${isExpanded && hasAssets ? 'translate-y-0 scale-100 blur-0' : '-translate-y-2 scale-[0.985] blur-[1px]'}`}>
-          <div className={`w-full transition-[opacity,transform] duration-300 ease-out ${isExpanded && hasAssets ? 'translate-y-0 opacity-100 delay-75' : '-translate-y-1 opacity-0 delay-0'}`} onClick={(event) => event.stopPropagation()}>
+          <div className={`relative w-full transition-[opacity,transform] duration-300 ease-out ${isExpanded && hasAssets ? 'translate-y-0 opacity-100 delay-75' : '-translate-y-1 opacity-0 delay-0'}`} onClick={(event) => event.stopPropagation()}>
+            <div
+              className={`absolute right-4 top-1.5 z-10 flex items-center gap-1.5 text-[9px] font-black uppercase leading-none tracking-[0.04em] transition-opacity duration-150 ${isScrubbing ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
+              aria-label="Chart timeframe"
+            >
+              {FRAMES.map((frame, index) => (
+                <React.Fragment key={frame}>
+                  {index > 0 ? <span className="h-2.5 w-px bg-[#F5F0E8]/25" aria-hidden="true" /> : null}
+                  <button
+                    type="button"
+                    aria-pressed={timeframe === frame}
+                    onClick={() => {
+                      resetScrubState();
+                      setTimeframe(frame);
+                    }}
+                    className={`px-0.5 py-1 text-[9px] font-black uppercase leading-none transition-colors ${timeframe === frame ? 'text-[#B8F55A]' : 'text-[#F5F0E8]/45 hover:text-[#F5F0E8]/80'}`}
+                  >
+                    {frame}
+                  </button>
+                </React.Fragment>
+              ))}
+            </div>
             <PortfolioChart
               dataPoints={chartData}
               colorTheme={chartPerformanceColor}
@@ -414,23 +526,6 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
             className={`px-4 pb-4 transition-[opacity,transform] duration-200 ease-out ${isExpanded && hasAssets ? 'translate-y-0 opacity-100 delay-100' : '-translate-y-1 opacity-0 delay-0'}`}
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="-mt-1 grid grid-cols-4 gap-1.5" role="tablist" aria-label="Chart timeframe">
-              {FRAMES.map((frame) => (
-                <button
-                  key={frame}
-                  type="button"
-                  aria-pressed={timeframe === frame}
-                  onClick={() => {
-                    resetScrubState();
-                    setTimeframe(frame);
-                  }}
-                  className="neo-btn-secondary h-8 w-full border border-[#555555] px-0 text-center text-[10px] font-black uppercase leading-none transition-colors"
-                  style={timeframe === frame ? { backgroundColor: GLOBAL_ACCENT, color: '#1A1A1A' } : undefined}
-                >
-                  {frame}
-                </button>
-              ))}
-            </div>
             <PortfolioAllocationBar
               assets={aggregatedAssets.map((asset) => ({
                 key: asset.key,

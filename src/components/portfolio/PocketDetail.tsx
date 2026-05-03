@@ -187,7 +187,29 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
           </div>
         </div>
 
-        <div className="w-full">
+        <div className="relative w-full">
+          <div
+            className={`absolute right-4 top-1.5 z-10 flex items-center gap-1.5 text-[9px] font-black uppercase leading-none tracking-[0.04em] transition-opacity duration-150 ${isScrubbing ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
+            aria-label="Chart timeframe"
+          >
+            {FRAMES.map((frame, index) => (
+              <React.Fragment key={frame}>
+                {index > 0 ? <span className="h-2.5 w-px bg-[#F5F0E8]/25" aria-hidden="true" /> : null}
+                <button
+                  type="button"
+                  aria-pressed={timeframe === frame}
+                  onClick={() => {
+                    resetScrubState();
+                    setTimeframe(frame);
+                  }}
+                  className={`px-0.5 py-1 text-[9px] font-black uppercase leading-none transition-colors ${timeframe === frame ? 'text-[#1A1A1A]' : 'text-[#F5F0E8]/45 hover:text-[#F5F0E8]/80'}`}
+                  style={timeframe === frame ? { color: pocket.color_theme } : undefined}
+                >
+                  {frame}
+                </button>
+              </React.Fragment>
+            ))}
+          </div>
           <PortfolioChart
             dataPoints={chartData}
             colorTheme={chartPerformanceColor}
@@ -202,23 +224,6 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
         </div>
 
         <div className="px-4 pb-4">
-          <div className="-mt-1 grid grid-cols-4 gap-1.5" role="tablist" aria-label="Chart timeframe">
-            {FRAMES.map((frame) => (
-              <button
-                key={frame}
-                type="button"
-                aria-pressed={timeframe === frame}
-                onClick={() => {
-                  resetScrubState();
-                  setTimeframe(frame);
-                }}
-                className="neo-btn-secondary h-8 w-full border border-[#555555] px-0 text-center text-[10px] font-black uppercase leading-none transition-colors"
-                style={timeframe === frame ? { backgroundColor: pocket.color_theme, color: '#1A1A1A' } : undefined}
-              >
-                {frame}
-              </button>
-            ))}
-          </div>
           <PortfolioAllocationBar
             assets={aggregatedAssets.map((asset) => ({
               key: asset.key,

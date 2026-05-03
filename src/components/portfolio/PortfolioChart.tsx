@@ -19,6 +19,8 @@ interface PortfolioChartProps {
 const SCRUB_GAIN_COLOR = '#22C55E';
 const SCRUB_LOSS_COLOR = '#EF4444';
 const SCRUB_FLAT_COLOR = '#F5F0E8';
+const CHART_PAD_TOP = 28;
+const CHART_PAD_BOTTOM = 14;
 
 function hexToRgba(hex: string, alpha: number): string {
   const cleaned = hex.replace('#', '').trim();
@@ -81,9 +83,10 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     if (dataPoints.length === 0) return;
 
     const padX = 0;
-    const padY = 8;
+    const padTop = CHART_PAD_TOP;
+    const padBottom = CHART_PAD_BOTTOM;
     const plotW = width - padX * 2;
-    const plotH = height - padY * 2;
+    const plotH = height - padTop - padBottom;
 
     const minTs = dataPoints[0].timestamp;
     const maxTs = dataPoints[dataPoints.length - 1].timestamp;
@@ -91,7 +94,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     const spanY = Math.max(1e-6, yRange.max - yRange.min);
 
     const toX = (timestamp: number) => padX + ((timestamp - minTs) / spanTs) * plotW;
-    const toY = (value: number) => padY + (1 - (value - yRange.min) / spanY) * plotH;
+    const toY = (value: number) => padTop + (1 - (value - yRange.min) / spanY) * plotH;
 
     const revealProgress = scrubXRef.current === null ? Math.max(0, Math.min(1, revealProgressRef.current)) : 1;
     const shouldClipReveal = revealProgress < 1;
@@ -103,9 +106,11 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       ctx.clip();
     }
 
-    const gradient = ctx.createLinearGradient(0, padY, 0, height);
+    const gradient = ctx.createLinearGradient(0, padTop, 0, height);
     gradient.addColorStop(0, hexToRgba(colorTheme, 0.28));
-    gradient.addColorStop(1, hexToRgba(colorTheme, 0.03));
+    gradient.addColorStop(0.5, hexToRgba(colorTheme, 0.12));
+    gradient.addColorStop(0.78, hexToRgba(colorTheme, 0.035));
+    gradient.addColorStop(1, hexToRgba(colorTheme, 0));
 
     ctx.beginPath();
     dataPoints.forEach((point, idx) => {
@@ -116,8 +121,8 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     });
     const lastX = toX(dataPoints[dataPoints.length - 1].timestamp);
     const firstX = toX(dataPoints[0].timestamp);
-    ctx.lineTo(lastX, height - padY);
-    ctx.lineTo(firstX, height - padY);
+    ctx.lineTo(lastX, height - padBottom);
+    ctx.lineTo(firstX, height - padBottom);
     ctx.closePath();
     ctx.fillStyle = gradient;
     ctx.fill();
@@ -152,9 +157,11 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
         hour12: false,
       }).format(new Date(point.timestamp));
 
-      const scrubGradient = ctx.createLinearGradient(0, padY, 0, height);
+      const scrubGradient = ctx.createLinearGradient(0, padTop, 0, height);
       scrubGradient.addColorStop(0, hexToRgba(scrubColor, 0.26));
-      scrubGradient.addColorStop(1, hexToRgba(scrubColor, 0.02));
+      scrubGradient.addColorStop(0.5, hexToRgba(scrubColor, 0.11));
+      scrubGradient.addColorStop(0.78, hexToRgba(scrubColor, 0.03));
+      scrubGradient.addColorStop(1, hexToRgba(scrubColor, 0));
 
       ctx.beginPath();
       dataPoints.slice(0, idx + 1).forEach((segmentPoint, segmentIdx) => {
@@ -164,8 +171,8 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
         else ctx.lineTo(segmentX, segmentY);
       });
       ctx.lineTo(x, dotY);
-      ctx.lineTo(x, height - padY);
-      ctx.lineTo(firstX, height - padY);
+      ctx.lineTo(x, height - padBottom);
+      ctx.lineTo(firstX, height - padBottom);
       ctx.closePath();
       ctx.fillStyle = scrubGradient;
       ctx.fill();
@@ -183,8 +190,8 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       ctx.stroke();
 
       ctx.beginPath();
-      ctx.moveTo(x, padY);
-      ctx.lineTo(x, height - padY);
+      ctx.moveTo(x, padTop);
+      ctx.lineTo(x, height - padBottom);
       ctx.strokeStyle = hexToRgba('#F5F0E8', 0.8);
       ctx.lineWidth = 1;
       ctx.stroke();
@@ -205,7 +212,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       const labelX = Math.min(width - labelW - 4, Math.max(4, x - labelW / 2));
       const topY = 6;
       const bottomY = Math.max(6, height - labelH - 8);
-      const isNearTop = dotY <= (padY + labelH + 10);
+      const isNearTop = dotY <= (padTop + labelH + 10);
       const labelY = isNearTop ? bottomY : topY;
 
       ctx.fillStyle = 'rgba(15, 15, 18, 0.88)';
@@ -297,6 +304,8 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
 
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      if (!isScrubbingRef.current) return;
       const ratio = rect.width <= 0 ? 0 : x / rect.width;
       const idx = Math.max(0, Math.min(dataPoints.length - 1, Math.round(ratio * (dataPoints.length - 1))));
       onScrub?.(dataPoints[idx]);
@@ -306,6 +315,10 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
 
   const endScrub = () => {
     isScrubbingRef.current = false;
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
     scrubXRef.current = null;
     onScrubEnd?.();
     const wrapper = wrapperRef.current;
