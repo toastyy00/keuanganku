@@ -1,8 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 
 interface ChartPoint {
   timestamp: number;
   value: number;
+}
+
+interface CanvasPoint {
+  x: number;
+  y: number;
 }
 
 interface PortfolioChartProps {
@@ -21,6 +26,7 @@ const SCRUB_LOSS_COLOR = '#EF4444';
 const SCRUB_FLAT_COLOR = '#F5F0E8';
 const CHART_PAD_TOP = 28;
 const CHART_PAD_BOTTOM = 14;
+const SMOOTH_CURVE_TENSION = 0.18;
 
 function hexToRgba(hex: string, alpha: number): string {
   const cleaned = hex.replace('#', '').trim();
@@ -53,6 +59,26 @@ function fillRoundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, wi
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
   ctx.fill();
+}
+
+function drawSmoothPath(ctx: CanvasRenderingContext2D, points: CanvasPoint[], minY: number, maxY: number): void {
+  if (points.length === 0) return;
+
+  ctx.moveTo(points[0].x, points[0].y);
+  if (points.length === 1) return;
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const previous = points[index - 1] ?? points[index];
+    const current = points[index];
+    const next = points[index + 1];
+    const afterNext = points[index + 2] ?? next;
+    const cp1X = current.x + (next.x - previous.x) * SMOOTH_CURVE_TENSION;
+    const cp1Y = Math.min(maxY, Math.max(minY, current.y + (next.y - previous.y) * SMOOTH_CURVE_TENSION));
+    const cp2X = next.x - (afterNext.x - current.x) * SMOOTH_CURVE_TENSION;
+    const cp2Y = Math.min(maxY, Math.max(minY, next.y - (afterNext.y - current.y) * SMOOTH_CURVE_TENSION));
+
+    ctx.bezierCurveTo(cp1X, cp1Y, cp2X, cp2Y, next.x, next.y);
+  }
 }
 
 const PortfolioChart: React.FC<PortfolioChartProps> = ({
@@ -113,6 +139,10 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
 
     const toX = (timestamp: number) => padX + ((timestamp - minTs) / spanTs) * plotW;
     const toY = (value: number) => padTop + (1 - (value - yRange.min) / spanY) * plotH;
+    const curvePoints = dataPoints.map((point) => ({
+      x: toX(point.timestamp),
+      y: toY(point.value),
+    }));
 
     const revealProgress = scrubXRef.current === null ? Math.max(0, Math.min(1, revealProgressRef.current)) : 1;
     const shouldClipReveal = revealProgress < 1;
@@ -131,14 +161,9 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     gradient.addColorStop(1, hexToRgba(colorTheme, 0));
 
     ctx.beginPath();
-    dataPoints.forEach((point, idx) => {
-      const x = toX(point.timestamp);
-      const y = toY(point.value);
-      if (idx === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    const lastX = toX(dataPoints[dataPoints.length - 1].timestamp);
-    const firstX = toX(dataPoints[0].timestamp);
+    drawSmoothPath(ctx, curvePoints, padTop, height - padBottom);
+    const lastX = curvePoints[curvePoints.length - 1].x;
+    const firstX = curvePoints[0].x;
     ctx.lineTo(lastX, height - padBottom);
     ctx.lineTo(firstX, height - padBottom);
     ctx.closePath();
@@ -146,12 +171,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     ctx.fill();
 
     ctx.beginPath();
-    dataPoints.forEach((point, idx) => {
-      const x = toX(point.timestamp);
-      const y = toY(point.value);
-      if (idx === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
+    drawSmoothPath(ctx, curvePoints, padTop, height - padBottom);
     ctx.lineWidth = 2.5;
     ctx.strokeStyle = colorTheme;
     ctx.stroke();
@@ -165,7 +185,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       const ratio = width <= 0 ? 0 : x / width;
       const idx = Math.max(0, Math.min(dataPoints.length - 1, Math.round(ratio * (dataPoints.length - 1))));
       const point = dataPoints[idx];
-      const dotY = toY(point.value);
+      const dotY = curvePoints[idx]?.y ?? toY(point.value);
       const scrubColor = getScrubPerformanceColor(dataPoints[0].value, point.value);
       const timeLabel = new Intl.DateTimeFormat('id-ID', {
         day: '2-digit',
@@ -181,13 +201,9 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       scrubGradient.addColorStop(0.78, hexToRgba(scrubColor, 0.03));
       scrubGradient.addColorStop(1, hexToRgba(scrubColor, 0));
 
+      const scrubCurvePoints = curvePoints.slice(0, idx + 1);
       ctx.beginPath();
-      dataPoints.slice(0, idx + 1).forEach((segmentPoint, segmentIdx) => {
-        const segmentX = toX(segmentPoint.timestamp);
-        const segmentY = toY(segmentPoint.value);
-        if (segmentIdx === 0) ctx.moveTo(segmentX, segmentY);
-        else ctx.lineTo(segmentX, segmentY);
-      });
+      drawSmoothPath(ctx, scrubCurvePoints, padTop, height - padBottom);
       ctx.lineTo(x, dotY);
       ctx.lineTo(x, height - padBottom);
       ctx.lineTo(firstX, height - padBottom);
@@ -196,12 +212,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       ctx.fill();
 
       ctx.beginPath();
-      dataPoints.slice(0, idx + 1).forEach((segmentPoint, segmentIdx) => {
-        const segmentX = toX(segmentPoint.timestamp);
-        const segmentY = toY(segmentPoint.value);
-        if (segmentIdx === 0) ctx.moveTo(segmentX, segmentY);
-        else ctx.lineTo(segmentX, segmentY);
-      });
+      drawSmoothPath(ctx, scrubCurvePoints, padTop, height - padBottom);
       ctx.lineTo(x, dotY);
       ctx.lineWidth = 2.8;
       ctx.strokeStyle = scrubColor;
@@ -210,10 +221,10 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       ctx.beginPath();
       ctx.moveTo(x, padTop);
       ctx.lineTo(x, height - padBottom);
-      ctx.setLineDash([1.4, 1.8]);
-      ctx.lineDashOffset = -((performance.now() / 120) % 3.2);
-      ctx.strokeStyle = hexToRgba(scrubColor, 0.62);
-      ctx.lineWidth = 0.8;
+      ctx.setLineDash([1.8, 1.7]);
+      ctx.lineDashOffset = -((performance.now() / 120) % 3.5);
+      ctx.strokeStyle = hexToRgba(scrubColor, 0.74);
+      ctx.lineWidth = 1.05;
       ctx.stroke();
       ctx.setLineDash([]);
 
@@ -280,17 +291,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     draw(width, height);
   }, [draw]);
 
-  useEffect(() => {
-    const wrapper = wrapperRef.current;
-    if (!wrapper) return;
-
-    renderChart();
-    const ro = new ResizeObserver(renderChart);
-    ro.observe(wrapper);
-    return () => ro.disconnect();
-  }, [renderChart]);
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (revealRafRef.current !== null) {
       cancelAnimationFrame(revealRafRef.current);
       revealRafRef.current = null;
@@ -331,6 +332,16 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       }
     };
   }, [renderChart, revealDurationMs, revealFromProgress, revealKey]);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    renderChart();
+    const ro = new ResizeObserver(renderChart);
+    ro.observe(wrapper);
+    return () => ro.disconnect();
+  }, [renderChart]);
 
   const scrubAtClientX = (clientX: number) => {
     const wrapper = wrapperRef.current;

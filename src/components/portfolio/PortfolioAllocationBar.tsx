@@ -181,8 +181,8 @@ const PortfolioAllocationBar: React.FC<PortfolioAllocationBarProps> = ({ assets,
         ))}
       </div>
       <div
-        className={`mt-2.5 flex items-center gap-x-2 gap-y-1.5 overflow-hidden transition-[max-height,opacity,transform] duration-300 ease-out ${
-          isCollapsed ? 'max-h-[10px] flex-nowrap opacity-90 translate-y-0' : 'max-h-28 flex-wrap opacity-100 translate-y-0.5'
+        className={`mt-2.5 flex items-center gap-x-2 gap-y-1.5 overflow-hidden ${
+          isCollapsed ? 'max-h-[10px] flex-nowrap' : 'max-h-28 flex-wrap'
         }`}
       >
         {legendAssets.map((asset) => (

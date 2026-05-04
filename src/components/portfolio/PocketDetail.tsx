@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { formatCurrency, formatPortfolioAmount } from '../../lib/utils';
 import { getCachedPortfolioIdrRate, getPortfolioIdrRate, type PortfolioRateResult } from '../../lib/exchangeRate';
@@ -22,6 +22,14 @@ const FRAMES: Array<'24H' | '1W' | '1M' | '1Y'> = ['24H', '1W', '1M', '1Y'];
 const CHART_GAIN_COLOR = '#22C55E';
 const CHART_LOSS_COLOR = '#EF4444';
 const CHART_FLAT_COLOR = '#F5F0E8';
+const TIMEFRAME_CHART_REVEAL_DURATION_MS = 360;
+const EMPTY_CHART_DATA: { timestamp: number; value: number }[] = [];
+
+function getChartSeriesSignature(points: { timestamp: number; value: number }[]): string {
+  const first = points[0];
+  const last = points[points.length - 1];
+  return `${points.length}:${first?.timestamp ?? 0}:${last?.timestamp ?? 0}:${first?.value ?? 0}:${last?.value ?? 0}`;
+}
 
 const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const pockets = usePortfolioStore((s) => s.pockets);
@@ -39,7 +47,8 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const removeAsset = usePortfolioStore((s) => s.removeAsset);
   const updatePocket = usePortfolioStore((s) => s.updatePocket);
   const deletePocket = usePortfolioStore((s) => s.deletePocket);
-  const [timeframe, setTimeframe] = useState<'24H' | '1W' | '1M' | '1Y' | 'ALL'>('24H');
+  const [timeframe, setTimeframe] = useState<'24H' | '1W' | '1M' | '1Y'>('24H');
+  const [timeframeReveal, setTimeframeReveal] = useState<{ fromProgress: number; key: string } | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [assetAction, setAssetAction] = useState<PortfolioAsset | null>(null);
   const [selectedAggregateKey, setSelectedAggregateKey] = useState<string | null>(null);
@@ -51,6 +60,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const [isRefreshPressed, setIsRefreshPressed] = useState(false);
   const [portfolioRateInfo, setPortfolioRateInfo] = useState<PortfolioRateResult | null>(() => getCachedPortfolioIdrRate());
   const refreshReleaseTimerRef = useRef<number | null>(null);
+  const pendingTimeframeRevealRef = useRef<{ timeframe: typeof timeframe; previousSignature: string } | null>(null);
   const resetScrubState = () => {
     setIsScrubbing(false);
     setScrubValue(null);
@@ -99,7 +109,8 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
     return sum + usd * item.amount;
   }, 0);
 
-  const chartData = chartByPocket[pocketId] ?? [];
+  const chartData = chartByPocket[pocketId] ?? EMPTY_CHART_DATA;
+  const chartSignature = useMemo(() => getChartSeriesSignature(chartData), [chartData]);
   const displayValue = isScrubbing ? (scrubValue ?? totalUsd) : totalUsd;
   const firstPointValue = chartData[0]?.value ?? 0;
   const latestPointValue = chartData[chartData.length - 1]?.value ?? 0;
@@ -118,6 +129,14 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const formatPortfolioIdrValue = (usdValue: number) => (
     portfolioRateInfo ? formatCurrency(usdValue * portfolioRateInfo.rate, 'IDR') : 'Rp --'
   );
+
+  useLayoutEffect(() => {
+    const pendingReveal = pendingTimeframeRevealRef.current;
+    if (!pendingReveal || pendingReveal.timeframe !== timeframe || pendingReveal.previousSignature === chartSignature) return;
+
+    pendingTimeframeRevealRef.current = null;
+    setTimeframeReveal({ fromProgress: 0, key: `${pendingReveal.timeframe}-${chartSignature}` });
+  }, [chartSignature, timeframe]);
 
   if (!pocket) return null;
 
@@ -199,7 +218,10 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
                   type="button"
                   aria-pressed={timeframe === frame}
                   onClick={() => {
+                    if (timeframe === frame) return;
                     resetScrubState();
+                    pendingTimeframeRevealRef.current = { timeframe: frame, previousSignature: chartSignature };
+                    setTimeframeReveal(null);
                     setTimeframe(frame);
                   }}
                   className={`px-0.5 py-1 text-[9px] font-black uppercase leading-none transition-colors ${timeframe === frame ? 'text-[#1A1A1A]' : 'text-[#F5F0E8]/45 hover:text-[#F5F0E8]/80'}`}
@@ -220,6 +242,9 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
               setScrubPointValue(point.value);
             }}
             onScrubEnd={resetScrubState}
+            revealFromProgress={timeframeReveal?.fromProgress ?? null}
+            revealDurationMs={TIMEFRAME_CHART_REVEAL_DURATION_MS}
+            revealKey={timeframeReveal?.key}
           />
         </div>
 

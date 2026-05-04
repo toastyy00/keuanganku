@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { formatCurrency } from '../../lib/utils';
 import { getCachedPortfolioIdrRate, getPortfolioIdrRate, type PortfolioRateResult } from '../../lib/exchangeRate';
@@ -11,6 +11,7 @@ type Timeframe = '24H' | '1W' | '1M' | '1Y';
 
 const FRAMES: Timeframe[] = ['24H', '1W', '1M', '1Y'];
 const GLOBAL_ACCENT = '#B8F55A';
+const TOTAL_ALLOCATION_ACCENT = '#D8DEE9';
 const CHART_GAIN_COLOR = '#22C55E';
 const CHART_LOSS_COLOR = '#EF4444';
 const CHART_FLAT_COLOR = '#F5F0E8';
@@ -19,6 +20,8 @@ const MINI_SPARKLINE_VIEWBOX_WIDTH = 220;
 const MINI_SPARKLINE_VIEWBOX_HEIGHT = 96;
 const MINI_SPARKLINE_REVEAL_DELAY_MS = 140;
 const MINI_SPARKLINE_REVEAL_DURATION_MS = 2100;
+const MINI_SPARKLINE_GLOW_DURATION_MS = 2700;
+const TIMEFRAME_CHART_REVEAL_DURATION_MS = 360;
 const EMPTY_CHART_DATA: { timestamp: number; value: number }[] = [];
 
 interface TotalPortfolioCardProps {
@@ -51,6 +54,12 @@ function buildMiniSparkline(points: { timestamp: number; value: number }[]): { l
   return { line, area };
 }
 
+function getChartSeriesSignature(points: { timestamp: number; value: number }[]): string {
+  const first = points[0];
+  const last = points[points.length - 1];
+  return `${points.length}:${first?.timestamp ?? 0}:${last?.timestamp ?? 0}:${first?.value ?? 0}:${last?.value ?? 0}`;
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -81,20 +90,40 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
   const [scrubPointValue, setScrubPointValue] = useState<number | null>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [isRefreshPressed, setIsRefreshPressed] = useState(false);
+  const [isRefreshAnimating, setIsRefreshAnimating] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [fullChartReveal, setFullChartReveal] = useState<{ fromProgress: number; key: string } | null>(null);
+  const [timeframeReveal, setTimeframeReveal] = useState<{ fromProgress: number; key: string } | null>(null);
   const [miniSparklineRevealProgress, setMiniSparklineRevealProgress] = useState(1);
   const [fullChartRevealProgress, setFullChartRevealProgress] = useState(1);
   const refreshReleaseTimerRef = useRef<number | null>(null);
+  const refreshAnimationTimerRef = useRef<number | null>(null);
   const miniSparklineRevealStartedAtRef = useRef<number | null>(null);
   const miniSparklineRevealFrameRef = useRef<number | null>(null);
   const fullChartRevealFrameRef = useRef<number | null>(null);
+  const pendingTimeframeRevealRef = useRef<{ timeframe: Timeframe; previousSignature: string } | null>(null);
 
   const resetScrubState = () => {
     setIsScrubbing(false);
     setScrubValue(null);
     setScrubPointValue(null);
+  };
+
+  const refreshTotalChart = async () => {
+    if (refreshAnimationTimerRef.current !== null) {
+      window.clearTimeout(refreshAnimationTimerRef.current);
+    }
+    setIsRefreshAnimating(true);
+    try {
+      await refreshPrices(undefined, { force: true });
+      await refreshTotalChartSeries(timeframe, { force: true });
+    } finally {
+      refreshAnimationTimerRef.current = window.setTimeout(() => {
+        setIsRefreshAnimating(false);
+        refreshAnimationTimerRef.current = null;
+      }, 220);
+    }
   };
 
   const aggregatedAssets = useMemo(() => aggregateHoldingsByTicker(assets, prices), [assets, prices]);
@@ -124,6 +153,9 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
       if (refreshReleaseTimerRef.current !== null) {
         window.clearTimeout(refreshReleaseTimerRef.current);
       }
+      if (refreshAnimationTimerRef.current !== null) {
+        window.clearTimeout(refreshAnimationTimerRef.current);
+      }
       if (miniSparklineRevealFrameRef.current !== null) {
         window.cancelAnimationFrame(miniSparklineRevealFrameRef.current);
         miniSparklineRevealFrameRef.current = null;
@@ -148,6 +180,7 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
 
   const totalUsd = aggregatedAssets.reduce((sum, asset) => sum + asset.totalUsdValue, 0);
   const chartData = chartByPocket[TOTAL_PORTFOLIO_CHART_KEY] ?? EMPTY_CHART_DATA;
+  const chartSignature = useMemo(() => getChartSeriesSignature(chartData), [chartData]);
   const displayValue = isScrubbing ? (scrubValue ?? totalUsd) : totalUsd;
   const firstPointValue = chartData[0]?.value ?? 0;
   const latestPointValue = chartData[chartData.length - 1]?.value ?? 0;
@@ -172,6 +205,14 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
   const formatPortfolioIdrValue = (usdValue: number) => (portfolioRateInfo ? formatCurrency(usdValue * portfolioRateInfo.rate, 'IDR') : 'Rp --');
   const hasAssets = aggregatedAssets.length > 0 && totalUsd > 0;
   const shouldAnimateMiniSparkline = hasAssets && !!miniSparkline && shouldAnimateMiniSparklineProp && !prefersReducedMotion;
+
+  useLayoutEffect(() => {
+    const pendingReveal = pendingTimeframeRevealRef.current;
+    if (!pendingReveal || pendingReveal.timeframe !== timeframe || pendingReveal.previousSignature === chartSignature) return;
+
+    pendingTimeframeRevealRef.current = null;
+    setTimeframeReveal({ fromProgress: 0, key: `${pendingReveal.timeframe}-${chartSignature}` });
+  }, [chartSignature, timeframe]);
 
   useEffect(() => {
     if (!hasAssets || !miniSparkline || !shouldAnimateMiniSparklineProp) {
@@ -385,13 +426,13 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
                     >
                       <animate
                         attributeName="opacity"
-                        values="0;0.38;0.38;0.26;0"
-                        keyTimes="0;0.11;0.76;0.88;1"
-                        dur="2.7s"
+                        values="0;0.28;0.38;0.34;0.22;0.08;0"
+                        keyTimes="0;0.12;0.26;0.7;0.84;0.94;1"
+                        dur={`${MINI_SPARKLINE_GLOW_DURATION_MS / 1000}s`}
                         begin={`${MINI_SPARKLINE_REVEAL_DELAY_MS}ms`}
                         fill="freeze"
                         calcMode="spline"
-                        keySplines="0.22 0.61 0.36 1;0.4 0 0.2 1;0.22 0.61 0.36 1;0.4 0 0.2 1"
+                        keySplines="0.22 0.61 0.36 1;0.22 0.61 0.36 1;0.4 0 0.2 1;0.33 0 0.2 1;0.45 0 0.2 1;0.4 0 0.2 1"
                       />
                     </path>
                   )}
@@ -436,49 +477,6 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
               </p>
             )}
           </div>
-          <button
-            type="button"
-            aria-hidden={!isExpanded}
-            tabIndex={isExpanded ? 0 : -1}
-            className={`inline-flex h-9 w-9 items-center justify-center border-2 transition-[opacity,transform,box-shadow,filter] duration-300 ease-out ${
-              isExpanded ? 'translate-x-0 translate-y-0 scale-100 opacity-100 blur-0 delay-100' : 'translate-x-2 -translate-y-1 scale-90 opacity-0 blur-[1px] delay-0 pointer-events-none'
-            } ${isRefreshPressed ? 'translate-x-1 translate-y-1' : ''}`}
-            style={{
-              borderColor: GLOBAL_ACCENT,
-              color: GLOBAL_ACCENT,
-              backgroundColor: 'rgba(20,20,24,0.45)',
-              boxShadow: isRefreshPressed ? 'inset 0 0 0 2px #969696' : `2px 2px 0 0 #969696, inset 0 0 0 1px ${GLOBAL_ACCENT}33`,
-            }}
-            onClick={async (event) => {
-              event.stopPropagation();
-              if (!isExpanded) return;
-              await refreshPrices(undefined, { force: true });
-              await refreshTotalChartSeries(timeframe, { force: true });
-            }}
-            onPointerDown={(event) => {
-              event.stopPropagation();
-              if (!isExpanded) return;
-              if (refreshReleaseTimerRef.current !== null) {
-                window.clearTimeout(refreshReleaseTimerRef.current);
-              }
-              setIsRefreshPressed(true);
-            }}
-            onPointerUp={(event) => {
-              event.stopPropagation();
-              if (!isExpanded) return;
-              if (refreshReleaseTimerRef.current !== null) {
-                window.clearTimeout(refreshReleaseTimerRef.current);
-              }
-              refreshReleaseTimerRef.current = window.setTimeout(() => {
-                setIsRefreshPressed(false);
-              }, 120);
-            }}
-            onPointerLeave={() => setIsRefreshPressed(false)}
-            onPointerCancel={() => setIsRefreshPressed(false)}
-            onBlur={() => setIsRefreshPressed(false)}
-          >
-            <RefreshCw className={`transition-transform duration-300 ease-out ${isExpanded ? 'rotate-0 delay-100' : '-rotate-45 delay-0'}`} size={14} />
-          </button>
         </div>
       </div>
 
@@ -496,7 +494,12 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
                     type="button"
                     aria-pressed={timeframe === frame}
                     onClick={() => {
+                      if (timeframe === frame) return;
                       resetScrubState();
+                      setFullChartReveal(null);
+                      setFullChartRevealProgress(1);
+                      pendingTimeframeRevealRef.current = { timeframe: frame, previousSignature: chartSignature };
+                      setTimeframeReveal(null);
                       setTimeframe(frame);
                     }}
                     className={`px-0.5 py-1 text-[9px] font-black uppercase leading-none transition-colors ${timeframe === frame ? 'text-[#B8F55A]' : 'text-[#F5F0E8]/45 hover:text-[#F5F0E8]/80'}`}
@@ -505,6 +508,37 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
                   </button>
                 </React.Fragment>
               ))}
+              <span className="h-2.5 w-px bg-[#F5F0E8]/25" aria-hidden="true" />
+              <button
+                type="button"
+                aria-label="Refresh chart"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void refreshTotalChart();
+                }}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  if (refreshReleaseTimerRef.current !== null) {
+                    window.clearTimeout(refreshReleaseTimerRef.current);
+                  }
+                  setIsRefreshPressed(true);
+                }}
+                onPointerUp={(event) => {
+                  event.stopPropagation();
+                  if (refreshReleaseTimerRef.current !== null) {
+                    window.clearTimeout(refreshReleaseTimerRef.current);
+                  }
+                  refreshReleaseTimerRef.current = window.setTimeout(() => {
+                    setIsRefreshPressed(false);
+                  }, 120);
+                }}
+                onPointerLeave={() => setIsRefreshPressed(false)}
+                onPointerCancel={() => setIsRefreshPressed(false)}
+                onBlur={() => setIsRefreshPressed(false)}
+                className={`inline-flex h-4 w-4 items-center justify-center text-[#F5F0E8]/45 transition-[color,transform,opacity] duration-150 hover:text-[#F5F0E8]/80 ${isRefreshPressed ? 'scale-90 opacity-80' : 'scale-100 opacity-100'}`}
+              >
+                <RefreshCw className={`h-3 w-3 ${isRefreshAnimating ? 'animate-[spin_700ms_linear_infinite] text-[#B8F55A]' : ''}`} strokeWidth={3} />
+              </button>
             </div>
             <PortfolioChart
               dataPoints={chartData}
@@ -516,9 +550,9 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
                 setScrubPointValue(point.value);
               }}
               onScrubEnd={resetScrubState}
-              revealFromProgress={fullChartReveal?.fromProgress ?? null}
-              revealDurationMs={MINI_SPARKLINE_REVEAL_DURATION_MS}
-              revealKey={fullChartReveal?.key}
+              revealFromProgress={fullChartReveal?.fromProgress ?? timeframeReveal?.fromProgress ?? null}
+              revealDurationMs={fullChartReveal ? MINI_SPARKLINE_REVEAL_DURATION_MS : TIMEFRAME_CHART_REVEAL_DURATION_MS}
+              revealKey={fullChartReveal?.key ?? timeframeReveal?.key}
             />
           </div>
 
@@ -532,7 +566,7 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
                 ticker: asset.ticker,
                 usdValue: asset.totalUsdValue,
               }))}
-              colorTheme={GLOBAL_ACCENT}
+              colorTheme={TOTAL_ALLOCATION_ACCENT}
               collapsible
               tone="dark"
               minSegmentPercentage={1.6}
