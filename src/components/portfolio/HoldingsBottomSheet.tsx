@@ -62,7 +62,7 @@ const HoldingsBottomSheet: React.FC<HoldingsBottomSheetProps> = ({ isOpen, onClo
         isOpen={isOpen && !isAddOpen}
         onClose={onClose}
         title={`${aggregate.ticker} HOLDINGS`}
-        description={`${sortedHoldings.length} location${sortedHoldings.length === 1 ? '' : 's'}`}
+        description={`${sortedHoldings.length} position${sortedHoldings.length === 1 ? '' : 's'}`}
         panelClassName="sm:max-w-[520px]"
         containPageOverscroll
       >
@@ -88,7 +88,7 @@ const HoldingsBottomSheet: React.FC<HoldingsBottomSheetProps> = ({ isOpen, onClo
 
           <div className="space-y-2">
             <div className="-mt-0.5 flex items-end justify-between">
-              <p className="text-xs font-black uppercase leading-none text-[#F5F0E8]/50">Holding Locations</p>
+              <p className="text-xs font-black uppercase leading-none text-[#F5F0E8]/50">Holding Positions</p>
               <p className="text-[10px] font-black uppercase text-[#F5F0E8]/50">Tap to edit</p>
             </div>
             {sortedHoldings.map((holding) => {

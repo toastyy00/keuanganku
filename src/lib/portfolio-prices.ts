@@ -81,12 +81,14 @@ const COINGECKO_TO_TICKER: Record<string, string> = Object.fromEntries(
 const STABLECOIN_IDS = new Set([
   'tether',
   'usd-coin',
+  'usdc',
   'dai',
   'binance-usd',
   'first-digital-usd',
   'true-usd',
   'paxos-standard',
 ]);
+const STABLECOIN_TICKERS = new Set(['USDC', 'USDT', 'DAI', 'BUSD', 'FDUSD', 'TUSD', 'USDP']);
 
 function timeframeToDays(timeframe: Timeframe): number {
   switch (timeframe) {
@@ -115,6 +117,11 @@ function historicalQueryForDays(days: number): { interval: '15m' | '1h' | '4h' |
 
 function isStablecoinId(coingeckoId: string): boolean {
   return STABLECOIN_IDS.has(coingeckoId.trim().toLowerCase());
+}
+
+function isStablecoinRef(asset: PriceAssetRef): boolean {
+  const priceId = priceIdForRef(asset);
+  return isStablecoinId(priceId) || STABLECOIN_TICKERS.has(normalizeTicker(asset.ticker));
 }
 
 function normalizeTicker(ticker: string): string {
@@ -686,7 +693,7 @@ export async function fetchCurrentAssetPrices(assets: PriceAssetRef[]): Promise<
   const inflightEntries: Array<Promise<void>> = [];
 
   for (const [id, asset] of refsByPriceId.entries()) {
-    if (isStablecoinId(id)) {
+    if (isStablecoinRef(asset)) {
       result[id] = { usd: 1 };
       currentPriceCache.set(id, {
         value: { usd: 1 },
@@ -801,7 +808,7 @@ export async function fetchCurrentPrices(coingeckoIds: string[]): Promise<Curren
 
 export async function fetchHistoricalPrices(coingeckoId: string, days: number, tickerHint?: string, options?: { burstGuard?: boolean }): Promise<HistoricalPoint[]> {
   if (!coingeckoId) return [];
-  if (isStablecoinId(coingeckoId)) return buildStablecoinHistoricalPrices(days);
+  if (isStablecoinRef({ ticker: tickerHint ?? '', coingecko_id: coingeckoId })) return buildStablecoinHistoricalPrices(days);
 
   const ticker = normalizeTicker(tickerHint ?? '') || resolveTickerForBinance(coingeckoId);
   const { interval, limit } = historicalQueryForDays(days);
@@ -911,7 +918,7 @@ export async function fetchHistoricalPricesForAssets(assets: PriceAssetRef[], da
   pruneHistoricalPriceCache(now);
   let networkCount = 0;
   for (const [id, asset] of refsByPriceId.entries()) {
-    if (isStablecoinId(id)) continue;
+    if (isStablecoinRef(asset)) continue;
     const cacheKey = historicalCacheKey(id, days, asset.ticker);
     const cached = historicalPriceCache.get(cacheKey);
     if (!cached || cached.expiresAt <= now) networkCount += 1;

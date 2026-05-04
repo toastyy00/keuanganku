@@ -31,12 +31,24 @@ function getChartSeriesSignature(points: { timestamp: number; value: number }[])
   return `${points.length}:${first?.timestamp ?? 0}:${last?.timestamp ?? 0}:${first?.value ?? 0}:${last?.value ?? 0}`;
 }
 
+function assetChangeColorClass(changePct: number): string {
+  if (Math.abs(changePct) < 0.005) return 'text-brutal-black/45';
+  return changePct > 0 ? 'text-[#22C55E]/75' : 'text-[#EF4444]/75';
+}
+
+function formatAssetChangePct(changePct: number): string {
+  if (Math.abs(changePct) < 0.005) return '0.00%';
+  const sign = changePct > 0 ? '+' : '-';
+  return `${sign}${Math.abs(changePct).toFixed(2)}%`;
+}
+
 const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const pockets = usePortfolioStore((s) => s.pockets);
   const assets = usePortfolioStore((s) => s.assets);
   const prices = usePortfolioStore((s) => s.prices);
   const logs = usePortfolioStore((s) => s.activityLogs);
   const chartByPocket = usePortfolioStore((s) => s.chartSeriesByPocket);
+  const assetChangesByScope = usePortfolioStore((s) => s.assetChangesByScope);
   const fetchPrices = usePortfolioStore((s) => s.fetchPrices);
   const refreshPrices = usePortfolioStore((s) => s.refreshPrices);
   const refreshChartSeries = usePortfolioStore((s) => s.refreshChartSeries);
@@ -58,13 +70,31 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const [scrubPointValue, setScrubPointValue] = useState<number | null>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [isRefreshPressed, setIsRefreshPressed] = useState(false);
+  const [isRefreshAnimating, setIsRefreshAnimating] = useState(false);
   const [portfolioRateInfo, setPortfolioRateInfo] = useState<PortfolioRateResult | null>(() => getCachedPortfolioIdrRate());
   const refreshReleaseTimerRef = useRef<number | null>(null);
+  const refreshAnimationTimerRef = useRef<number | null>(null);
   const pendingTimeframeRevealRef = useRef<{ timeframe: typeof timeframe; previousSignature: string } | null>(null);
   const resetScrubState = () => {
     setIsScrubbing(false);
     setScrubValue(null);
     setScrubPointValue(null);
+  };
+
+  const refreshPocketChart = async () => {
+    if (refreshAnimationTimerRef.current !== null) {
+      window.clearTimeout(refreshAnimationTimerRef.current);
+    }
+    setIsRefreshAnimating(true);
+    try {
+      await refreshPrices(pocketId, { force: true });
+      await refreshChartSeries(pocketId, timeframe, { force: true });
+    } finally {
+      refreshAnimationTimerRef.current = window.setTimeout(() => {
+        setIsRefreshAnimating(false);
+        refreshAnimationTimerRef.current = null;
+      }, 220);
+    }
   };
 
   const pocket = pockets.find((item) => item.id === pocketId) as PortfolioPocket | undefined;
@@ -73,6 +103,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const aggregatedAssets = useMemo<AggregatedPortfolioAsset[]>(() => aggregateHoldingsByTicker(pocketAssets, prices), [pocketAssets, prices]);
   const pocketAssetFingerprint = useMemo(() => buildPortfolioAssetFingerprint(pocketAssets), [pocketAssets]);
   const selectedAggregate = useMemo(() => aggregatedAssets.find((item) => item.key === selectedAggregateKey) ?? null, [aggregatedAssets, selectedAggregateKey]);
+  const assetChanges = assetChangesByScope[`${pocketId}::${timeframe}`] ?? {};
   const selectedHoldingLogs = useMemo(() => {
     if (!assetAction) return [];
     return pocketLogs.filter((log) => log.asset_id === assetAction.id);
@@ -100,6 +131,9 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
     return () => {
       if (refreshReleaseTimerRef.current !== null) {
         window.clearTimeout(refreshReleaseTimerRef.current);
+      }
+      if (refreshAnimationTimerRef.current !== null) {
+        window.clearTimeout(refreshAnimationTimerRef.current);
       }
     };
   }, []);
@@ -163,46 +197,13 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
         }}
       >
         <div className="px-4 pt-4">
-          <div className="mb-3 flex items-start justify-between">
+          <div className="mb-3 flex items-start">
             <div>
               <p className="text-xs font-black uppercase text-brutal-black/50">Total Assets</p>
               <p className="text-2xl font-black">{formatPortfolioIdrValue(displayValue)}</p>
               <p className="text-sm font-bold text-brutal-black/60">${displayValue.toFixed(2)}</p>
               <p className={`mt-1 text-sm font-black ${changeColorClass}`}>{`${changeSign}$${Math.abs(changeValue).toFixed(2)} (${changeSign}${Math.abs(changePct).toFixed(2)}%) ${timeframe}`}</p>
             </div>
-            <button
-              type="button"
-              className={`inline-flex h-9 w-9 items-center justify-center border-2 transition-[transform,box-shadow] duration-150 ease-out ${isRefreshPressed ? 'translate-x-1 translate-y-1' : ''}`}
-              style={{
-                borderColor: `${pocket.color_theme}`,
-                color: `${pocket.color_theme}`,
-                backgroundColor: 'rgba(20,20,24,0.45)',
-                boxShadow: isRefreshPressed ? `inset 0 0 0 2px ${pocket.color_theme}` : `2px 2px 0 0 rgba(0,0,0,0.45), inset 0 0 0 1px ${pocket.color_theme}33`,
-              }}
-              onPointerDown={() => {
-                if (refreshReleaseTimerRef.current !== null) {
-                  window.clearTimeout(refreshReleaseTimerRef.current);
-                }
-                setIsRefreshPressed(true);
-              }}
-              onPointerUp={() => {
-                if (refreshReleaseTimerRef.current !== null) {
-                  window.clearTimeout(refreshReleaseTimerRef.current);
-                }
-                refreshReleaseTimerRef.current = window.setTimeout(() => {
-                  setIsRefreshPressed(false);
-                }, 120);
-              }}
-              onPointerLeave={() => setIsRefreshPressed(false)}
-              onPointerCancel={() => setIsRefreshPressed(false)}
-              onBlur={() => setIsRefreshPressed(false)}
-              onClick={async () => {
-                await refreshPrices(pocketId, { force: true });
-                await refreshChartSeries(pocketId, timeframe, { force: true });
-              }}
-            >
-              <RefreshCw size={14} />
-            </button>
           </div>
         </div>
 
@@ -231,6 +232,35 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
                 </button>
               </React.Fragment>
             ))}
+            <span className="h-2.5 w-px bg-[#F5F0E8]/25" aria-hidden="true" />
+            <button
+              type="button"
+              aria-label="Refresh chart"
+              onClick={() => {
+                void refreshPocketChart();
+              }}
+              onPointerDown={() => {
+                if (refreshReleaseTimerRef.current !== null) {
+                  window.clearTimeout(refreshReleaseTimerRef.current);
+                }
+                setIsRefreshPressed(true);
+              }}
+              onPointerUp={() => {
+                if (refreshReleaseTimerRef.current !== null) {
+                  window.clearTimeout(refreshReleaseTimerRef.current);
+                }
+                refreshReleaseTimerRef.current = window.setTimeout(() => {
+                  setIsRefreshPressed(false);
+                }, 120);
+              }}
+              onPointerLeave={() => setIsRefreshPressed(false)}
+              onPointerCancel={() => setIsRefreshPressed(false)}
+              onBlur={() => setIsRefreshPressed(false)}
+              className={`inline-flex h-4 w-4 items-center justify-center text-[#F5F0E8]/45 transition-[color,transform,opacity] duration-150 hover:text-[#F5F0E8]/80 ${isRefreshPressed ? 'scale-90 opacity-80' : 'scale-100 opacity-100'}`}
+              style={isRefreshAnimating ? { color: pocket.color_theme } : undefined}
+            >
+              <RefreshCw className={isRefreshAnimating ? 'h-3 w-3 animate-[spin_700ms_linear_infinite]' : 'h-3 w-3'} strokeWidth={3} />
+            </button>
           </div>
           <PortfolioChart
             dataPoints={chartData}
@@ -282,23 +312,29 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
         </div>
         {aggregatedAssets.map((asset) => {
           const price = prices[asset.coingecko_id ?? '']?.usd ?? 0;
+          const assetChange = asset.coingecko_id ? assetChanges[asset.coingecko_id] : undefined;
           return (
             <button
               key={asset.key}
               type="button"
-              className="neo-card portfolio-active-balance-card flex w-full items-center justify-between px-3 py-2 text-left"
+              className="neo-card portfolio-active-balance-card flex w-full items-center justify-between px-3 py-2.5 text-left"
               style={{
                 '--portfolio-pocket-accent': pocket.color_theme,
                 '--portfolio-pocket-accent-soft': `${pocket.color_theme}24`,
               } as React.CSSProperties}
               onClick={() => setSelectedAggregateKey(asset.key)}
             >
-              <div>
-                <p className="flex items-baseline gap-1.5 text-sm font-black">
+              <div className="min-w-0">
+                <p className="flex min-w-0 items-center gap-1 text-sm font-black leading-none">
                   <span>{asset.ticker}</span>
-                  <span className="text-[10px] font-bold text-brutal-black/55">≈ ${price.toFixed(4)}</span>
+                  <span className="text-[10px] font-bold leading-none text-brutal-black/55">≈ ${price.toFixed(4)}</span>
+                  {assetChange ? (
+                    <span className={`text-[10px] font-bold leading-none ${assetChangeColorClass(assetChange.changePct)}`}>
+                      {formatAssetChangePct(assetChange.changePct)}
+                    </span>
+                  ) : null}
                 </p>
-                <p className="text-xs font-medium text-brutal-black/60">
+                <p className="mt-1 text-xs font-medium text-brutal-black/60">
                   {formatPortfolioAmount(asset.totalAmount)}
                 </p>
               </div>

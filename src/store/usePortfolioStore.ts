@@ -13,6 +13,8 @@ type Timeframe = '24H' | '1W' | '1M' | '1Y' | 'ALL';
 type PriceCacheMeta = { fetchedAt: number; idsFingerprint: string };
 type ChartCacheMeta = { fetchedAt: number; assetFingerprint: string };
 type ChartSeries = { timestamp: number; value: number }[];
+type HistoricalPoint = [number, number];
+type AssetTimeframeChange = { changePct: number; changeValue: number };
 type RefreshOptions = { force?: boolean };
 
 interface PortfolioStoreState {
@@ -24,6 +26,7 @@ interface PortfolioStoreState {
   priceCacheMetaByScope: Record<string, PriceCacheMeta>;
   chartCacheMetaByKey: Record<string, ChartCacheMeta>;
   chartSeriesByCacheKey: Record<string, ChartSeries>;
+  assetChangesByScope: Record<string, Record<string, AssetTimeframeChange>>;
   isLoading: boolean;
   error: string | null;
   _hasHydrated: boolean;
@@ -136,6 +139,30 @@ function omitPocketCacheKeys<T>(record: Record<string, T>, pocketId: string): Re
   return omitRecordKeys(record, (key) => key.startsWith(`${pocketId}::`));
 }
 
+function buildAssetTimeframeChanges(
+  assets: { coingecko_id: string }[],
+  historicalByAsset: Record<string, HistoricalPoint[]>,
+): Record<string, AssetTimeframeChange> {
+  const changes: Record<string, AssetTimeframeChange> = {};
+  const ids = Array.from(new Set(assets.map((asset) => asset.coingecko_id).filter(Boolean)));
+
+  for (const id of ids) {
+    const points = historicalByAsset[id] ?? [];
+    if (points.length < 2) continue;
+    const first = points[0]?.[1];
+    const last = points[points.length - 1]?.[1];
+    if (!Number.isFinite(first) || !Number.isFinite(last) || first === 0) continue;
+
+    const changeValue = last - first;
+    changes[id] = {
+      changeValue,
+      changePct: (changeValue / first) * 100,
+    };
+  }
+
+  return changes;
+}
+
 function toActivityLogInput(asset: PortfolioAsset, action: 'ADD' | 'REDUCE', amountChange: number, balanceAfter: number, priceAtTime: number, note?: string): Omit<PortfolioActivityLog, 'id' | 'created_at'> {
   return {
     pocket_id: asset.pocket_id,
@@ -161,6 +188,7 @@ export const usePortfolioStore = create<PortfolioStore>()(
       priceCacheMetaByScope: {},
       chartCacheMetaByKey: {},
       chartSeriesByCacheKey: {},
+      assetChangesByScope: {},
       isLoading: false,
       error: null,
       _hasHydrated: false,
@@ -180,6 +208,7 @@ export const usePortfolioStore = create<PortfolioStore>()(
           priceCacheMetaByScope: {},
           chartCacheMetaByKey: {},
           chartSeriesByCacheKey: {},
+          assetChangesByScope: {},
           hasLoadedOnce: false,
           lastLoadedAt: null,
           cacheScope: scope,
@@ -285,6 +314,7 @@ export const usePortfolioStore = create<PortfolioStore>()(
         const priceMetaSnapshot = stateSnapshot.priceCacheMetaByScope;
         const chartMetaSnapshot = stateSnapshot.chartCacheMetaByKey;
         const chartCacheSnapshot = stateSnapshot.chartSeriesByCacheKey;
+        const assetChangesSnapshot = stateSnapshot.assetChangesByScope;
         set((state) => ({
           pockets: state.pockets.filter((item) => item.id !== id),
           assets: state.assets.filter((item) => item.pocket_id !== id),
@@ -293,6 +323,7 @@ export const usePortfolioStore = create<PortfolioStore>()(
           priceCacheMetaByScope: omitRecordKeys(state.priceCacheMetaByScope, (key) => key === id),
           chartCacheMetaByKey: omitPocketCacheKeys(state.chartCacheMetaByKey, id),
           chartSeriesByCacheKey: omitPocketCacheKeys(state.chartSeriesByCacheKey, id),
+          assetChangesByScope: omitPocketCacheKeys(state.assetChangesByScope, id),
         }));
         try {
           await getPortfolioActivityLogRepo().deleteByPocketId(id);
@@ -307,6 +338,7 @@ export const usePortfolioStore = create<PortfolioStore>()(
             priceCacheMetaByScope: priceMetaSnapshot,
             chartCacheMetaByKey: chartMetaSnapshot,
             chartSeriesByCacheKey: chartCacheSnapshot,
+            assetChangesByScope: assetChangesSnapshot,
           });
           const msg = err instanceof Error ? err.message : 'Failed to delete pocket';
           set({ error: msg });
@@ -566,6 +598,8 @@ export const usePortfolioStore = create<PortfolioStore>()(
         const coingeckoIds = Array.from(new Set(scopedAssets.map((asset) => asset.coingecko_id)));
         if (force) clearHistoricalPriceCache(coingeckoIds, days);
         const historicalByAsset = await fetchHistoricalPricesForAssets(scopedAssets, days);
+        const assetChanges = buildAssetTimeframeChanges(scopedAssets, historicalByAsset);
+        const hasAssetChanges = Object.keys(assetChanges).length > 0;
 
         const computedSeries = computePortfolioValueSeries(scopedAssets, historicalByAsset, timeframe);
         const series = computedSeries.length > 0 || cachedSeries.length === 0 ? computedSeries : cachedSeries;
@@ -582,6 +616,12 @@ export const usePortfolioStore = create<PortfolioStore>()(
             ...state.chartCacheMetaByKey,
             [metaKey]: { fetchedAt: Date.now(), assetFingerprint: fingerprint },
           },
+          assetChangesByScope: hasAssetChanges
+            ? {
+                ...state.assetChangesByScope,
+                [metaKey]: assetChanges,
+              }
+            : state.assetChangesByScope,
         }));
         return series;
       },
@@ -641,6 +681,7 @@ export const usePortfolioStore = create<PortfolioStore>()(
         priceCacheMetaByScope: state.priceCacheMetaByScope,
         chartCacheMetaByKey: state.chartCacheMetaByKey,
         chartSeriesByCacheKey: state.chartSeriesByCacheKey,
+        assetChangesByScope: state.assetChangesByScope,
         cacheScope: state.cacheScope,
       }),
       onRehydrateStorage: () => (state, error) => {
