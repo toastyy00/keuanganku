@@ -28,13 +28,33 @@ const CHART_PAD_TOP = 28;
 const CHART_PAD_BOTTOM = 14;
 const SMOOTH_CURVE_TENSION = 0.18;
 
-function hexToRgba(hex: string, alpha: number): string {
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const cleaned = hex.replace('#', '').trim();
-  if (cleaned.length !== 6) return `rgba(184,245,90,${alpha})`;
-  const r = Number.parseInt(cleaned.slice(0, 2), 16);
-  const g = Number.parseInt(cleaned.slice(2, 4), 16);
-  const b = Number.parseInt(cleaned.slice(4, 6), 16);
+  if (cleaned.length !== 6) return { r: 184, g: 245, b: 90 };
+  return {
+    r: Number.parseInt(cleaned.slice(0, 2), 16),
+    g: Number.parseInt(cleaned.slice(2, 4), 16),
+    b: Number.parseInt(cleaned.slice(4, 6), 16),
+  };
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const { r, g, b } = hexToRgb(hex);
   return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function hexToDimmedRgba(hex: string, alpha: number): string {
+  const { r, g, b } = hexToRgb(hex);
+  const luminance = r * 0.299 + g * 0.587 + b * 0.114;
+  const saturation = 0.38;
+  const dimR = Math.round(luminance + (r - luminance) * saturation);
+  const dimG = Math.round(luminance + (g - luminance) * saturation);
+  const dimB = Math.round(luminance + (b - luminance) * saturation);
+  return `rgba(${dimR},${dimG},${dimB},${alpha})`;
 }
 
 function getScrubPerformanceColor(firstValue: number, currentValue: number): string {
@@ -144,44 +164,71 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       y: toY(point.value),
     }));
 
-    const revealProgress = scrubXRef.current === null ? Math.max(0, Math.min(1, revealProgressRef.current)) : 1;
+    const revealProgress = scrubXRef.current === null ? clamp(revealProgressRef.current, 0, 1) : 1;
     const shouldClipReveal = revealProgress < 1;
+    const firstX = curvePoints[0].x;
+    const lastX = curvePoints[curvePoints.length - 1].x;
 
-    if (shouldClipReveal) {
+    const drawChartSegment = (
+      fromX: number,
+      toX: number,
+      color: string,
+      rgba: (hex: string, alpha: number) => string,
+      alphaScale: number,
+      lineWidth: number,
+    ) => {
+      const left = clamp(Math.min(fromX, toX), 0, width);
+      const right = clamp(Math.max(fromX, toX), 0, width);
+      if (right - left <= 0.5) return;
+
       ctx.save();
       ctx.beginPath();
-      ctx.rect(0, 0, width * revealProgress, height);
+      ctx.rect(left, 0, right - left, height);
       ctx.clip();
-    }
 
-    const gradient = ctx.createLinearGradient(0, padTop, 0, height);
-    gradient.addColorStop(0, hexToRgba(colorTheme, 0.28));
-    gradient.addColorStop(0.5, hexToRgba(colorTheme, 0.12));
-    gradient.addColorStop(0.78, hexToRgba(colorTheme, 0.035));
-    gradient.addColorStop(1, hexToRgba(colorTheme, 0));
+      if (shouldClipReveal) {
+        ctx.beginPath();
+        ctx.rect(0, 0, width * revealProgress, height);
+        ctx.clip();
+      }
 
-    ctx.beginPath();
-    drawSmoothPath(ctx, curvePoints, padTop, height - padBottom);
-    const lastX = curvePoints[curvePoints.length - 1].x;
-    const firstX = curvePoints[0].x;
-    ctx.lineTo(lastX, height - padBottom);
-    ctx.lineTo(firstX, height - padBottom);
-    ctx.closePath();
-    ctx.fillStyle = gradient;
-    ctx.fill();
+      const fillChartArea = () => {
+        ctx.beginPath();
+        drawSmoothPath(ctx, curvePoints, padTop, height - padBottom);
+        ctx.lineTo(lastX, height - padBottom);
+        ctx.lineTo(firstX, height - padBottom);
+        ctx.closePath();
+      };
 
-    ctx.beginPath();
-    drawSmoothPath(ctx, curvePoints, padTop, height - padBottom);
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = colorTheme;
-    ctx.stroke();
+      const depthGradient = ctx.createLinearGradient(0, padTop, 0, height);
+      depthGradient.addColorStop(0, `rgba(7, 9, 12, ${0.28 * alphaScale})`);
+      depthGradient.addColorStop(0.54, `rgba(7, 9, 12, ${0.18 * alphaScale})`);
+      depthGradient.addColorStop(0.88, `rgba(7, 9, 12, ${0.07 * alphaScale})`);
+      depthGradient.addColorStop(1, 'rgba(7, 9, 12, 0)');
+      fillChartArea();
+      ctx.fillStyle = depthGradient;
+      ctx.fill();
 
-    if (shouldClipReveal) {
+      const colorGradient = ctx.createLinearGradient(0, padTop, 0, height);
+      colorGradient.addColorStop(0, rgba(color, 0.34 * alphaScale));
+      colorGradient.addColorStop(0.42, rgba(color, 0.14 * alphaScale));
+      colorGradient.addColorStop(0.78, rgba(color, 0.035 * alphaScale));
+      colorGradient.addColorStop(1, rgba(color, 0));
+      fillChartArea();
+      ctx.fillStyle = colorGradient;
+      ctx.fill();
+
+      ctx.beginPath();
+      drawSmoothPath(ctx, curvePoints, padTop, height - padBottom);
+      ctx.lineWidth = lineWidth;
+      ctx.strokeStyle = rgba(color, alphaScale);
+      ctx.stroke();
+
       ctx.restore();
-    }
+    };
 
     if (scrubXRef.current !== null) {
-      const x = Math.min(width - padX, Math.max(padX, scrubXRef.current));
+      const x = clamp(scrubXRef.current, padX, width - padX);
       const ratio = width <= 0 ? 0 : x / width;
       const idx = Math.max(0, Math.min(dataPoints.length - 1, Math.round(ratio * (dataPoints.length - 1))));
       const point = dataPoints[idx];
@@ -195,28 +242,8 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
         hour12: false,
       }).format(new Date(point.timestamp));
 
-      const scrubGradient = ctx.createLinearGradient(0, padTop, 0, height);
-      scrubGradient.addColorStop(0, hexToRgba(scrubColor, 0.26));
-      scrubGradient.addColorStop(0.5, hexToRgba(scrubColor, 0.11));
-      scrubGradient.addColorStop(0.78, hexToRgba(scrubColor, 0.03));
-      scrubGradient.addColorStop(1, hexToRgba(scrubColor, 0));
-
-      const scrubCurvePoints = curvePoints.slice(0, idx + 1);
-      ctx.beginPath();
-      drawSmoothPath(ctx, scrubCurvePoints, padTop, height - padBottom);
-      ctx.lineTo(x, dotY);
-      ctx.lineTo(x, height - padBottom);
-      ctx.lineTo(firstX, height - padBottom);
-      ctx.closePath();
-      ctx.fillStyle = scrubGradient;
-      ctx.fill();
-
-      ctx.beginPath();
-      drawSmoothPath(ctx, scrubCurvePoints, padTop, height - padBottom);
-      ctx.lineTo(x, dotY);
-      ctx.lineWidth = 2.8;
-      ctx.strokeStyle = scrubColor;
-      ctx.stroke();
+      drawChartSegment(x, width, scrubColor, hexToDimmedRgba, 0.44, 2.5);
+      drawChartSegment(0, x, scrubColor, hexToRgba, 1, 2.8);
 
       ctx.beginPath();
       ctx.moveTo(x, padTop);
@@ -229,28 +256,30 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       ctx.setLineDash([]);
 
       const pulseElapsed = performance.now() - pulseStartedAtRef.current;
-      const pulsePhase = (pulseElapsed % 1200) / 1200;
-      const pulseRadius = 5.8 + pulsePhase * 9;
-      const pulseAlpha = Math.max(0, 0.28 * (1 - pulsePhase));
+      const pulsePhase = (pulseElapsed % 1040) / 1040;
+      const pulseEase = 1 - Math.pow(1 - pulsePhase, 2.4);
+      const pulseFade = Math.pow(1 - pulsePhase, 1.7);
+      const pulseRadius = 6.4 + pulseEase * 8.8;
+      const pulseAlpha = Math.max(0, 0.58 * pulseFade);
 
       ctx.beginPath();
       ctx.arc(x, dotY, pulseRadius, 0, Math.PI * 2);
       ctx.strokeStyle = hexToRgba(scrubColor, pulseAlpha);
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = 2.4 + pulseFade * 0.6;
+      ctx.shadowColor = hexToRgba(scrubColor, pulseAlpha * 0.65);
+      ctx.shadowBlur = 5 + pulseFade * 3;
       ctx.stroke();
+      ctx.shadowBlur = 0;
 
       ctx.beginPath();
-      ctx.arc(x, dotY, 7.5, 0, Math.PI * 2);
-      ctx.fillStyle = hexToRgba(scrubColor, 0.12);
+      ctx.arc(x, dotY, 8.5, 0, Math.PI * 2);
+      ctx.fillStyle = hexToRgba(scrubColor, 0.26);
       ctx.fill();
 
       ctx.beginPath();
-      ctx.arc(x, dotY, 4.5, 0, Math.PI * 2);
+      ctx.arc(x, dotY, 5.2, 0, Math.PI * 2);
       ctx.fillStyle = scrubColor;
       ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#F5F0E8';
-      ctx.stroke();
 
       ctx.font = '700 11px ui-sans-serif, system-ui, -apple-system, Segoe UI';
       const textWidth = ctx.measureText(timeLabel).width;
@@ -270,6 +299,8 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       fillRoundedRect(ctx, labelX, labelY, labelW, labelH, 6);
       ctx.fillStyle = '#1A1A1A';
       ctx.fillText(timeLabel, labelX + labelPadX, labelY + 14);
+    } else {
+      drawChartSegment(0, width, colorTheme, hexToRgba, 1, 2.5);
     }
   }, [colorTheme, dataPoints, yRange.max, yRange.min]);
 
@@ -303,7 +334,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       return;
     }
 
-    const startProgress = Math.max(0, Math.min(1, revealFromProgress));
+    const startProgress = clamp(revealFromProgress, 0, 1);
     const duration = Math.max(80, revealDurationMs * (1 - startProgress));
     const startedAt = performance.now();
     revealProgressRef.current = startProgress;
@@ -361,7 +392,6 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     });
 
     if (pulseRafRef.current === null) {
-      pulseStartedAtRef.current = performance.now();
       const tickPulse = () => {
         const pulseWrapper = wrapperRef.current;
         if (!isScrubbingRef.current || scrubXRef.current === null || !pulseWrapper) {
@@ -376,6 +406,13 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     }
   };
 
+  const beginScrub = () => {
+    if (!isScrubbingRef.current) {
+      pulseStartedAtRef.current = performance.now();
+    }
+    isScrubbingRef.current = true;
+  };
+
   const endScrub = () => {
     isScrubbingRef.current = false;
     if (rafRef.current !== null) {
@@ -387,6 +424,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       pulseRafRef.current = null;
     }
     scrubXRef.current = null;
+    pulseStartedAtRef.current = 0;
     onScrubEnd?.();
     const wrapper = wrapperRef.current;
     if (wrapper) draw(wrapper.clientWidth, 200);
@@ -417,7 +455,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       ref={wrapperRef}
       className="w-full"
       onMouseDown={(e) => {
-        isScrubbingRef.current = true;
+        beginScrub();
         scrubAtClientX(e.clientX);
       }}
       onMouseMove={(e) => {
@@ -427,7 +465,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       onMouseLeave={endScrub}
       onMouseUp={endScrub}
       onTouchStart={(e) => {
-        isScrubbingRef.current = true;
+        beginScrub();
         scrubAtClientX(e.touches[0].clientX);
       }}
       onTouchMove={(e) => {
