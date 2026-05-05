@@ -1373,29 +1373,53 @@ const HistoryPage: React.FC = () => {
                     setCatFilter(new Set());
                   }
                 }}
-                className="shrink-0 flex items-center justify-center gap-1.5 px-2.5 py-1 border-2 font-black uppercase text-xs tracking-wider transition-[transform,box-shadow,border-color,color,background-color] duration-150 ease-out [box-shadow:3px_3px_0px_0px_var(--chip-shadow)] active:translate-x-[3px] active:translate-y-[3px] active:[box-shadow:0px_0px_0px_0px_transparent]"
+                className="group relative isolate shrink-0 border-0 bg-transparent p-0 font-black uppercase text-xs tracking-wider"
                 style={{
-                  borderColor: isActive ? f.color : '#555555',
-                  color: isActive ? f.color : '#A09890',
-                  backgroundColor: isActive ? '#1A1A1A' : 'transparent',
-                  '--chip-shadow': isActive ? f.color : 'transparent',
-                } as React.CSSProperties & { '--chip-shadow': string }}
+                  '--chip-accent': f.color,
+                } as React.CSSProperties & { '--chip-accent': string }}
               >
-                {f.label}
+                <span
+                  aria-hidden="true"
+                  className={`absolute inset-0 -z-10 border-2 bg-[#1A1A1A] transition-opacity duration-150 ease-out ${
+                    isActive ? 'opacity-100' : 'opacity-0'
+                  }`}
+                  style={{ borderColor: f.color }}
+                />
+                <span
+                  className={`relative flex items-center justify-center gap-1.5 border-2 px-2.5 py-1 transition-[transform,border-color,color,background-color] duration-150 ease-out ${
+                    isActive
+                      ? '-translate-x-[3px] -translate-y-[3px] bg-[#1A1A1A] text-[var(--chip-accent)] border-[var(--chip-accent)] group-active:translate-x-0 group-active:translate-y-0'
+                      : 'translate-x-0 translate-y-0 border-[#555555] bg-transparent text-[#A09890] group-active:-translate-x-0.5 group-active:-translate-y-0.5'
+                  }`}
+                >
+                  {f.label}
+                </span>
               </button>
             );
           })}
           <button
             onClick={() => setViewMode('flow')}
-            className="shrink-0 flex items-center justify-center gap-1.5 px-2.5 py-1 border-2 font-black uppercase text-xs tracking-wider transition-[transform,box-shadow,border-color,color,background-color] duration-150 ease-out [box-shadow:3px_3px_0px_0px_var(--chip-shadow)] active:translate-x-[3px] active:translate-y-[3px] active:[box-shadow:0px_0px_0px_0px_transparent]"
+            className="group relative isolate shrink-0 border-0 bg-transparent p-0 font-black uppercase text-xs tracking-wider"
             style={{
-              borderColor: viewMode === 'flow' ? '#2F8FA3' : '#555555',
-              color: viewMode === 'flow' ? '#2F8FA3' : '#A09890',
-              backgroundColor: viewMode === 'flow' ? '#1A1A1A' : 'transparent',
-              '--chip-shadow': viewMode === 'flow' ? '#2F8FA3' : 'transparent',
-            } as React.CSSProperties & { '--chip-shadow': string }}
+              '--chip-accent': '#2F8FA3',
+            } as React.CSSProperties & { '--chip-accent': string }}
           >
-            Flow
+            <span
+              aria-hidden="true"
+              className={`absolute inset-0 -z-10 border-2 bg-[#1A1A1A] transition-opacity duration-150 ease-out ${
+                viewMode === 'flow' ? 'opacity-100' : 'opacity-0'
+              }`}
+              style={{ borderColor: '#2F8FA3' }}
+            />
+            <span
+              className={`relative flex items-center justify-center gap-1.5 border-2 px-2.5 py-1 transition-[transform,border-color,color,background-color] duration-150 ease-out ${
+                viewMode === 'flow'
+                  ? '-translate-x-[3px] -translate-y-[3px] bg-[#1A1A1A] text-[var(--chip-accent)] border-[var(--chip-accent)] group-active:translate-x-0 group-active:translate-y-0'
+                  : 'translate-x-0 translate-y-0 border-[#555555] bg-transparent text-[#A09890] group-active:-translate-x-0.5 group-active:-translate-y-0.5'
+              }`}
+            >
+              Flow
+            </span>
           </button>
         </div>
 
