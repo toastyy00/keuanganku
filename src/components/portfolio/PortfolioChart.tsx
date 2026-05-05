@@ -16,6 +16,7 @@ interface PortfolioChartProps {
   timeframe: '24H' | '1W' | '1M' | '1Y' | 'ALL';
   onScrub?: (point: ChartPoint) => void;
   onScrubEnd?: () => void;
+  formatScrubValues?: (value: number) => string[];
   revealFromProgress?: number | null;
   revealDurationMs?: number;
   revealKey?: string;
@@ -27,6 +28,8 @@ const SCRUB_FLAT_COLOR = '#F5F0E8';
 const CHART_PAD_TOP = 28;
 const CHART_PAD_BOTTOM = 14;
 const SMOOTH_CURVE_TENSION = 0.18;
+const IDLE_MARKER_DELAY_MS = 90;
+const IDLE_MARKER_REVEAL_MS = 340;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -57,6 +60,11 @@ function hexToDimmedRgba(hex: string, alpha: number): string {
   return `rgba(${dimR},${dimG},${dimB},${alpha})`;
 }
 
+function hexToDeepRgba(hex: string, alpha: number): string {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${Math.round(r * 0.62)},${Math.round(g * 0.36)},${Math.round(b * 0.36)},${alpha})`;
+}
+
 function getScrubPerformanceColor(firstValue: number, currentValue: number): string {
   const changeValue = currentValue - firstValue;
   const changePct = firstValue === 0 ? 0 : (changeValue / firstValue) * 100;
@@ -81,6 +89,22 @@ function fillRoundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, wi
   ctx.fill();
 }
 
+function strokeRoundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number): void {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  ctx.stroke();
+}
+
 function drawSmoothPath(ctx: CanvasRenderingContext2D, points: CanvasPoint[], minY: number, maxY: number): void {
   if (points.length === 0) return;
 
@@ -101,12 +125,58 @@ function drawSmoothPath(ctx: CanvasRenderingContext2D, points: CanvasPoint[], mi
   }
 }
 
+function drawPulsingDot(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  color: string,
+  elapsedMs: number,
+  intensity = 1,
+  emergence = 1,
+): void {
+  const visibleIntensity = clamp(intensity, 0, 1);
+  const visibleEmergence = clamp(emergence, 0, 1);
+  if (visibleIntensity <= 0 || visibleEmergence <= 0) return;
+
+  const elapsed = Math.max(0, elapsedMs);
+  const pulsePhase = (elapsed % 1040) / 1040;
+  const pulseEase = 1 - Math.pow(1 - pulsePhase, 2.4);
+  const pulseFade = Math.pow(1 - pulsePhase, 1.7);
+  const pulsePresence = clamp((visibleEmergence - 0.5) / 0.5, 0, 1);
+  const pulseRadius = 6.4 + pulseEase * 8.8;
+  const pulseAlpha = Math.max(0, 0.58 * pulseFade * visibleIntensity * pulsePresence);
+  const haloRadius = 2.8 + (8.5 - 2.8) * visibleEmergence;
+  const coreRadius = 2.3 + (5.2 - 2.3) * visibleEmergence;
+
+  if (pulseAlpha > 0) {
+    ctx.beginPath();
+    ctx.arc(x, y, pulseRadius, 0, Math.PI * 2);
+    ctx.strokeStyle = hexToRgba(color, pulseAlpha);
+    ctx.lineWidth = 2.4 + pulseFade * 0.6;
+    ctx.shadowColor = hexToRgba(color, pulseAlpha * 0.65);
+    ctx.shadowBlur = 5 + pulseFade * 3;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.beginPath();
+  ctx.arc(x, y, haloRadius, 0, Math.PI * 2);
+  ctx.fillStyle = hexToRgba(color, 0.26 * visibleIntensity);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(x, y, coreRadius, 0, Math.PI * 2);
+  ctx.fillStyle = hexToRgba(color, visibleIntensity);
+  ctx.fill();
+}
+
 const PortfolioChart: React.FC<PortfolioChartProps> = ({
   dataPoints,
   colorTheme,
   timeframe,
   onScrub,
   onScrubEnd,
+  formatScrubValues,
   revealFromProgress = null,
   revealDurationMs = 0,
   revealKey,
@@ -117,9 +187,15 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
   const rafRef = useRef<number | null>(null);
   const revealRafRef = useRef<number | null>(null);
   const pulseRafRef = useRef<number | null>(null);
+  const idlePulseRafRef = useRef<number | null>(null);
   const pulseStartedAtRef = useRef(0);
+  const idlePulseStartedAtRef = useRef(0);
+  const idleMarkerStartedAtRef = useRef(0);
   const revealProgressRef = useRef(1);
+  const lastRevealTokenRef = useRef<string | null>(null);
   const isScrubbingRef = useRef(false);
+  const endScrubRef = useRef<() => void>(() => {});
+  const scrubAtClientXRef = useRef<(clientX: number) => void>(() => {});
 
   const yRange = useMemo(() => {
     if (dataPoints.length === 0) return { min: 0, max: 1 };
@@ -201,8 +277,9 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       };
 
       const depthGradient = ctx.createLinearGradient(0, padTop, 0, height);
-      depthGradient.addColorStop(0, `rgba(7, 9, 12, ${0.28 * alphaScale})`);
-      depthGradient.addColorStop(0.54, `rgba(7, 9, 12, ${0.18 * alphaScale})`);
+      depthGradient.addColorStop(0, `rgba(7, 9, 12, ${0.34 * alphaScale})`);
+      depthGradient.addColorStop(0.42, `rgba(7, 9, 12, ${0.21 * alphaScale})`);
+      depthGradient.addColorStop(0.66, `rgba(7, 9, 12, ${0.12 * alphaScale})`);
       depthGradient.addColorStop(0.88, `rgba(7, 9, 12, ${0.07 * alphaScale})`);
       depthGradient.addColorStop(1, 'rgba(7, 9, 12, 0)');
       fillChartArea();
@@ -210,8 +287,9 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       ctx.fill();
 
       const colorGradient = ctx.createLinearGradient(0, padTop, 0, height);
-      colorGradient.addColorStop(0, rgba(color, 0.34 * alphaScale));
-      colorGradient.addColorStop(0.42, rgba(color, 0.14 * alphaScale));
+      colorGradient.addColorStop(0, hexToDeepRgba(color, 0.5 * alphaScale));
+      colorGradient.addColorStop(0.18, rgba(color, 0.3 * alphaScale));
+      colorGradient.addColorStop(0.42, rgba(color, 0.16 * alphaScale));
       colorGradient.addColorStop(0.78, rgba(color, 0.035 * alphaScale));
       colorGradient.addColorStop(1, rgba(color, 0));
       fillChartArea();
@@ -234,13 +312,18 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       const point = dataPoints[idx];
       const dotY = curvePoints[idx]?.y ?? toY(point.value);
       const scrubColor = getScrubPerformanceColor(dataPoints[0].value, point.value);
+      const pointDate = new Date(point.timestamp);
+      const currentYear = new Date().getFullYear();
+      const pointYear = pointDate.getFullYear();
       const timeLabel = new Intl.DateTimeFormat('id-ID', {
         day: '2-digit',
         month: 'short',
+        ...(pointYear !== currentYear ? { year: 'numeric' as const } : {}),
         hour: '2-digit',
         minute: '2-digit',
         hour12: false,
-      }).format(new Date(point.timestamp));
+      }).format(pointDate);
+      const valueLabels = (formatScrubValues?.(point.value) ?? []).filter(Boolean).slice(0, 2);
 
       drawChartSegment(x, width, scrubColor, hexToDimmedRgba, 0.44, 2.5);
       drawChartSegment(0, x, scrubColor, hexToRgba, 1, 2.8);
@@ -255,54 +338,67 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       ctx.stroke();
       ctx.setLineDash([]);
 
-      const pulseElapsed = performance.now() - pulseStartedAtRef.current;
-      const pulsePhase = (pulseElapsed % 1040) / 1040;
-      const pulseEase = 1 - Math.pow(1 - pulsePhase, 2.4);
-      const pulseFade = Math.pow(1 - pulsePhase, 1.7);
-      const pulseRadius = 6.4 + pulseEase * 8.8;
-      const pulseAlpha = Math.max(0, 0.58 * pulseFade);
+      drawPulsingDot(ctx, x, dotY, scrubColor, performance.now() - pulseStartedAtRef.current);
 
-      ctx.beginPath();
-      ctx.arc(x, dotY, pulseRadius, 0, Math.PI * 2);
-      ctx.strokeStyle = hexToRgba(scrubColor, pulseAlpha);
-      ctx.lineWidth = 2.4 + pulseFade * 0.6;
-      ctx.shadowColor = hexToRgba(scrubColor, pulseAlpha * 0.65);
-      ctx.shadowBlur = 5 + pulseFade * 3;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      ctx.beginPath();
-      ctx.arc(x, dotY, 8.5, 0, Math.PI * 2);
-      ctx.fillStyle = hexToRgba(scrubColor, 0.26);
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.arc(x, dotY, 5.2, 0, Math.PI * 2);
-      ctx.fillStyle = scrubColor;
-      ctx.fill();
-
-      ctx.font = '700 11px ui-sans-serif, system-ui, -apple-system, Segoe UI';
-      const textWidth = ctx.measureText(timeLabel).width;
-      const labelPadX = 8;
-      const labelH = 20;
-      const labelW = textWidth + labelPadX * 2;
-      const labelX = Math.min(width - labelW - 4, Math.max(4, x - labelW / 2));
-      const labelGap = 11;
+      const dateFont = '700 9px ui-sans-serif, system-ui, -apple-system, Segoe UI';
+      const idrFont = '800 12px ui-sans-serif, system-ui, -apple-system, Segoe UI';
+      const usdFont = '700 9px ui-sans-serif, system-ui, -apple-system, Segoe UI';
+      ctx.font = idrFont;
+      const primaryValueWidth = valueLabels[0] ? ctx.measureText(valueLabels[0]).width : 0;
+      ctx.font = usdFont;
+      const secondaryValueWidth = valueLabels[1] ? ctx.measureText(valueLabels[1]).width : 0;
+      ctx.font = dateFont;
+      const timeTextWidth = ctx.measureText(timeLabel).width;
+      const labelPadX = 10;
+      const labelH = valueLabels.length > 0 ? 50 : 24;
+      const labelW = Math.max(primaryValueWidth, secondaryValueWidth, timeTextWidth) + labelPadX * 2;
+      const labelGap = 14;
+      const preferredLabelX = x + labelGap + labelW <= width - 4 ? x + labelGap : x - labelGap - labelW;
+      const labelX = Math.min(width - labelW - 4, Math.max(4, preferredLabelX));
       const minLabelY = 6;
       const maxLabelY = Math.max(minLabelY, height - labelH - 8);
-      const labelAboveY = dotY - labelH - labelGap;
-      const labelBelowY = dotY + labelGap;
-      const preferredLabelY = labelAboveY >= minLabelY ? labelAboveY : labelBelowY;
-      const labelY = Math.min(maxLabelY, Math.max(minLabelY, preferredLabelY));
+      const labelY = Math.min(maxLabelY, Math.max(minLabelY, dotY - labelH / 2));
 
-      ctx.fillStyle = 'rgba(245, 240, 232, 0.96)';
-      fillRoundedRect(ctx, labelX, labelY, labelW, labelH, 6);
-      ctx.fillStyle = '#1A1A1A';
-      ctx.fillText(timeLabel, labelX + labelPadX, labelY + 14);
+      ctx.fillStyle = 'rgba(18, 20, 24, 0.68)';
+      fillRoundedRect(ctx, labelX, labelY, labelW, labelH, 7);
+      ctx.strokeStyle = 'rgba(245, 240, 232, 0.14)';
+      ctx.lineWidth = 1;
+      strokeRoundedRect(ctx, labelX + 0.5, labelY + 0.5, labelW - 1, labelH - 1, 7);
+      if (valueLabels.length > 0) {
+        ctx.font = dateFont;
+        ctx.fillStyle = 'rgba(245, 240, 232, 0.68)';
+        ctx.fillText(timeLabel, labelX + labelPadX, labelY + 13);
+        ctx.font = idrFont;
+        ctx.fillStyle = 'rgba(245, 240, 232, 0.96)';
+        ctx.fillText(valueLabels[0], labelX + labelPadX, labelY + 30);
+        if (valueLabels[1]) {
+          ctx.font = usdFont;
+          ctx.fillStyle = 'rgba(245, 240, 232, 0.62)';
+          ctx.fillText(valueLabels[1], labelX + labelPadX, labelY + 43);
+        }
+      } else {
+        ctx.fillStyle = 'rgba(245, 240, 232, 0.86)';
+        ctx.font = dateFont;
+        ctx.fillText(timeLabel, labelX + labelPadX, labelY + 15);
+      }
     } else {
       drawChartSegment(0, width, colorTheme, hexToRgba, 1, 2.5);
+      const lastPoint = curvePoints[curvePoints.length - 1];
+      const markerRevealProgress = shouldClipReveal ? 0 : clamp((performance.now() - idleMarkerStartedAtRef.current) / IDLE_MARKER_REVEAL_MS, 0, 1);
+      const markerEase = 1 - Math.pow(1 - markerRevealProgress, 3);
+      if (lastPoint && markerEase > 0) {
+        drawPulsingDot(
+          ctx,
+          lastPoint.x,
+          lastPoint.y,
+          colorTheme,
+          performance.now() - idlePulseStartedAtRef.current,
+          0.92 * markerEase,
+          markerEase,
+        );
+      }
     }
-  }, [colorTheme, dataPoints, yRange.max, yRange.min]);
+  }, [colorTheme, dataPoints, formatScrubValues, yRange.max, yRange.min]);
 
   const renderChart = useCallback(() => {
     const canvas = canvasRef.current;
@@ -322,6 +418,31 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     draw(width, height);
   }, [draw]);
 
+  const stopIdlePulse = useCallback(() => {
+    if (idlePulseRafRef.current !== null) {
+      cancelAnimationFrame(idlePulseRafRef.current);
+      idlePulseRafRef.current = null;
+    }
+  }, []);
+
+  const startIdlePulse = useCallback(() => {
+    if (idlePulseRafRef.current !== null || isScrubbingRef.current) return;
+    idlePulseStartedAtRef.current = performance.now();
+
+    const tickIdlePulse = () => {
+      const wrapper = wrapperRef.current;
+      if (isScrubbingRef.current || !wrapper) {
+        idlePulseRafRef.current = null;
+        return;
+      }
+
+      draw(wrapper.clientWidth, 200);
+      idlePulseRafRef.current = requestAnimationFrame(tickIdlePulse);
+    };
+
+    idlePulseRafRef.current = requestAnimationFrame(tickIdlePulse);
+  }, [draw]);
+
   useLayoutEffect(() => {
     if (revealRafRef.current !== null) {
       cancelAnimationFrame(revealRafRef.current);
@@ -330,13 +451,23 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
 
     if (revealFromProgress === null || revealFromProgress >= 1 || revealDurationMs <= 0) {
       revealProgressRef.current = 1;
+      lastRevealTokenRef.current = null;
       renderChart();
       return;
     }
 
     const startProgress = clamp(revealFromProgress, 0, 1);
+    const revealToken = revealKey ?? `${startProgress}:${revealDurationMs}`;
+    if (lastRevealTokenRef.current === revealToken && revealProgressRef.current >= 1) {
+      renderChart();
+      return;
+    }
+
+    lastRevealTokenRef.current = revealToken;
     const duration = Math.max(80, revealDurationMs * (1 - startProgress));
     const startedAt = performance.now();
+    idleMarkerStartedAtRef.current = startedAt + duration + IDLE_MARKER_DELAY_MS;
+    idlePulseStartedAtRef.current = idleMarkerStartedAtRef.current + IDLE_MARKER_REVEAL_MS * 0.58;
     revealProgressRef.current = startProgress;
     renderChart();
 
@@ -350,6 +481,8 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       if (progress < 1) {
         revealRafRef.current = requestAnimationFrame(tick);
       } else {
+        idleMarkerStartedAtRef.current = now + IDLE_MARKER_DELAY_MS;
+        idlePulseStartedAtRef.current = idleMarkerStartedAtRef.current + IDLE_MARKER_REVEAL_MS * 0.58;
         revealRafRef.current = null;
       }
     };
@@ -371,8 +504,12 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     renderChart();
     const ro = new ResizeObserver(renderChart);
     ro.observe(wrapper);
-    return () => ro.disconnect();
-  }, [renderChart]);
+    startIdlePulse();
+    return () => {
+      ro.disconnect();
+      stopIdlePulse();
+    };
+  }, [renderChart, startIdlePulse, stopIdlePulse]);
 
   const scrubAtClientX = (clientX: number) => {
     const wrapper = wrapperRef.current;
@@ -407,6 +544,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
   };
 
   const beginScrub = () => {
+    stopIdlePulse();
     if (!isScrubbingRef.current) {
       pulseStartedAtRef.current = performance.now();
     }
@@ -428,15 +566,27 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     onScrubEnd?.();
     const wrapper = wrapperRef.current;
     if (wrapper) draw(wrapper.clientWidth, 200);
+    startIdlePulse();
   };
 
   useEffect(() => {
-    const end = () => endScrub();
+    endScrubRef.current = endScrub;
+    scrubAtClientXRef.current = scrubAtClientX;
+  });
+
+  useEffect(() => {
+    const end = () => endScrubRef.current();
+    const move = (event: MouseEvent) => {
+      if (!isScrubbingRef.current) return;
+      scrubAtClientXRef.current(event.clientX);
+    };
     window.addEventListener('mouseup', end);
+    window.addEventListener('mousemove', move);
     window.addEventListener('touchend', end, { passive: true });
     window.addEventListener('touchcancel', end, { passive: true });
     return () => {
       window.removeEventListener('mouseup', end);
+      window.removeEventListener('mousemove', move);
       window.removeEventListener('touchend', end);
       window.removeEventListener('touchcancel', end);
       if (rafRef.current !== null) {
@@ -447,8 +597,12 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
         cancelAnimationFrame(pulseRafRef.current);
         pulseRafRef.current = null;
       }
+      if (idlePulseRafRef.current !== null) {
+        cancelAnimationFrame(idlePulseRafRef.current);
+        idlePulseRafRef.current = null;
+      }
     };
-  });
+  }, []);
 
   return (
     <div
@@ -462,7 +616,6 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
         if (!isScrubbingRef.current) return;
         scrubAtClientX(e.clientX);
       }}
-      onMouseLeave={endScrub}
       onMouseUp={endScrub}
       onTouchStart={(e) => {
         beginScrub();

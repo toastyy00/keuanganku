@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { formatCurrency, formatPortfolioAmount } from '../../lib/utils';
 import { getCachedPortfolioIdrRate, getPortfolioIdrRate, type PortfolioRateResult } from '../../lib/exchangeRate';
@@ -66,7 +66,6 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const [selectedAggregateKey, setSelectedAggregateKey] = useState<string | null>(null);
   const [returnAggregateKey, setReturnAggregateKey] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [scrubValue, setScrubValue] = useState<number | null>(null);
   const [scrubPointValue, setScrubPointValue] = useState<number | null>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [isRefreshPressed, setIsRefreshPressed] = useState(false);
@@ -77,7 +76,6 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const pendingTimeframeRevealRef = useRef<{ timeframe: typeof timeframe; previousSignature: string } | null>(null);
   const resetScrubState = () => {
     setIsScrubbing(false);
-    setScrubValue(null);
     setScrubPointValue(null);
   };
 
@@ -145,7 +143,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
 
   const chartData = chartByPocket[pocketId] ?? EMPTY_CHART_DATA;
   const chartSignature = useMemo(() => getChartSeriesSignature(chartData), [chartData]);
-  const displayValue = isScrubbing ? (scrubValue ?? totalUsd) : totalUsd;
+  const displayValue = totalUsd;
   const firstPointValue = chartData[0]?.value ?? 0;
   const latestPointValue = chartData[chartData.length - 1]?.value ?? 0;
   const endPointValue = isScrubbing ? (scrubPointValue ?? latestPointValue) : latestPointValue;
@@ -160,8 +158,18 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const changeColorClass = isDisplayChangeFlat ? 'text-[#F5F0E8]' : (isDisplayChangePositive ? 'text-[#22C55E]' : 'text-[#EF4444]');
   const chartPerformanceColor = isStableChangeFlat ? CHART_FLAT_COLOR : (isStableChangePositive ? CHART_GAIN_COLOR : CHART_LOSS_COLOR);
   const changeSign = changeValue >= 0 ? '+' : '-';
-  const formatPortfolioIdrValue = (usdValue: number) => (
-    portfolioRateInfo ? formatCurrency(usdValue * portfolioRateInfo.rate, 'IDR') : 'Rp --'
+  const formatPortfolioIdrValue = useCallback(
+    (usdValue: number) => (
+      portfolioRateInfo ? formatCurrency(usdValue * portfolioRateInfo.rate, 'IDR') : 'Rp --'
+    ),
+    [portfolioRateInfo],
+  );
+  const formatChartScrubValues = useCallback(
+    (value: number) => [
+      formatPortfolioIdrValue(value),
+      formatCurrency(value, 'USD'),
+    ],
+    [formatPortfolioIdrValue],
   );
 
   useLayoutEffect(() => {
@@ -268,10 +276,10 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
             timeframe={timeframe}
             onScrub={(point) => {
               setIsScrubbing(true);
-              setScrubValue(point.value);
               setScrubPointValue(point.value);
             }}
             onScrubEnd={resetScrubState}
+            formatScrubValues={formatChartScrubValues}
             revealFromProgress={timeframeReveal?.fromProgress ?? null}
             revealDurationMs={TIMEFRAME_CHART_REVEAL_DURATION_MS}
             revealKey={timeframeReveal?.key}

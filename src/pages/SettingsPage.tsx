@@ -10,6 +10,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { useExpenseStore } from '../store/useExpenseStore';
+import { usePortfolioStore } from '../store/usePortfolioStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { testAiConnectionDetailed } from '../lib/ai';
 import { exportJSON, importJSON } from '../lib/sync';
@@ -93,6 +94,12 @@ const SettingsPage: React.FC = () => {
     expenses, categories, recurringTemplates,
     currency, setCurrency, addCategory, deleteCategory, loadExpenses,
   } = useExpenseStore();
+  const {
+    pockets: portfolioPockets,
+    assets: portfolioAssets,
+    activityLogs: portfolioActivityLogs,
+    loadPortfolio,
+  } = usePortfolioStore();
 
   const {
     aiProvider, openaiKey, openrouterKey, openrouterModel,
@@ -129,6 +136,10 @@ const SettingsPage: React.FC = () => {
     });
   }, []);
 
+  useEffect(() => {
+    void loadPortfolio();
+  }, [loadPortfolio]);
+
   const handleCurrencyChange = (c: Currency) => { haptic(); setCurrency(c); };
 
   const handleBudgetChange = (
@@ -157,6 +168,11 @@ const SettingsPage: React.FC = () => {
     downloadCSV(expenses, `keuanganku-${month}.csv`);
   };
 
+  const handleExportJSON = async () => {
+    haptic();
+    await exportJSON({ expenses, categories, recurring: recurringTemplates });
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -178,6 +194,7 @@ const SettingsPage: React.FC = () => {
       setImportMsg('✓ Import berhasil. Memuat ulang data...');
       setImportConfirm(null);
       await loadExpenses({ force: true });
+      await loadPortfolio({ force: true });
       haptic();
     } catch (err) {
       setImportMsg(`✗ ${err instanceof Error ? err.message : 'Import gagal'}`);
@@ -371,7 +388,7 @@ const SettingsPage: React.FC = () => {
         <Section title="Backup & Restore" icon={Download} defaultOpen={false}>
           <div className="flex gap-3 flex-wrap">
             <Button variant="primary" leftIcon={<Download size={14} strokeWidth={2.5} />}
-              onClick={() => { haptic(); exportJSON({ expenses, categories, recurring: recurringTemplates }); }}>
+              onClick={() => { void handleExportJSON(); }}>
               Export JSON
             </Button>
             <Button variant="primary" leftIcon={<Download size={14} strokeWidth={2.5} />}
@@ -401,12 +418,43 @@ const SettingsPage: React.FC = () => {
               </div>
             </div>
           )}
-          <div className="space-y-1 pt-1">
+          <div className="space-y-2 pt-1">
             <p className="text-xs font-bold text-brutal-black/60 uppercase">Ringkasan Data</p>
-            <div className="flex gap-4 text-sm">
-              <span><span className="font-black">{expenses.length}</span> transaksi</span>
-              <span><span className="font-black">{recurringTemplates.length}</span> rutin</span>
-              <span><span className="font-black">{categories.length}</span> kategori</span>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="border-2 border-[#555555] bg-[#2A2A2A] p-3">
+                <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-brutal-bone-dim">Expense</p>
+                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                  <div>
+                    <p className="text-lg font-black leading-none">{expenses.length}</p>
+                    <p className="mt-1 font-bold text-brutal-bone-dim">transaksi</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-black leading-none">{recurringTemplates.length}</p>
+                    <p className="mt-1 font-bold text-brutal-bone-dim">rutin</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-black leading-none">{categories.length}</p>
+                    <p className="mt-1 font-bold text-brutal-bone-dim">kategori</p>
+                  </div>
+                </div>
+              </div>
+              <div className="border-2 border-[#555555] bg-[#2A2A2A] p-3">
+                <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-brutal-bone-dim">Pockets</p>
+                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                  <div>
+                    <p className="text-lg font-black leading-none">{portfolioPockets.length}</p>
+                    <p className="mt-1 font-bold text-brutal-bone-dim">pocket</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-black leading-none">{portfolioAssets.length}</p>
+                    <p className="mt-1 font-bold text-brutal-bone-dim">asset</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-black leading-none">{portfolioActivityLogs.length}</p>
+                    <p className="mt-1 font-bold text-brutal-bone-dim">log</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </Section>

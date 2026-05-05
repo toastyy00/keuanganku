@@ -1,4 +1,4 @@
-import type { Expense, Category, RecurringTemplate } from '../types';
+import type { Expense, Category, RecurringTemplate, PortfolioActivityLog, PortfolioAsset, PortfolioPocket } from '../types';
 import { useAuthStore } from '../store/useAuthStore';
 import { v4 as uuidv4 } from 'uuid';
 import { getSupabaseClientAsync } from './supabase';
@@ -6,6 +6,7 @@ import { getLocalISODate } from './utils';
 import { writeIDB } from './idb-storage';
 import { getActiveDataScope, scopedDataKey } from './dataScope';
 import { resetSyncStateForScope, syncWithSupabaseIfNeeded } from './sync-engine';
+import { getPortfolioActivityLogRepo, getPortfolioAssetRepo, getPortfolioPocketRepo } from './portfolio-repository';
 
 // ============================================================
 //  SYNC — Compatibility wrapper (delegates to local-first sync engine)
@@ -20,6 +21,9 @@ export interface SyncResult {
 type ImportedCategory = Partial<Category> & { user_id?: string };
 type ImportedRecurring = Partial<RecurringTemplate> & { user_id?: string; frequency?: string };
 type ImportedExpense = Partial<Expense> & { user_id?: string };
+type ImportedPortfolioPocket = Partial<PortfolioPocket> & { user_id?: string };
+type ImportedPortfolioAsset = Partial<PortfolioAsset> & { user_id?: string };
+type ImportedPortfolioActivityLog = Partial<PortfolioActivityLog> & { user_id?: string };
 
 export async function syncToSupabase(): Promise<SyncResult> {
   const result = await syncWithSupabaseIfNeeded({ force: true });
@@ -48,13 +52,25 @@ export async function syncToSupabase(): Promise<SyncResult> {
 //  JSON BACKUP
 // ============================================================
 
-export function exportJSON(data: { expenses: Expense[]; categories: Category[]; recurring: RecurringTemplate[] }): void {
+interface PortfolioBackupData {
+  pockets: PortfolioPocket[];
+  assets: PortfolioAsset[];
+  activityLogs: PortfolioActivityLog[];
+}
+
+export async function exportJSON(data: { expenses: Expense[]; categories: Category[]; recurring: RecurringTemplate[]; portfolio?: PortfolioBackupData }): Promise<void> {
+  const portfolio = data.portfolio ?? {
+    pockets: await getPortfolioPocketRepo().getAll(),
+    assets: await getPortfolioAssetRepo().getAll(),
+    activityLogs: await getPortfolioActivityLogRepo().getAll(),
+  };
   const payload = {
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     expenses: data.expenses,
     categories: data.categories,
     recurring: data.recurring,
+    portfolio,
   };
 
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -79,6 +95,11 @@ interface BackupData {
   expenses?: Expense[];
   categories?: unknown[];
   recurring?: unknown[];
+  portfolio?: {
+    pockets?: unknown[];
+    assets?: unknown[];
+    activityLogs?: unknown[];
+  };
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -95,6 +116,80 @@ function toImportedRecurring(value: unknown): ImportedRecurring | null {
 
 function toImportedExpense(value: unknown): ImportedExpense | null {
   return isObject(value) ? (value as ImportedExpense) : null;
+}
+
+function toImportedPortfolioPocket(value: unknown): ImportedPortfolioPocket | null {
+  return isObject(value) ? (value as ImportedPortfolioPocket) : null;
+}
+
+function toImportedPortfolioAsset(value: unknown): ImportedPortfolioAsset | null {
+  return isObject(value) ? (value as ImportedPortfolioAsset) : null;
+}
+
+function toImportedPortfolioActivityLog(value: unknown): ImportedPortfolioActivityLog | null {
+  return isObject(value) ? (value as ImportedPortfolioActivityLog) : null;
+}
+
+function normalizeImportedPortfolioPockets(raw: unknown[] | undefined): PortfolioPocket[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(toImportedPortfolioPocket)
+    .filter((p): p is ImportedPortfolioPocket => p !== null)
+    .map((p) => ({
+      id: typeof p.id === 'string' ? p.id : uuidv4(),
+      name: typeof p.name === 'string' ? p.name : 'Pocket',
+      source_type: p.source_type === 'CEX' || p.source_type === 'WEB3' || p.source_type === 'WALLET' || p.source_type === 'LAINNYA' ? p.source_type : 'LAINNYA',
+      source: typeof p.source === 'string' ? p.source : undefined,
+      color_theme: typeof p.color_theme === 'string' ? p.color_theme : '#B8F55A',
+      icon: typeof p.icon === 'string' ? p.icon : 'Wallet',
+      sort_order: typeof p.sort_order === 'number' ? p.sort_order : 0,
+      created_at: typeof p.created_at === 'string' ? p.created_at : new Date().toISOString(),
+    }));
+}
+
+function normalizeImportedPortfolioAssets(raw: unknown[] | undefined): PortfolioAsset[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(toImportedPortfolioAsset)
+    .filter((a): a is ImportedPortfolioAsset => a !== null)
+    .map((a) => ({
+      id: typeof a.id === 'string' ? a.id : uuidv4(),
+      pocket_id: typeof a.pocket_id === 'string' ? a.pocket_id : '',
+      ticker: typeof a.ticker === 'string' ? a.ticker.trim().toUpperCase() : 'ASSET',
+      coingecko_id: typeof a.coingecko_id === 'string' ? a.coingecko_id : undefined,
+      amount: typeof a.amount === 'number' ? a.amount : 0,
+      location: typeof a.location === 'string' && a.location.trim() ? a.location.trim() : 'Wallet',
+      holding_type: a.holding_type === 'staked' || a.holding_type === 'locked' ? a.holding_type : 'liquid',
+      chain: typeof a.chain === 'string' && a.chain.trim() ? a.chain.trim() : undefined,
+      note: typeof a.note === 'string' && a.note.trim() ? a.note.trim() : undefined,
+      created_at: typeof a.created_at === 'string' ? a.created_at : new Date().toISOString(),
+    }));
+}
+
+function normalizeImportedPortfolioActivityLogs(raw: unknown[] | undefined): PortfolioActivityLog[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(toImportedPortfolioActivityLog)
+    .filter((log): log is ImportedPortfolioActivityLog => log !== null)
+    .map((log) => ({
+      id: typeof log.id === 'string' ? log.id : uuidv4(),
+      pocket_id: typeof log.pocket_id === 'string' ? log.pocket_id : '',
+      asset_id: typeof log.asset_id === 'string' ? log.asset_id : '',
+      ticker: typeof log.ticker === 'string' ? log.ticker.trim().toUpperCase() : 'ASSET',
+      action: log.action === 'REDUCE' ? 'REDUCE' : 'ADD',
+      amount_change: typeof log.amount_change === 'number' ? log.amount_change : 0,
+      balance_after: typeof log.balance_after === 'number' ? log.balance_after : 0,
+      price_at_time: typeof log.price_at_time === 'number' ? log.price_at_time : 0,
+      location: typeof log.location === 'string' ? log.location : undefined,
+      note: typeof log.note === 'string' ? log.note : undefined,
+      created_at: typeof log.created_at === 'string' ? log.created_at : new Date().toISOString(),
+    }));
+}
+
+async function insertInChunks<T>(items: T[], insert: (chunk: T[]) => Promise<void>, chunkSize = 500): Promise<void> {
+  for (let i = 0; i < items.length; i += chunkSize) {
+    await insert(items.slice(i, i + chunkSize));
+  }
 }
 
 /**
@@ -114,6 +209,10 @@ export async function importJSON(raw: string): Promise<BackupData> {
   }
 
   const { session, user } = useAuthStore.getState();
+  const hasPortfolioBackup = parsed.portfolio !== undefined;
+  const portfolioPockets = normalizeImportedPortfolioPockets(parsed.portfolio?.pockets);
+  const portfolioAssets = normalizeImportedPortfolioAssets(parsed.portfolio?.assets);
+  const portfolioActivityLogs = normalizeImportedPortfolioActivityLogs(parsed.portfolio?.activityLogs);
 
   if (session && user) {
     const client = await getSupabaseClientAsync();
@@ -129,6 +228,17 @@ export async function importJSON(raw: string): Promise<BackupData> {
 
     const { error: deleteCategoriesError } = await client.from('categories').delete().eq('user_id', user.id);
     if (deleteCategoriesError) throw new Error(`Gagal menghapus kategori lama: ${deleteCategoriesError.message}`);
+
+    if (hasPortfolioBackup) {
+      const { error: deletePortfolioActivityError } = await client.from('portfolio_activity_log').delete().eq('user_id', user.id);
+      if (deletePortfolioActivityError) throw new Error(`Gagal menghapus portfolio activity lama: ${deletePortfolioActivityError.message}`);
+
+      const { error: deletePortfolioAssetsError } = await client.from('portfolio_assets').delete().eq('user_id', user.id);
+      if (deletePortfolioAssetsError) throw new Error(`Gagal menghapus portfolio asset lama: ${deletePortfolioAssetsError.message}`);
+
+      const { error: deletePortfolioPocketsError } = await client.from('portfolio_pockets').delete().eq('user_id', user.id);
+      if (deletePortfolioPocketsError) throw new Error(`Gagal menghapus portfolio pocket lama: ${deletePortfolioPocketsError.message}`);
+    }
 
     // 2. Insert Categories
     if (Array.isArray(parsed.categories) && parsed.categories.length > 0) {
@@ -209,7 +319,52 @@ export async function importJSON(raw: string): Promise<BackupData> {
       }
     }
 
-    await syncWithSupabaseIfNeeded({ force: true });
+    if (hasPortfolioBackup && portfolioPockets.length > 0) {
+      await insertInChunks(portfolioPockets, async (chunk) => {
+        const { error } = await client
+          .from('portfolio_pockets')
+          .upsert(chunk.map((p) => ({
+            ...p,
+            user_id: user.id,
+            source: p.source ?? null,
+            deleted_at: null,
+          })), { onConflict: 'id' });
+        if (error) throw new Error(`Gagal import portfolio pocket: ${error.message}`);
+      });
+    }
+
+    if (hasPortfolioBackup && portfolioAssets.length > 0) {
+      await insertInChunks(portfolioAssets, async (chunk) => {
+        const { error } = await client
+          .from('portfolio_assets')
+          .upsert(chunk.map((a) => ({
+            ...a,
+            user_id: user.id,
+            coingecko_id: a.coingecko_id ?? null,
+            chain: a.chain ?? null,
+            note: a.note ?? null,
+            deleted_at: null,
+          })), { onConflict: 'id' });
+        if (error) throw new Error(`Gagal import portfolio asset: ${error.message}`);
+      });
+    }
+
+    if (hasPortfolioBackup && portfolioActivityLogs.length > 0) {
+      await insertInChunks(portfolioActivityLogs, async (chunk) => {
+        const { error } = await client
+          .from('portfolio_activity_log')
+          .upsert(chunk.map((log) => ({
+            ...log,
+            user_id: user.id,
+            location: log.location ?? null,
+            note: log.note ?? null,
+            deleted_at: null,
+          })), { onConflict: 'id' });
+        if (error) throw new Error(`Gagal import portfolio activity: ${error.message}`);
+      });
+    }
+
+    await syncWithSupabaseIfNeeded({ force: true, domain: 'all' });
   } else {
     // Write to offline IndexedDB fallback
     const scope = getActiveDataScope();
@@ -221,6 +376,11 @@ export async function importJSON(raw: string): Promise<BackupData> {
     }
     if (Array.isArray(parsed.recurring)) {
       await writeIDB(scopedDataKey('recurring', scope), parsed.recurring);
+    }
+    if (parsed.portfolio) {
+      await writeIDB(scopedDataKey('portfolio_pockets', scope), portfolioPockets);
+      await writeIDB(scopedDataKey('portfolio_assets', scope), portfolioAssets);
+      await writeIDB(scopedDataKey('portfolio_activity_log', scope), portfolioActivityLogs);
     }
   }
 

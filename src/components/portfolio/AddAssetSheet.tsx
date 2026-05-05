@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle2, Coins, Loader2, LockKeyhole, Search, Sprout } from 'lucide-react';
-import { resolveCoingeckoId, searchCoinGeckoTickerOptions } from '../../lib/portfolio-prices';
+import { isBinanceSpotSymbolSupported, resolveCoingeckoId, searchCoinGeckoTickerOptions } from '../../lib/portfolio-prices';
 import { BottomSheet } from '../ui/BottomSheet';
 import { Button } from '../ui/Button';
 import { Input, Textarea } from '../ui/Input';
@@ -236,10 +236,13 @@ const AddAssetSheet: React.FC<AddAssetSheetProps> = ({ isOpen, onClose, lockedTi
             const coingeckoId = selectedCoingeckoId || undefined;
             const hasKnownLocalMapping = resolveCoingeckoId(normalizedTicker) !== normalizedTicker.toLowerCase();
             if (!lockedTicker && !coingeckoId && !hasKnownLocalMapping) {
-              const options = coinOptions.length > 0 ? coinOptions : await loadTickerOptions();
-              if (options.length > 0) {
-                setErrors((current) => ({ ...current, ticker: 'Pilih CoinGecko ID dulu' }));
-                return;
+              const binanceSupport = await isBinanceSpotSymbolSupported(`${normalizedTicker}USDT`);
+              if (binanceSupport !== true) {
+                const options = coinOptions.length > 0 ? coinOptions : await loadTickerOptions();
+                if (options.length > 0) {
+                  setErrors((current) => ({ ...current, ticker: 'Pilih CoinGecko ID dulu' }));
+                  return;
+                }
               }
             }
             setSaving(true);

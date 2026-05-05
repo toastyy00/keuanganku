@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { formatCurrency } from '../../lib/utils';
 import { getCachedPortfolioIdrRate, getPortfolioIdrRate, type PortfolioRateResult } from '../../lib/exchangeRate';
@@ -23,10 +23,35 @@ const MINI_SPARKLINE_REVEAL_DURATION_MS = 2100;
 const MINI_SPARKLINE_GLOW_DURATION_MS = 2700;
 const TIMEFRAME_CHART_REVEAL_DURATION_MS = 360;
 const EMPTY_CHART_DATA: { timestamp: number; value: number }[] = [];
+const MINI_SPARKLINE_CURVE_TENSION = 0.18;
 
 interface TotalPortfolioCardProps {
   shouldAnimateMiniSparkline?: boolean;
   onMiniSparklineRevealComplete?: () => void;
+}
+
+function buildSmoothSparklinePath(coords: ReadonlyArray<readonly [number, number]>): string {
+  if (coords.length === 0) return '';
+
+  const [startX, startY] = coords[0];
+  const segments = [`M ${startX.toFixed(2)} ${startY.toFixed(2)}`];
+
+  for (let index = 0; index < coords.length - 1; index += 1) {
+    const previous = coords[index - 1] ?? coords[index];
+    const current = coords[index];
+    const next = coords[index + 1];
+    const afterNext = coords[index + 2] ?? next;
+    const cp1X = current[0] + (next[0] - previous[0]) * MINI_SPARKLINE_CURVE_TENSION;
+    const cp1Y = current[1] + (next[1] - previous[1]) * MINI_SPARKLINE_CURVE_TENSION;
+    const cp2X = next[0] - (afterNext[0] - current[0]) * MINI_SPARKLINE_CURVE_TENSION;
+    const cp2Y = next[1] - (afterNext[1] - current[1]) * MINI_SPARKLINE_CURVE_TENSION;
+
+    segments.push(
+      `C ${cp1X.toFixed(2)} ${cp1Y.toFixed(2)}, ${cp2X.toFixed(2)} ${cp2Y.toFixed(2)}, ${next[0].toFixed(2)} ${next[1].toFixed(2)}`,
+    );
+  }
+
+  return segments.join(' ');
 }
 
 function buildMiniSparkline(points: { timestamp: number; value: number }[]): { line: string; area: string } | null {
@@ -48,7 +73,7 @@ function buildMiniSparkline(points: { timestamp: number; value: number }[]): { l
     return [x, y] as const;
   });
 
-  const line = coords.map(([x, y], index) => `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`).join(' ');
+  const line = buildSmoothSparklinePath(coords);
   const area = `${line} L ${coords[coords.length - 1][0].toFixed(2)} ${height} L ${coords[0][0].toFixed(2)} ${height} Z`;
 
   return { line, area };
@@ -86,7 +111,6 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
   const refreshTotalChartSeries = usePortfolioStore((s) => s.refreshTotalChartSeries);
   const [timeframe, setTimeframe] = useState<Timeframe>('24H');
   const [portfolioRateInfo, setPortfolioRateInfo] = useState<PortfolioRateResult | null>(() => getCachedPortfolioIdrRate());
-  const [scrubValue, setScrubValue] = useState<number | null>(null);
   const [scrubPointValue, setScrubPointValue] = useState<number | null>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [isRefreshPressed, setIsRefreshPressed] = useState(false);
@@ -106,7 +130,6 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
 
   const resetScrubState = () => {
     setIsScrubbing(false);
-    setScrubValue(null);
     setScrubPointValue(null);
   };
 
@@ -181,7 +204,7 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
   const totalUsd = aggregatedAssets.reduce((sum, asset) => sum + asset.totalUsdValue, 0);
   const chartData = chartByPocket[TOTAL_PORTFOLIO_CHART_KEY] ?? EMPTY_CHART_DATA;
   const chartSignature = useMemo(() => getChartSeriesSignature(chartData), [chartData]);
-  const displayValue = isScrubbing ? (scrubValue ?? totalUsd) : totalUsd;
+  const displayValue = totalUsd;
   const firstPointValue = chartData[0]?.value ?? 0;
   const latestPointValue = chartData[chartData.length - 1]?.value ?? 0;
   const displayedChangeProgress = isExpanded ? fullChartRevealProgress : easeSparklineReveal(miniSparklineRevealProgress);
@@ -202,7 +225,17 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
   const cardAccentColor = isStableChangePositive || isStableChangeFlat ? GLOBAL_ACCENT : CARD_LOSS_ACCENT;
   const miniSparkline = useMemo(() => buildMiniSparkline(chartData), [chartData]);
   const changeSign = changeValue >= 0 ? '+' : '-';
-  const formatPortfolioIdrValue = (usdValue: number) => (portfolioRateInfo ? formatCurrency(usdValue * portfolioRateInfo.rate, 'IDR') : 'Rp --');
+  const formatPortfolioIdrValue = useCallback(
+    (usdValue: number) => (portfolioRateInfo ? formatCurrency(usdValue * portfolioRateInfo.rate, 'IDR') : 'Rp --'),
+    [portfolioRateInfo],
+  );
+  const formatChartScrubValues = useCallback(
+    (value: number) => [
+      formatPortfolioIdrValue(value),
+      formatCurrency(value, 'USD'),
+    ],
+    [formatPortfolioIdrValue],
+  );
   const hasAssets = aggregatedAssets.length > 0 && totalUsd > 0;
   const shouldAnimateMiniSparkline = hasAssets && !!miniSparkline && shouldAnimateMiniSparklineProp && !prefersReducedMotion;
 
@@ -502,7 +535,7 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
                       setTimeframeReveal(null);
                       setTimeframe(frame);
                     }}
-                    className={`px-0.5 py-1 text-[9px] font-black uppercase leading-none transition-colors ${timeframe === frame ? 'text-[#B8F55A]' : 'text-[#F5F0E8]/45 hover:text-[#F5F0E8]/80'}`}
+                    className={`px-0.5 py-1 text-[9px] font-black uppercase leading-none transition-colors ${timeframe === frame ? 'text-[#F5F0E8]' : 'text-[#F5F0E8]/45 hover:text-[#F5F0E8]/80'}`}
                   >
                     {frame}
                   </button>
@@ -546,10 +579,10 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
               timeframe={timeframe}
               onScrub={(point) => {
                 setIsScrubbing(true);
-                setScrubValue(point.value);
                 setScrubPointValue(point.value);
               }}
               onScrubEnd={resetScrubState}
+              formatScrubValues={formatChartScrubValues}
               revealFromProgress={fullChartReveal?.fromProgress ?? timeframeReveal?.fromProgress ?? null}
               revealDurationMs={fullChartReveal ? MINI_SPARKLINE_REVEAL_DURATION_MS : TIMEFRAME_CHART_REVEAL_DURATION_MS}
               revealKey={fullChartReveal?.key ?? timeframeReveal?.key}
