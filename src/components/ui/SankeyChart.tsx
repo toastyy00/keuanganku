@@ -204,6 +204,10 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
     setHoveredCategorySlug(null);
   };
 
+  const handleCatHover = (slug: string) => {
+    setHoveredCategorySlug(slug === highlightedCat ? null : slug);
+  };
+
   const handleCatDoubleClick = (slug: string) => {
     setSankeyHighlightedCat(slug); // persist the highlight
     setHoveredCategorySlug(null);
@@ -360,7 +364,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
               key={`f-${f.id}-${i}`}
               className="cursor-pointer"
               onClick={() => handleCatClick(f.categorySlug)}
-              onMouseEnter={() => setHoveredCategorySlug(f.categorySlug)}
+              onMouseEnter={() => handleCatHover(f.categorySlug)}
             >
               {/* Left endcap — dark charcoal with glow so it stands out from background */}
               <rect
@@ -424,7 +428,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
               style={{ top: `${n.labelTop}px`, height: `${n.labelH}px`, fontSize: `${n.fontSize}px` }}
               onClick={() => handleCatClick(n.slug)}
               onDoubleClick={() => handleCatDoubleClick(n.slug)}
-              onMouseEnter={() => setHoveredCategorySlug(n.slug)}
+              onMouseEnter={() => handleCatHover(n.slug)}
             >
               {n.slug.toUpperCase()}
             </div>
@@ -455,7 +459,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
               e.stopPropagation();
               setClickedLeftId(prev => prev === fl.id ? null : fl.id);
             }}
-            onMouseEnter={() => setHoveredCategorySlug(fl.categorySlug)}
+            onMouseEnter={() => handleCatHover(fl.categorySlug)}
           >
             {fl.name}
             {isClicked && (
