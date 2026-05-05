@@ -119,7 +119,7 @@ const PocketList: React.FC<PocketListProps> = ({
                   onOpenPocket(pocket);
                 }
               }}
-              className={`group relative block w-full bg-[#1D1D1D] px-2 py-2 text-left transition-[transform,box-shadow] duration-150 ${
+              className={`group relative block w-full rounded-lg bg-[#1D1D1D] px-2 py-2 text-left transition-[transform,box-shadow] duration-150 ${
                 cardTapId === pocket.id ? 'translate-x-[4px] translate-y-[4px] shadow-none' : 'shadow-[4px_4px_0_0_#969696] md:hover:-translate-y-0.5 md:hover:shadow-[6px_8px_0_0_#969696]'
               }`}
               style={{
@@ -132,7 +132,7 @@ const PocketList: React.FC<PocketListProps> = ({
             >
               <div className="flex min-h-[56px] items-center gap-2.5">
                 <div
-                  className="flex h-[48px] w-[48px] shrink-0 items-center justify-center border-2"
+                  className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-md border-2"
                   style={{
                     borderColor: `${pocket.color_theme}`,
                     background: buildPocketAccentGradient(pocket.color_theme),
@@ -152,7 +152,7 @@ const PocketList: React.FC<PocketListProps> = ({
                   type="button"
                   aria-label={`Edit pocket ${pocket.name}`}
                   title="Pocket settings"
-                  className={`ml-1 inline-flex h-[44px] w-[44px] shrink-0 items-center justify-center border-2 bg-[#1B1B1E] transition-[transform,box-shadow] duration-150 ${
+                  className={`ml-1 inline-flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-md border-2 bg-[#1B1B1E] transition-[transform,box-shadow] duration-150 ${
                     settingsPressedId === pocket.id ? 'scale-90 rotate-6' : 'scale-100 rotate-0'
                   } ${settingsTapId === pocket.id ? 'translate-x-[4px] translate-y-[4px] shadow-[0_0_0_0_#969696]' : 'shadow-[3px_3px_0_0_#969696]'}`}
                   style={{

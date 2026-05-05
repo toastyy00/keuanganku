@@ -291,14 +291,14 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
         style={{ height: `${CH}px`, top: 0, overflow: 'visible' }}
       >
         <defs>
-          {/* Active: left=earth amber, right=dark lime green */}
+          {/* Active: left=muted teal, right=dark lime green */}
           <linearGradient id="sankey-hl" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#D46A29" stopOpacity="0.95" />
+            <stop offset="0%" stopColor="#2F8FA3" stopOpacity="0.95" />
             <stop offset="100%" stopColor="#5a8a1e" stopOpacity="0.85" />
           </linearGradient>
           {/* Inactive: dark earthy grey fading out */}
           <linearGradient id="sankey-grey" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#633820" stopOpacity="0.15" />
+            <stop offset="0%" stopColor="#2F8FA3" stopOpacity="0.14" />
             <stop offset="100%" stopColor="#777" stopOpacity="0.25" />
           </linearGradient>
           {/* Left endcap glow filter for active */}
@@ -333,7 +333,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
               <rect
                 x={leftX} y={f.leftY}
                 width={ENDCAP_W} height={Math.max(f.leftH, 2)}
-                fill={isActive ? '#64242F' : '#4A2B1A'}
+                fill={isActive ? '#1F6473' : '#24404A'}
                 opacity={isActive ? 1 : 0.3}
                 rx={3}
                 filter={isActive ? 'url(#endcap-glow)' : ''}
@@ -396,11 +396,11 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
           <div
             key={fl.id}
             className={[
-              'absolute flex items-center px-1.5 rounded text-[#FF9A62]',
+              'absolute flex items-center px-1.5 rounded text-[#9EE7F1]',
               'text-[9px] font-black tracking-wider uppercase',
               'pointer-events-auto cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis',
               'transition-all duration-200 shadow-md',
-              clickedLeftId === fl.id ? 'bg-[#4A1721] z-10' : 'bg-[#64242F]'
+              clickedLeftId === fl.id ? 'bg-[#143B45] z-10' : 'bg-[#1F6473]'
             ].join(' ')}
             style={{ left: 0, top: `${fl.labelTop}px`, height: `${LEFT_LABEL_H}px`, maxWidth: clickedLeftId === fl.id ? '80%' : '40%' }}
             onClick={(e) => {
@@ -410,7 +410,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
           >
             {fl.name}
             {clickedLeftId === fl.id && (
-              <span className="ml-1.5 opacity-90 text-[#B8F55A]">
+              <span className="ml-1.5 font-black text-[#B8F55A] opacity-95">
                 {formatCurrency(fl.amount, currency)}
               </span>
             )}

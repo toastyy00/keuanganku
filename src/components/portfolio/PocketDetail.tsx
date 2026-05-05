@@ -233,8 +233,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
                     setTimeframeReveal(null);
                     setTimeframe(frame);
                   }}
-                  className={`px-0.5 py-1 text-[9px] font-black uppercase leading-none transition-colors ${timeframe === frame ? 'text-[#1A1A1A]' : 'text-[#F5F0E8]/45 hover:text-[#F5F0E8]/80'}`}
-                  style={timeframe === frame ? { color: pocket.color_theme } : undefined}
+                  className={`px-0.5 py-1 text-[9px] font-black uppercase leading-none transition-colors ${timeframe === frame ? 'text-[#F5F0E8]' : 'text-[#F5F0E8]/45 hover:text-[#F5F0E8]/80'}`}
                 >
                   {frame}
                 </button>

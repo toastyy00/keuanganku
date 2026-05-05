@@ -1389,10 +1389,10 @@ const HistoryPage: React.FC = () => {
             onClick={() => setViewMode('flow')}
             className="shrink-0 flex items-center justify-center gap-1.5 px-2.5 py-1 border-2 font-black uppercase text-xs tracking-wider transition-[transform,box-shadow,border-color,color,background-color] duration-150 ease-out [box-shadow:3px_3px_0px_0px_var(--chip-shadow)] active:translate-x-[3px] active:translate-y-[3px] active:[box-shadow:0px_0px_0px_0px_transparent]"
             style={{
-              borderColor: viewMode === 'flow' ? '#F87171' : '#555555',
-              color: viewMode === 'flow' ? '#F87171' : '#A09890',
+              borderColor: viewMode === 'flow' ? '#2F8FA3' : '#555555',
+              color: viewMode === 'flow' ? '#2F8FA3' : '#A09890',
               backgroundColor: viewMode === 'flow' ? '#1A1A1A' : 'transparent',
-              '--chip-shadow': viewMode === 'flow' ? '#F87171' : 'transparent',
+              '--chip-shadow': viewMode === 'flow' ? '#2F8FA3' : 'transparent',
             } as React.CSSProperties & { '--chip-shadow': string }}
           >
             Flow

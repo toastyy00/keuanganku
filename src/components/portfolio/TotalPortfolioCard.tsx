@@ -24,6 +24,7 @@ const MINI_SPARKLINE_GLOW_DURATION_MS = 2700;
 const TIMEFRAME_CHART_REVEAL_DURATION_MS = 360;
 const EMPTY_CHART_DATA: { timestamp: number; value: number }[] = [];
 const MINI_SPARKLINE_CURVE_TENSION = 0.18;
+const TOTAL_PORTFOLIO_EXPANDED_STORAGE_KEY = 'keuanganku-total-portfolio-expanded';
 
 interface TotalPortfolioCardProps {
   shouldAnimateMiniSparkline?: boolean;
@@ -99,6 +100,11 @@ function easeFullChartReveal(value: number): number {
   return 1 - Math.pow(1 - t, 3);
 }
 
+function getInitialExpandedState(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage.getItem(TOTAL_PORTFOLIO_EXPANDED_STORAGE_KEY) === 'true';
+}
+
 const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
   shouldAnimateMiniSparkline: shouldAnimateMiniSparklineProp = true,
   onMiniSparklineRevealComplete,
@@ -115,7 +121,7 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [isRefreshPressed, setIsRefreshPressed] = useState(false);
   const [isRefreshAnimating, setIsRefreshAnimating] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(getInitialExpandedState);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [fullChartReveal, setFullChartReveal] = useState<{ fromProgress: number; key: string } | null>(null);
   const [timeframeReveal, setTimeframeReveal] = useState<{ fromProgress: number; key: string } | null>(null);
@@ -337,6 +343,7 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
 
   const toggleExpanded = () => {
     setIsExpanded((current) => {
+      const nextExpanded = !current;
       if (!current) {
         const fromProgress = shouldAnimateMiniSparkline ? getMiniSparklineRevealProgress() : 1;
         setFullChartRevealProgress(fromProgress);
@@ -352,7 +359,8 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
         setFullChartReveal(null);
         setFullChartRevealProgress(1);
       }
-      return !current;
+      window.localStorage.setItem(TOTAL_PORTFOLIO_EXPANDED_STORAGE_KEY, String(nextExpanded));
+      return nextExpanded;
     });
   };
 
@@ -368,7 +376,7 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
           toggleExpanded();
         }
       }}
-      className="relative cursor-pointer overflow-hidden shadow-[4px_4px_0_0_#969696] transition-[transform,box-shadow] duration-200 md:hover:-translate-y-0.5 md:hover:shadow-[6px_8px_0_0_#969696]"
+      className="relative cursor-pointer overflow-hidden rounded-lg shadow-[4px_4px_0_0_#969696] transition-[transform,box-shadow] duration-200 md:hover:-translate-y-0.5 md:hover:shadow-[6px_8px_0_0_#969696]"
       style={{
         background: `linear-gradient(124deg, #222326 10%, #262931 42%, ${cardAccentColor}4D 78%, ${cardAccentColor}66 100%)`,
       }}

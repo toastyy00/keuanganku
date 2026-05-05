@@ -44,53 +44,50 @@ const SkeletonBlock: React.FC<{
   />
 );
 
-const SkeletonSummaryCard: React.FC = () => (
-  <SkeletonCard className="!shadow-[4px_4px_0_0_#fafefe99]">
-    <div className="flex items-start justify-between gap-4">
-      <div className="min-w-0 flex-1 space-y-3">
-        <SkeletonBlock className="h-3 w-28" />
-        <SkeletonBlock className="h-8 w-[78%]" />
-        <SkeletonBlock className="h-3 w-36" />
-      </div>
-      <SkeletonBlock className="h-9 w-9 shrink-0" />
-    </div>
-  </SkeletonCard>
+const skeletonShadow = '!shadow-[2px_2px_0_0_rgba(250,254,254,0.46)]';
+
+const SkeletonToolbar: React.FC = () => (
+  <div className="flex items-center gap-2" aria-hidden="true">
+    <SkeletonBlock className="h-9 flex-1 bg-brutal-black/10" />
+    <SkeletonBlock className="h-9 w-20 bg-brutal-black/10" />
+    <SkeletonBlock className="h-9 w-9 bg-brutal-black/10" />
+  </div>
 );
 
-const SkeletonControlsCard: React.FC = () => (
-  <SkeletonCard className="!shadow-[3px_3px_0_0_#fafefe99]">
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex flex-1 gap-2">
-        <SkeletonBlock className="h-9 flex-1" />
-        <SkeletonBlock className="h-9 flex-1" />
-      </div>
-      <SkeletonBlock className="h-9 w-10 shrink-0" />
-    </div>
-  </SkeletonCard>
-);
-
-const SkeletonContentCard: React.FC = () => (
-  <SkeletonCard className="!shadow-[4px_4px_0_0_#fafefe99]">
-    <div className="space-y-4">
+const SkeletonPanel: React.FC<{ variant?: 'compact' | 'medium' | 'list' }> = ({ variant = 'medium' }) => (
+  <SkeletonCard className={skeletonShadow}>
+    <div className="space-y-3">
       <div className="flex items-center justify-between gap-4">
-        <SkeletonBlock className="h-3 w-28" />
-        <SkeletonBlock className="h-3 w-16" />
+        <SkeletonBlock className="h-3 w-24" />
+        <SkeletonBlock className="h-5 w-5" />
       </div>
-      <div className="grid grid-cols-3 gap-2">
-        <SkeletonBlock className="h-16" />
-        <SkeletonBlock className="h-16" />
-        <SkeletonBlock className="h-16" />
-      </div>
-      <div className="space-y-2">
-        <SkeletonBlock className="h-2 w-full" />
-        <SkeletonBlock className="h-2 w-2/3" />
-      </div>
+      {variant === 'compact' ? (
+        <div className="space-y-2">
+          <SkeletonBlock className="h-5 w-3/4" />
+          <SkeletonBlock className="h-3 w-1/2" />
+        </div>
+      ) : variant === 'list' ? (
+        <div className="space-y-2">
+          <SkeletonBlock className="h-4 w-full" />
+          <SkeletonBlock className="h-4 w-[88%]" />
+          <SkeletonBlock className="h-4 w-[62%]" />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <SkeletonBlock className="h-7 w-[70%]" />
+          <SkeletonBlock className="h-2 w-full" />
+          <div className="grid grid-cols-2 gap-2">
+            <SkeletonBlock className="h-10" />
+            <SkeletonBlock className="h-10" />
+          </div>
+        </div>
+      )}
     </div>
   </SkeletonCard>
 );
 
 export const SkeletonRow: React.FC = () => (
-  <div className="neo-card flex items-center gap-2.5 px-3 py-1.5 !shadow-[1px_1px_0_0_#fafefe99]" aria-hidden="true">
+  <div className="neo-card flex items-center gap-2.5 px-3 py-1.5 !shadow-[1px_1px_0_0_rgba(250,254,254,0.38)]" aria-hidden="true">
     <SkeletonBlock className="h-8 w-8 shrink-0" />
     <div className="min-w-0 flex-1">
       <SkeletonBlock className="h-3.5 w-3/4" />
@@ -104,15 +101,18 @@ interface SkeletonDashboardProps {
 }
 
 export const SkeletonDashboard: React.FC<SkeletonDashboardProps> = ({ count = 4 }) => (
-  <div className="section-pad mx-auto max-w-2xl space-y-5 pt-5 pb-1">
+  <div className="section-pad mx-auto max-w-2xl space-y-4 pt-5 pb-1">
     <div className="flex items-center justify-between gap-4 py-1">
       <SkeletonBlock className="h-5 w-32 bg-brutal-black/10" />
       <SkeletonBlock className="h-8 w-8 bg-brutal-black/10" />
     </div>
-    <SkeletonSummaryCard />
-    <SkeletonControlsCard />
-    <SkeletonContentCard />
-    <div className="space-y-2">
+    <SkeletonToolbar />
+    <div className="grid gap-3">
+      <SkeletonPanel variant="medium" />
+      <SkeletonPanel variant="compact" />
+      <SkeletonPanel variant="list" />
+    </div>
+    <div className="space-y-2 pt-1">
       <div className="mb-2 flex items-center justify-between">
         <SkeletonBlock className="h-3 w-36 bg-brutal-black/10" />
         <SkeletonBlock className="h-3 w-20 bg-brutal-black/10" />
