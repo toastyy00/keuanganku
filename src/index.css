@@ -229,6 +229,32 @@
     @apply border-2 border-brutal-black;
   }
 
+  .skeleton-card {
+    position: relative;
+    border-color: transparent;
+    isolation: isolate;
+  }
+
+  .skeleton-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: rgba(245, 240, 232, 0.08);
+    opacity: 0;
+    animation: skeletonCardPulse 1.05s ease-in-out infinite;
+  }
+
+  .skeleton-card > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .skeleton-block {
+    animation: skeletonBlockPulse 1.05s ease-in-out infinite;
+  }
+
   /* Bottom sheet overlay */
   .bottom-sheet-overlay {
     @apply fixed inset-0 bg-black/60 z-40;
@@ -474,6 +500,39 @@
 
   .animate-pop-rotate {
     animation: popRotate 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  @keyframes skeletonCardPulse {
+    0%,
+    100% {
+      opacity: 0;
+    }
+
+    50% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes skeletonBlockPulse {
+    0%,
+    100% {
+      opacity: 0.45;
+    }
+
+    50% {
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton-card::before,
+    .skeleton-block {
+      animation: none;
+    }
+
+    .skeleton-card::before {
+      opacity: 0;
+    }
   }
 
   .history-delete-card-fill {

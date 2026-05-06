@@ -20,14 +20,14 @@ export const SkeletonCard: React.FC<SkeletonCardProps> = ({
   children,
 }) => (
   <div
-    className={`neo-card space-y-3 overflow-hidden p-4 ${tone === 'light' ? 'bg-[#F5F0E8] text-[#1A1A1A]' : 'bg-[#2A2A2A]'} ${className}`}
+    className={`skeleton-card neo-card space-y-3 overflow-hidden p-4 !shadow-[2px_2px_0_0_rgba(245,240,232,0.24)] ${tone === 'light' ? 'bg-[#F5F0E8] text-[#1A1A1A]' : 'bg-[#2A2A2A]'} ${className}`}
     style={height ? { height } : undefined}
     aria-hidden="true"
   >
     {children ?? Array.from({ length: lines }).map((_, i) => (
         <div
           key={i}
-          className={`h-4 animate-pulse rounded-none ${tone === 'light' ? 'bg-[#1A1A1A]/12' : 'bg-[#F5F0E8]/12'}`}
+          className={`skeleton-block h-4 rounded-none ${tone === 'light' ? 'bg-[#1A1A1A]/12' : 'bg-[#F5F0E8]/12'}`}
           style={{ width: `${90 - i * 18}%` }}
         />
       ))}
@@ -39,12 +39,12 @@ const SkeletonBlock: React.FC<{
   tone?: 'dark' | 'light';
 }> = ({ className = '', tone = 'dark' }) => (
   <div
-    className={`animate-pulse rounded-none ${tone === 'light' ? 'bg-[#1A1A1A]/12' : 'bg-[#F5F0E8]/12'} ${className}`}
+    className={`skeleton-block rounded-none ${tone === 'light' ? 'bg-[#1A1A1A]/12' : 'bg-[#F5F0E8]/12'} ${className}`}
     aria-hidden="true"
   />
 );
 
-const skeletonShadow = '!shadow-[2px_2px_0_0_rgba(250,254,254,0.46)]';
+const skeletonShadow = '!shadow-[2px_2px_0_0_rgba(245,240,232,0.24)]';
 
 const SkeletonToolbar: React.FC = () => (
   <div className="flex items-center gap-2" aria-hidden="true">
@@ -87,7 +87,7 @@ const SkeletonPanel: React.FC<{ variant?: 'compact' | 'medium' | 'list' }> = ({ 
 );
 
 export const SkeletonRow: React.FC = () => (
-  <div className="neo-card flex items-center gap-2.5 px-3 py-1.5 !shadow-[1px_1px_0_0_rgba(250,254,254,0.38)]" aria-hidden="true">
+  <div className="skeleton-card neo-card flex items-center gap-2.5 overflow-hidden px-3 py-1.5 !shadow-[1px_1px_0_0_rgba(245,240,232,0.2)]" aria-hidden="true">
     <SkeletonBlock className="h-8 w-8 shrink-0" />
     <div className="min-w-0 flex-1">
       <SkeletonBlock className="h-3.5 w-3/4" />

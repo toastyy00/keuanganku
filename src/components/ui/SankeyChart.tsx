@@ -408,8 +408,8 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
               <rect
                 x={leftX} y={f.leftY}
                 width={ENDCAP_W} height={Math.max(f.leftH, 2)}
-                fill={isActive || isInactiveHovered ? '#1F6473' : '#24404A'}
-                opacity={isActive ? 1 : isInactiveHovered ? 0.58 : 0.3}
+                fill={isActive ? '#1F6473' : isInactiveHovered ? '#2F6E78' : '#24404A'}
+                opacity={isActive ? 1 : isInactiveHovered ? 0.68 : 0.72}
                 rx={3}
                 filter={isActive ? 'url(#endcap-glow)' : isInactiveHovered ? 'url(#endcap-glow-dim)' : ''}
                 className="transition-all duration-200"
