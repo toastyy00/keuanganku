@@ -524,6 +524,34 @@
     }
   }
 
+  @keyframes sankeyCurrentFade {
+    0% {
+      opacity: 0;
+    }
+
+    12% {
+      opacity: var(--sankey-current-opacity, 0.28);
+    }
+
+    74% {
+      opacity: var(--sankey-current-opacity, 0.28);
+    }
+
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes sankeyEndcapActiveIn {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 0.9;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .skeleton-card::before,
     .skeleton-block {
