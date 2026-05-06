@@ -325,39 +325,15 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
   const flowStartX = leftX + ENDCAP_W;
   const flowEndX = rightX - ENDCAP_W - 2;
   const rightBarX = rightX - ENDCAP_W;
-  const FLOW_WAVE_MAX_DELAY_MS = 220;
-  const FLOW_REVEAL_MS = 1180;
-  const FLOW_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
-  const getFlowIntroDelay = (index: number) => {
-    const flow = flows[index];
-    if (!flow) return 0;
-    const centerRatio = Math.min(1, Math.max(0, (flow.leftY + flow.leftH / 2) / CH));
-    return Math.round(24 + centerRatio * FLOW_WAVE_MAX_DELAY_MS);
+  const flowIntroWindowMs = Math.min(960, Math.max(360, flows.length * 22));
+  const flowIntroStepMs = flows.length <= 1 ? 0 : flowIntroWindowMs / (flows.length - 1);
+  const labelIntroWindowMs = Math.min(760, flowIntroWindowMs);
+  const getFlowIntroDelay = (index: number) => Math.round(index * flowIntroStepMs);
+  const getLabelIntroDelay = (index: number, total: number) => {
+    const step = total <= 1 ? 0 : labelIntroWindowMs / (total - 1);
+    return Math.round(120 + index * step);
   };
   const flowIntroIndexById = new Map(flows.map((flow, index) => [flow.id, index]));
-  const categoryIntroDelayBySlug = new Map<string, number>();
-  flows.forEach((flow, index) => {
-    const current = categoryIntroDelayBySlug.get(flow.categorySlug);
-    const next = getFlowIntroDelay(index);
-    categoryIntroDelayBySlug.set(flow.categorySlug, current === undefined ? next : Math.min(current, next));
-  });
-  const getRightIntroDelay = (slug: string, y: number) => {
-    const categoryDelay = categoryIntroDelayBySlug.get(slug) ?? 0;
-    const verticalNudge = Math.round(Math.min(54, Math.max(0, (y / CH) * 54)));
-    return Math.round(categoryDelay + FLOW_REVEAL_MS * 0.66 + verticalNudge);
-  };
-  const getRightEndcapIntroDelay = (slug: string, y: number) => {
-    const categoryDelay = categoryIntroDelayBySlug.get(slug) ?? 0;
-    const verticalNudge = Math.round(Math.min(28, Math.max(0, (y / CH) * 28)));
-    return Math.round(categoryDelay + 58 + verticalNudge);
-  };
-  const getRightEndcapActiveDelay = (slug: string, y: number) => {
-    return getRightIntroDelay(slug, y) + 34;
-  };
-  const getLeftLabelIntroDelay = (flowId: string) => {
-    const flowDelay = getFlowIntroDelay(flowIntroIndexById.get(flowId) ?? 0);
-    return Math.round(flowDelay + FLOW_REVEAL_MS * 0.26);
-  };
 
   return (
     <div
@@ -386,13 +362,6 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
             <stop offset="0%" stopColor="#2F8FA3" stopOpacity="0.38" />
             <stop offset="100%" stopColor="#5a8a1e" stopOpacity="0.28" />
           </linearGradient>
-          <linearGradient id="sankey-current" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0" />
-            <stop offset="42%" stopColor="#9EE7F1" stopOpacity="0.04" />
-            <stop offset="52%" stopColor="#FFFFFF" stopOpacity="0.22" />
-            <stop offset="62%" stopColor="#B8F55A" stopOpacity="0.06" />
-            <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
-          </linearGradient>
           {/* Left endcap glow filter for active */}
           <filter id="endcap-glow" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="2.5" result="blur" />
@@ -420,81 +389,37 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
             `C ${cx2.toFixed(1)} ${(f.rightY + f.rightH).toFixed(1)}, ${cx1.toFixed(1)} ${(f.leftY + f.leftH).toFixed(1)}, ${flowStartX.toFixed(1)} ${(f.leftY + f.leftH).toFixed(1)}`,
             'Z',
           ].join(' ');
-          const revealClipId = `flow-reveal-${flowIntroCycle}-${i}`;
-          const shapeClipId = `flow-shape-${flowIntroCycle}-${i}`;
-          const flowLength = Math.max(1, flowEndX - flowStartX);
-          const flowCurrentTravel = flowLength + 72;
-          const flowCurrentOpacity = isActive ? 0.52 : isInactiveHovered ? 0.38 : 0.26;
-
           return (
             <g
               key={`f-${flowIntroCycle}-${f.id}-${i}`}
               className="cursor-pointer"
               onClick={() => handleCatClick(f.categorySlug)}
               onMouseEnter={() => handleCatHover(f.categorySlug)}
+              style={{
+                opacity: flowIntroReady ? 1 : 0,
+                transform: flowIntroReady ? 'translateX(0) scaleX(1)' : 'translateX(-14px) scaleX(0.985)',
+                transformBox: 'fill-box',
+                transformOrigin: 'left center',
+                transition: `opacity 260ms ease-out ${introDelay}ms, transform 560ms cubic-bezier(0.16, 1, 0.3, 1) ${introDelay}ms`,
+              } as React.CSSProperties}
             >
-              <defs>
-                <clipPath id={revealClipId} clipPathUnits="userSpaceOnUse">
-                  <rect
-                    x={flowStartX - 2}
-                    y={-8}
-                    width={flowLength + 10}
-                    height={CH + 16}
-                    style={{
-                      transform: flowIntroReady ? 'scaleX(1)' : 'scaleX(0.001)',
-                      transformBox: 'fill-box',
-                      transformOrigin: 'left center',
-                      transition: `transform ${FLOW_REVEAL_MS}ms ${FLOW_EASE} ${introDelay + 28}ms`,
-                    } as React.CSSProperties}
-                  />
-                </clipPath>
-                <clipPath id={shapeClipId} clipPathUnits="userSpaceOnUse">
-                  <path d={d} />
-                </clipPath>
-              </defs>
               {/* Left endcap — dark charcoal with glow so it stands out from background */}
               <rect
                 x={leftX} y={f.leftY}
                 width={ENDCAP_W} height={Math.max(f.leftH, 2)}
                 fill={isActive ? '#1F6473' : isInactiveHovered ? '#2F6E78' : '#24404A'}
-                opacity={flowIntroReady ? (isActive ? 1 : isInactiveHovered ? 0.68 : 0.72) : 0}
+                opacity={isActive ? 1 : isInactiveHovered ? 0.68 : 0.72}
                 rx={3}
                 filter={isActive ? 'url(#endcap-glow)' : isInactiveHovered ? 'url(#endcap-glow-dim)' : ''}
-                style={{
-                  transform: flowIntroReady ? 'translateX(0)' : 'translateX(-5px)',
-                  transition: `opacity 180ms ease-out ${introDelay}ms, transform 240ms ${FLOW_EASE} ${introDelay}ms, fill 200ms ease-out, filter 200ms ease-out`,
-                } as React.CSSProperties}
+                className="transition-all duration-200"
               />
               {/* Bezier flow band */}
               <path
                 d={d}
-                clipPath={`url(#${revealClipId})`}
                 fill={isActive ? 'url(#sankey-hl)' : isInactiveHovered ? 'url(#sankey-hover)' : 'url(#sankey-grey)'}
-                opacity={flowIntroReady ? (isActive ? 1 : isInactiveHovered ? 0.96 : 0.75) : 0}
-                style={{
-                  transition: `opacity 240ms ease-out ${introDelay + 20}ms, fill 200ms ease-out`,
-                } as React.CSSProperties}
+                opacity={isActive ? 1 : isInactiveHovered ? 0.96 : 0.75}
+                className="transition-all duration-200"
               />
-              <g clipPath={`url(#${shapeClipId})`} pointerEvents="none">
-                <g clipPath={`url(#${revealClipId})`}>
-                  <rect
-                    x={flowStartX - 180}
-                    y={-8}
-                    width={220}
-                    height={CH + 16}
-                    fill="url(#sankey-current)"
-                    style={{
-                      opacity: 0,
-                      '--sankey-current-opacity': flowCurrentOpacity,
-                      transform: flowIntroReady ? `translateX(${flowCurrentTravel}px)` : 'translateX(0)',
-                      transition: `transform ${FLOW_REVEAL_MS}ms ${FLOW_EASE} ${introDelay + 28}ms`,
-                      animation: flowIntroReady
-                        ? `sankeyCurrentFade ${FLOW_REVEAL_MS + 220}ms ease-in-out ${introDelay + 46}ms both`
-                        : 'none',
-                    } as React.CSSProperties & { '--sankey-current-opacity': number }}
-                  />
-                </g>
-              </g>
             </g>
           );
         })}
@@ -503,36 +428,16 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
         {rightNodes.map((n, i) => {
           const isActive = !isHoverMode && n.slug === highlightedCat;
           const isHoveredTarget = hoveredCategorySlug === n.slug;
-          const introDelay = getRightEndcapIntroDelay(n.slug, n.y);
-          const activeDelay = getRightEndcapActiveDelay(n.slug, n.y);
           return (
-            <g key={`rc-${flowIntroCycle}-${n.slug}-${i}`}>
-              <rect
-                x={rightBarX} y={n.y}
-                width={ENDCAP_W} height={Math.max(n.h, 2)}
-                fill={isHoveredTarget ? '#6F8E4A' : '#4F5E3B'}
-                opacity={flowIntroReady ? (isHoveredTarget ? 0.58 : 0.72) : 0}
-                rx={3}
-                style={{
-                  transform: flowIntroReady ? 'translateX(0)' : 'translateX(4px)',
-                  transition: `opacity 260ms ease-out ${introDelay}ms, transform 320ms ${FLOW_EASE} ${introDelay}ms, fill 200ms ease-out`,
-                } as React.CSSProperties}
-              />
-              {isActive && (
-                <rect
-                  x={rightBarX} y={n.y}
-                  width={ENDCAP_W} height={Math.max(n.h, 2)}
-                  fill="#9DBB62"
-                  opacity={0}
-                  rx={3}
-                  style={{
-                    animation: flowIntroReady
-                      ? `sankeyEndcapActiveIn 300ms ease-out ${activeDelay}ms forwards`
-                      : 'none',
-                  } as React.CSSProperties}
-                />
-              )}
-            </g>
+            <rect
+              key={`rc-${flowIntroCycle}-${n.slug}-${i}`}
+              x={rightBarX} y={n.y}
+              width={ENDCAP_W} height={Math.max(n.h, 2)}
+              fill={isActive ? '#9DBB62' : isHoveredTarget ? '#6F8E4A' : '#4F5E3B'}
+              opacity={isActive ? 0.9 : isHoveredTarget ? 0.58 : 0.72}
+              rx={3}
+              className="transition-[fill,opacity] duration-200"
+            />
           );
         })}
       </svg>
@@ -540,10 +445,10 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
       {/* ── HTML label overlay ── */}
       <div className="absolute inset-0 pointer-events-none">
         {/* Right side labels (Categories) */}
-        {labels.map((n) => {
+        {labels.map((n, i) => {
           const isActive = !isHoverMode && n.slug === highlightedCat;
           const isHoveredLabel = hoveredCategorySlug === n.slug;
-          const introDelay = getRightIntroDelay(n.slug, n.y) + 34;
+          const introDelay = getLabelIntroDelay(i, labels.length);
           return (
             <div
               key={`${flowIntroCycle}-${n.slug}`}
@@ -564,7 +469,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
                 fontSize: `${n.fontSize}px`,
                 opacity: flowIntroReady ? 1 : 0,
                 transform: flowIntroReady ? 'translateX(0)' : 'translateX(8px)',
-                transition: `opacity 180ms ease-out ${introDelay}ms, transform 280ms ${FLOW_EASE} ${introDelay}ms, background-color 200ms ease-out, border-color 200ms ease-out, color 200ms ease-out, box-shadow 200ms ease-out`,
+                transition: `opacity 220ms ease-out ${introDelay}ms, transform 420ms cubic-bezier(0.16, 1, 0.3, 1) ${introDelay}ms, background-color 200ms ease-out, border-color 200ms ease-out, color 200ms ease-out, box-shadow 200ms ease-out`,
               }}
               onClick={() => handleCatClick(n.slug)}
               onDoubleClick={() => handleCatDoubleClick(n.slug)}
@@ -578,7 +483,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
         {visibleLeftLabels.map(fl => {
           const isHoverLabel = fl.labelKind === 'hover';
           const isClicked = clickedLeftId === fl.id;
-          const introDelay = getLeftLabelIntroDelay(fl.id);
+          const introDelay = getFlowIntroDelay(flowIntroIndexById.get(fl.id) ?? 0);
           return (
           <div
             key={`${flowIntroCycle}-${fl.id}`}
@@ -602,7 +507,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
               maxWidth: isClicked ? '80%' : '40%',
               opacity: flowIntroReady ? 1 : 0,
               transform: flowIntroReady ? 'translateX(0)' : 'translateX(-8px)',
-              transition: `opacity 180ms ease-out ${introDelay}ms, transform 280ms ${FLOW_EASE} ${introDelay}ms, max-width 200ms ease-out, background-color 200ms ease-out, border-color 200ms ease-out, color 200ms ease-out, box-shadow 200ms ease-out`,
+              transition: `opacity 220ms ease-out ${introDelay}ms, transform 420ms cubic-bezier(0.16, 1, 0.3, 1) ${introDelay}ms, max-width 200ms ease-out, background-color 200ms ease-out, border-color 200ms ease-out, color 200ms ease-out, box-shadow 200ms ease-out`,
             }}
             onClick={(e) => {
               e.stopPropagation();
