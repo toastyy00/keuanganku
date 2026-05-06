@@ -79,6 +79,8 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
   const { currency } = useExpenseStore();
   const [clickedLeftId, setClickedLeftId] = React.useState<string | null>(null);
   const [hoveredCategorySlug, setHoveredCategorySlug] = React.useState<string | null>(null);
+  const [flowIntroReady, setFlowIntroReady] = React.useState(false);
+  const [flowIntroCycle, setFlowIntroCycle] = React.useState(0);
 
   // ── Layout constants ──────────────────────────────────────────────────────
   const CH = height ?? 220;  // Chart height (px)
@@ -194,6 +196,25 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
 
     return { flows: f, rightNodes: rNodes, defaultTop1: top1Slug };
   }, [expenses, CH]);
+  const chartSignature = useMemo(() => {
+    const flowPart = flows.map((flow) => `${flow.id}:${flow.categorySlug}:${flow.leftY.toFixed(1)}:${flow.rightY.toFixed(1)}`).join('|');
+    const nodePart = rightNodes.map((node) => `${node.slug}:${node.y.toFixed(1)}:${node.h.toFixed(1)}`).join('|');
+    return `${CH}|${flowPart}|${nodePart}`;
+  }, [flows, rightNodes, CH]);
+
+  React.useLayoutEffect(() => {
+    setFlowIntroReady(false);
+    setFlowIntroCycle((current) => current + 1);
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => setFlowIntroReady(true));
+    });
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (secondFrame) window.cancelAnimationFrame(secondFrame);
+    };
+  }, [chartSignature]);
 
   const highlightedCat = sankeyHighlightedCat ?? defaultTop1;
   const isHoverMode = hoveredCategorySlug !== null;
@@ -304,6 +325,15 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
   const flowStartX = leftX + ENDCAP_W;
   const flowEndX = rightX - ENDCAP_W - 2;
   const rightBarX = rightX - ENDCAP_W;
+  const flowIntroWindowMs = Math.min(960, Math.max(360, flows.length * 22));
+  const flowIntroStepMs = flows.length <= 1 ? 0 : flowIntroWindowMs / (flows.length - 1);
+  const labelIntroWindowMs = Math.min(760, flowIntroWindowMs);
+  const getFlowIntroDelay = (index: number) => Math.round(index * flowIntroStepMs);
+  const getLabelIntroDelay = (index: number, total: number) => {
+    const step = total <= 1 ? 0 : labelIntroWindowMs / (total - 1);
+    return Math.round(120 + index * step);
+  };
+  const flowIntroIndexById = new Map(flows.map((flow, index) => [flow.id, index]));
 
   return (
     <div
@@ -323,10 +353,10 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
             <stop offset="0%" stopColor="#2F8FA3" stopOpacity="0.95" />
             <stop offset="100%" stopColor="#5a8a1e" stopOpacity="0.85" />
           </linearGradient>
-          {/* Inactive: dark earthy grey fading out */}
+          {/* Inactive: muted teal-to-olive, dimmed from the active palette */}
           <linearGradient id="sankey-grey" x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor="#2F8FA3" stopOpacity="0.14" />
-            <stop offset="100%" stopColor="#777" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#5A6F36" stopOpacity="0.22" />
           </linearGradient>
           <linearGradient id="sankey-hover" x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor="#2F8FA3" stopOpacity="0.38" />
@@ -348,6 +378,7 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
         {flows.map((f, i) => {
           const isActive = !isHoverMode && f.categorySlug === highlightedCat;
           const isInactiveHovered = hoveredCategorySlug === f.categorySlug;
+          const introDelay = getFlowIntroDelay(i);
           const cx1 = flowStartX + (flowEndX - flowStartX) * 0.55;
           const cx2 = flowEndX - (flowEndX - flowStartX) * 0.55;
 
@@ -361,10 +392,17 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
 
           return (
             <g
-              key={`f-${f.id}-${i}`}
+              key={`f-${flowIntroCycle}-${f.id}-${i}`}
               className="cursor-pointer"
               onClick={() => handleCatClick(f.categorySlug)}
               onMouseEnter={() => handleCatHover(f.categorySlug)}
+              style={{
+                opacity: flowIntroReady ? 1 : 0,
+                transform: flowIntroReady ? 'translateX(0) scaleX(1)' : 'translateX(-14px) scaleX(0.985)',
+                transformBox: 'fill-box',
+                transformOrigin: 'left center',
+                transition: `opacity 260ms ease-out ${introDelay}ms, transform 560ms cubic-bezier(0.16, 1, 0.3, 1) ${introDelay}ms`,
+              } as React.CSSProperties}
             >
               {/* Left endcap — dark charcoal with glow so it stands out from background */}
               <rect
@@ -393,11 +431,11 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
           const isHoveredTarget = hoveredCategorySlug === n.slug;
           return (
             <rect
-              key={`rc-${n.slug}-${i}`}
+              key={`rc-${flowIntroCycle}-${n.slug}-${i}`}
               x={rightBarX} y={n.y}
               width={ENDCAP_W} height={Math.max(n.h, 2)}
-              fill={isActive ? '#9DBB62' : isHoveredTarget ? '#6F8E4A' : '#555'}
-              opacity={isActive ? 0.9 : isHoveredTarget ? 0.58 : 1}
+              fill={isActive ? '#9DBB62' : isHoveredTarget ? '#6F8E4A' : '#4F5E3B'}
+              opacity={isActive ? 0.9 : isHoveredTarget ? 0.58 : 0.72}
               rx={3}
               className="transition-[fill,opacity] duration-200"
             />
@@ -408,12 +446,13 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
       {/* ── HTML label overlay ── */}
       <div className="absolute inset-0 pointer-events-none">
         {/* Right side labels (Categories) */}
-        {labels.map(n => {
+        {labels.map((n, i) => {
           const isActive = !isHoverMode && n.slug === highlightedCat;
           const isHoveredLabel = hoveredCategorySlug === n.slug;
+          const introDelay = getLabelIntroDelay(i, labels.length);
           return (
             <div
-              key={n.slug}
+              key={`${flowIntroCycle}-${n.slug}`}
               className={[
                 'absolute right-0 flex items-center px-1.5 rounded',
                 'font-black tracking-wider uppercase',
@@ -425,7 +464,14 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
                     ? 'bg-[#293A25] text-[#C6D6AF] border-[#6F8E4A]/30 shadow-sm'
                   : 'bg-black/25 text-[#888] border-transparent hover:text-[#ccc] hover:bg-black/40',
               ].join(' ')}
-              style={{ top: `${n.labelTop}px`, height: `${n.labelH}px`, fontSize: `${n.fontSize}px` }}
+              style={{
+                top: `${n.labelTop}px`,
+                height: `${n.labelH}px`,
+                fontSize: `${n.fontSize}px`,
+                opacity: flowIntroReady ? 1 : 0,
+                transform: flowIntroReady ? 'translateX(0)' : 'translateX(8px)',
+                transition: `opacity 220ms ease-out ${introDelay}ms, transform 420ms cubic-bezier(0.16, 1, 0.3, 1) ${introDelay}ms, background-color 200ms ease-out, border-color 200ms ease-out, color 200ms ease-out, box-shadow 200ms ease-out`,
+              }}
               onClick={() => handleCatClick(n.slug)}
               onDoubleClick={() => handleCatDoubleClick(n.slug)}
               onMouseEnter={() => handleCatHover(n.slug)}
@@ -438,9 +484,10 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
         {visibleLeftLabels.map(fl => {
           const isHoverLabel = fl.labelKind === 'hover';
           const isClicked = clickedLeftId === fl.id;
+          const introDelay = getFlowIntroDelay(flowIntroIndexById.get(fl.id) ?? 0);
           return (
           <div
-            key={fl.id}
+            key={`${flowIntroCycle}-${fl.id}`}
             className={[
               'absolute flex items-center px-1.5 rounded',
               'text-[9px] font-black tracking-wider uppercase',
@@ -454,7 +501,15 @@ export const SankeyChart: React.FC<SankeyChartProps> = ({ expenses, height, onCa
                   ? 'bg-[#143B45] text-[#9EE7F1] z-10 shadow-md'
                   : 'bg-[#1F6473] text-[#9EE7F1] shadow-md'
             ].join(' ')}
-            style={{ left: 0, top: `${fl.labelTop}px`, height: `${LEFT_LABEL_H}px`, maxWidth: isClicked ? '80%' : '40%' }}
+            style={{
+              left: 0,
+              top: `${fl.labelTop}px`,
+              height: `${LEFT_LABEL_H}px`,
+              maxWidth: isClicked ? '80%' : '40%',
+              opacity: flowIntroReady ? 1 : 0,
+              transform: flowIntroReady ? 'translateX(0)' : 'translateX(-8px)',
+              transition: `opacity 220ms ease-out ${introDelay}ms, transform 420ms cubic-bezier(0.16, 1, 0.3, 1) ${introDelay}ms, max-width 200ms ease-out, background-color 200ms ease-out, border-color 200ms ease-out, color 200ms ease-out, box-shadow 200ms ease-out`,
+            }}
             onClick={(e) => {
               e.stopPropagation();
               setClickedLeftId(prev => prev === fl.id ? null : fl.id);

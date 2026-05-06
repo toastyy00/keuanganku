@@ -353,6 +353,7 @@ const HistoryPage: React.FC = () => {
   const pendingDeletesRef = useRef<Record<string, PendingDeleteEntry>>({});
   const deleteTokenSeqRef = useRef(0);
   const activeDeleteTokensRef = useRef<Record<string, number>>({});
+  const previousFlowMonthPrefixRef = useRef<string | null>(null);
 
   useEffect(() => {
     getExchangeRate().then((res) => setRateInfo(res));
@@ -399,6 +400,18 @@ const HistoryPage: React.FC = () => {
   );
 
   const monthPrefix = `${viewYear}-${String(viewMonth).padStart(2, '0')}`;
+  useEffect(() => {
+    if (previousFlowMonthPrefixRef.current === null) {
+      previousFlowMonthPrefixRef.current = monthPrefix;
+      return;
+    }
+
+    if (previousFlowMonthPrefixRef.current !== monthPrefix) {
+      previousFlowMonthPrefixRef.current = monthPrefix;
+      setSankeyHighlightedCat(null);
+    }
+  }, [monthPrefix, setSankeyHighlightedCat]);
+
   const monthLabelStr = new Intl.DateTimeFormat('id-ID', {
     month: 'long', year: 'numeric',
   }).format(new Date(viewYear, viewMonth - 1, 1));
