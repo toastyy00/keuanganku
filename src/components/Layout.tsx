@@ -5,11 +5,13 @@ import {
   CalendarDays,
   RefreshCcw,
   Settings,
+  Wallet,
   Plus,
   LineChart,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { isDemoMode } from '../lib/appConfig';
 import { useUIStore } from '../store';
@@ -32,6 +34,22 @@ const RIGHT_ITEMS = [
 
 // All items in order — used for slide-direction calculation
 const ALL_ITEMS = [...LEFT_ITEMS, ...RIGHT_ITEMS];
+type SidebarNavItem = {
+  label: string;
+  to: string;
+  icon: LucideIcon;
+  end: boolean;
+  index: number;
+};
+const DESKTOP_POCKET_ITEM: SidebarNavItem = {
+  label: 'Pockets',
+  to: '/pockets',
+  icon: Wallet,
+  end: false,
+  index: 4,
+};
+const DESKTOP_MAIN_ITEMS = [...LEFT_ITEMS, RIGHT_ITEMS[0], DESKTOP_POCKET_ITEM];
+const DESKTOP_SETTINGS_ITEM = RIGHT_ITEMS[1];
 
 const SWIPE_MIN_DISTANCE_BASE = 72;
 const SWIPE_MIN_DISTANCE_MAX = 96;
@@ -82,6 +100,13 @@ const Layout: React.FC = () => {
 
     return demoMode ? 'Demo User' : 'User';
   })();
+  const sidebarUserInitials = sidebarUserName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'U';
+  const sidebarUserSubtitle = demoMode ? 'Demo mode' : (user?.email ?? 'Local account');
 
   const [isMinimized, setIsMinimized] = useState(
     () => localStorage.getItem('sidebar_min') === 'true'
@@ -302,6 +327,68 @@ const Layout: React.FC = () => {
     previousActiveIndexRef.current = activeIndex;
   }, [activeIndex]);
 
+  const renderDesktopNavItem = (
+    { label, to, icon: Icon, end }: SidebarNavItem,
+    options: { iconOnlyActive?: boolean } = {},
+  ) => (
+    <NavLink
+      key={to}
+      to={to}
+      end={end}
+      title={label}
+      onClick={preventIfAlreadyActive(isRouteActive(to, end))}
+      className={({ isActive }) =>
+        cn(
+          'relative block h-12 overflow-hidden',
+          'transition-[background-color] duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)]',
+          isActive && !options.iconOnlyActive && 'bg-[linear-gradient(270deg,rgba(184,245,90,0.08),transparent)]',
+        )
+      }
+    >
+      {({ isActive }) => (
+        <>
+          {isActive && !options.iconOnlyActive && (
+            <span
+              aria-hidden="true"
+              className="absolute right-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-l-[2px] bg-[#B8F55A]"
+            />
+          )}
+          <span
+            className={cn(
+              'absolute top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center',
+              'transition-[left,transform] duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)]',
+              isMinimized ? 'left-1/2 -translate-x-1/2' : 'left-4 translate-x-0',
+            )}
+          >
+            <Icon
+              size={isMinimized ? 22 : 20}
+              strokeWidth={2.5}
+              aria-hidden="true"
+              className="transition-colors duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
+              style={{ color: isActive ? '#B8F55A' : 'rgba(255,255,255,0.28)' }}
+            />
+          </span>
+          <span
+            className={cn(
+              'absolute left-[60px] top-1/2 -translate-y-1/2 whitespace-nowrap text-sm font-bold uppercase tracking-wider',
+              'transition-[opacity,transform] duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]',
+              isMinimized
+                ? 'pointer-events-none translate-x-[-8px] opacity-0 delay-0'
+                : 'translate-x-0 opacity-100 delay-[70ms]',
+            )}
+            style={{
+              color: isActive && !options.iconOnlyActive
+                ? '#B8F55A'
+                : 'rgba(255,255,255,0.28)',
+            }}
+          >
+            {label}
+          </span>
+        </>
+      )}
+    </NavLink>
+  );
+
 
   return (
     <div className="flex h-dvh min-h-0 overflow-hidden" style={{ backgroundColor: '#1A1A1A' }}>
@@ -311,91 +398,113 @@ const Layout: React.FC = () => {
       */}
       <aside
         className={cn(
-          'hidden md:flex flex-col flex-shrink-0 relative',
-          'transition-all duration-300 ease-in-out',
-          isMinimized ? 'w-20' : 'w-64',
-          'border-r-4 z-30',
+          'hidden md:flex flex-col flex-shrink-0 relative z-30',
+          'bg-[#141414]',
+          'transition-[width] duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)]',
+          isMinimized ? 'w-20' : 'w-[232px]',
         )}
-        style={{ backgroundColor: '#1A1A1A', borderColor: '#F5F0E8' }}
       >
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-0 right-0 top-0 z-30"
+          style={{ width: '0.5px', backgroundColor: 'rgba(255,255,255,0.07)' }}
+        />
+
+        {/* Header logo */}
+        <div className="relative h-[92px] overflow-hidden">
+          <h1
+            className={cn(
+              'absolute left-1/2 top-[30px] -translate-x-1/2 font-black uppercase leading-none tracking-tight text-[#F5F0E8]',
+              'transition-[opacity,transform] duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)]',
+              isMinimized
+                ? 'scale-100 opacity-100'
+                : 'scale-90 opacity-0',
+            )}
+            aria-hidden={!isMinimized}
+          >
+            K<span className="text-[#B8F55A]">K</span>
+          </h1>
+          <h1
+            className={cn(
+              'absolute left-5 top-[30px] font-black uppercase leading-none tracking-tight text-[#F5F0E8]',
+              'transition-[opacity,transform] duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)]',
+              isMinimized
+                ? 'translate-x-2 scale-[0.98] opacity-0'
+                : 'translate-x-0 scale-100 opacity-100 delay-[40ms]',
+            )}
+            aria-hidden={isMinimized}
+          >
+            Keuangan<span className="text-[#B8F55A]">ku</span>
+          </h1>
+          <p
+            className={cn(
+              'absolute left-5 top-[55px] whitespace-nowrap text-[11px] font-bold uppercase tracking-[0.15em] text-[#A09890]',
+              'transition-[opacity,transform] duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]',
+              isMinimized
+                ? 'pointer-events-none translate-x-2 opacity-0 delay-0'
+                : 'translate-x-0 opacity-100 delay-[70ms]',
+            )}
+          >
+            {demoMode ? 'Live demo mode' : 'Track your expenses'}
+          </p>
+        </div>
+
         {/* Toggle button */}
         <button
           onClick={toggleMinimize}
-          className="absolute -right-4 top-6 w-8 h-8 rounded-full border-4 flex items-center justify-center z-40 transition-colors duration-150"
+          className="absolute -right-4 top-[26px] z-40 flex h-8 w-8 items-center justify-center rounded-full border-4 transition-colors duration-150"
           style={{ backgroundColor: '#B8F55A', borderColor: '#1A1A1A' }}
           aria-label={isMinimized ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {isMinimized
-            ? <ChevronRight size={16} strokeWidth={3} className="text-[#1A1A1A]" />
-            : <ChevronLeft size={16} strokeWidth={3} className="text-[#1A1A1A]" />}
+            ? <ChevronRight size={16} strokeWidth={3} className="text-[#1A1A1A]" aria-hidden="true" />
+            : <ChevronLeft size={16} strokeWidth={3} className="text-[#1A1A1A]" aria-hidden="true" />}
         </button>
 
-        {/* Brand */}
-        <div
-          className={cn(
-            'py-5 border-b-4 h-[92px] flex flex-col justify-center',
-            isMinimized ? 'px-2 items-center' : 'px-5',
-          )}
-          style={{ borderColor: '#3A3A3A' }}
-        >
-          <h1 className="font-black uppercase tracking-tight leading-none" style={{ color: '#F5F0E8' }}>
-            {isMinimized
-              ? <>K<span style={{ color: '#B8F55A' }}>K</span></>
-              : <>Keuangan<span style={{ color: '#B8F55A' }}>ku</span></>}
-          </h1>
-          {!isMinimized && (
-            <p
-              className="text-[11px] font-bold uppercase tracking-[0.15em] mt-1 whitespace-nowrap"
-              style={{ color: '#A09890' }}
-            >
-              {demoMode ? 'Live demo mode' : 'Track your expenses'}
-            </p>
-          )}
-        </div>
-
-        {demoMode && !isMinimized && (
-          <div className="px-4 py-3 border-b-4" style={{ borderColor: '#3A3A3A' }}>
-            <div className="border-2 border-[#F5F0E8] bg-[#202020] px-3 py-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-brutal-yellow">
-                Demo Mode
-              </p>
-              <p className="mt-1 text-[11px] leading-4 text-brutal-bone-dim">
-                Data contoh lokal. Tidak terhubung ke akun atau Supabase.
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Nav links (desktop) */}
-        <nav className="flex flex-col flex-1 overflow-y-auto" aria-label="Main navigation">
-          {ALL_ITEMS.map(({ label, to, icon: Icon, end }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              title={label}
-              onClick={preventIfAlreadyActive(isRouteActive(to, end))}
-              className={({ isActive }) =>
-                cn('sidebar-item', isActive && 'active', isMinimized && 'justify-center !px-0')
-              }
-            >
-              <Icon size={20} strokeWidth={2.5} aria-hidden="true" />
-              {!isMinimized && <span>{label}</span>}
-            </NavLink>
-          ))}
+        <nav className="flex flex-1 flex-col overflow-hidden py-2" aria-label="Main navigation">
+          <div className="space-y-0.5">
+            {DESKTOP_MAIN_ITEMS.map((item) => renderDesktopNavItem(item))}
+          </div>
         </nav>
 
+        <div
+          className="relative py-2 before:absolute before:left-4 before:right-4 before:top-0 before:h-px before:scale-y-50 before:bg-white/[0.06] before:content-['']"
+        >
+          {renderDesktopNavItem(DESKTOP_SETTINGS_ITEM, { iconOnlyActive: true })}
+        </div>
+
         {/* Footer: account name */}
-        {!isMinimized && (
+        <div
+          className="relative h-[51px] border-t-[0.5px]"
+          style={{ borderColor: 'rgba(255,255,255,0.06)' }}
+        >
           <div
-            className="py-3 px-4 border-t-4"
-            style={{ borderColor: '#3A3A3A' }}
+            className={cn(
+              'absolute top-1/2 flex h-[26px] w-[26px] -translate-y-1/2 items-center justify-center rounded-full bg-[#B8F55A] text-[10px] font-black text-[#111]',
+              'transition-[left,transform] duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)]',
+              isMinimized ? 'left-1/2 -translate-x-1/2' : 'left-4 translate-x-0',
+            )}
           >
-            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#3A3A3A' }}>
+            {sidebarUserInitials}
+          </div>
+          <div
+            className={cn(
+              'absolute left-[54px] top-1/2 min-w-0 -translate-y-1/2',
+              'transition-[opacity,transform] duration-[180ms] ease-[cubic-bezier(0.4,0,0.2,1)]',
+              isMinimized
+                ? 'pointer-events-none translate-x-[-8px] opacity-0 delay-0'
+                : 'translate-x-0 opacity-100 delay-[70ms]',
+            )}
+          >
+            <p className="truncate text-[11px] font-bold leading-tight text-white/50">
               {sidebarUserName}
             </p>
+            <p className="truncate text-[9px] leading-tight text-white/25">
+              {sidebarUserSubtitle}
+            </p>
           </div>
-        )}
+        </div>
       </aside>
 
       {/*

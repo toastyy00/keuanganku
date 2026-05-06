@@ -647,8 +647,15 @@
 
 
 body.flow-mode-active::-webkit-scrollbar { display: none; }
-body.flow-mode-active * { scrollbar-width: none; -ms-overflow-style: none; }
-body.flow-mode-active *::-webkit-scrollbar { display: none; }
+body.flow-mode-active main,
+body.flow-mode-active main * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+body.flow-mode-active main::-webkit-scrollbar,
+body.flow-mode-active main *::-webkit-scrollbar {
+  display: none;
+}
 
 
 html.flow-mode-active::-webkit-scrollbar { display: none; }
