@@ -609,6 +609,17 @@ const DashboardPage: React.FC = () => {
     ? Math.round((familySupportSpent / familySupportMonthlyBudget) * 100)
     : 0;
   const familyRemaining = familySupportMonthlyBudget - familySupportSpent;
+  const totalBudgetLimit = personalMonthlyBudget + familySupportMonthlyBudget;
+  const totalBudgetSpent = personalSpent + familySupportSpent;
+  const budgetSegmentScale = totalBudgetLimit > 0 && totalBudgetSpent > totalBudgetLimit
+    ? totalBudgetLimit / totalBudgetSpent
+    : 1;
+  const personalBudgetBarPct = totalBudgetLimit > 0
+    ? (personalSpent * budgetSegmentScale / totalBudgetLimit) * 100
+    : 0;
+  const familyBudgetBarPct = totalBudgetLimit > 0
+    ? (familySupportSpent * budgetSegmentScale / totalBudgetLimit) * 100
+    : 0;
 
   function budgetColor(pct: number) {
     if (pct > 100) return { text: 'text-red-500', bar: '#DC2626', swatch: 'bg-red-500', over: true };
@@ -736,7 +747,7 @@ const DashboardPage: React.FC = () => {
                     )}
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDashCurrencyToggle(); }}
-                      className="px-2.5 py-0.5 border-4 font-black text-xs uppercase transition-all duration-150"
+                      className="px-2.5 py-0.5 border-4 rounded-[5px] font-black text-xs uppercase transition-all duration-150"
                       style={{ borderColor: '#1A1A1A', backgroundColor: '#1A1A1A', color: '#B8F55A' }}
                     >
                       {dashCurrency}
@@ -801,8 +812,11 @@ const DashboardPage: React.FC = () => {
               </div>
               {delta !== null && delta !== 0 && lastMonthSpending > 0 && (
                 <div
-                  className="flex flex-wrap items-center gap-x-2 gap-y-1 p-2 sm:p-2.5 border-2 w-full mt-2"
-                  style={{ borderColor: '#F5F0E8', backgroundColor: delta > 0 ? 'rgba(248,113,113,0.15)' : 'rgba(74,222,128,0.12)' }}
+                  className="flex flex-wrap items-center gap-x-2 gap-y-1 p-2 sm:p-2.5 border-2 rounded-[5px] w-full mt-2"
+                  style={{
+                    borderColor: delta > 0 ? 'rgba(248,113,113,0.45)' : 'rgba(74,222,128,0.38)',
+                    backgroundColor: delta > 0 ? 'rgba(248,113,113,0.15)' : 'rgba(74,222,128,0.12)'
+                  }}
                 >
                   <div className="flex items-center gap-1.5 shrink-0">
                     {delta > 0
@@ -853,22 +867,42 @@ const DashboardPage: React.FC = () => {
         <SwipeCarousel
           variant="dots"
           disableHint
-          accentColors={hasBudget ? ['#FFFFFF', '#FFFFFF'] : ['#FFFFFF']}
+          accentColors={hasBudget ? ['#fafefe99', '#fafefe99'] : ['#fafefe99']}
           slides={[
             /* Slide 1: Needs vs Wants */
-            <div className="px-4 py-3">
-              <p className="text-xs font-black uppercase tracking-wider mb-3 text-brutal-black/60">
-                Needs vs Wants
-              </p>
-              <div className="flex h-6 overflow-hidden mb-3">
+            <div className="px-4 py-3 min-h-[116px] flex flex-col justify-between">
+              <div className="flex items-center gap-2 mb-2.5">
+                <p className="text-xs font-black uppercase tracking-wider text-brutal-black/60">
+                  Where It Goes
+                </p>
+              </div>
+              <div className="flex justify-between mb-1">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-[2px] bg-blue-500" />
+                  <span className="text-[11px] font-black uppercase tracking-wider text-brutal-black/55">Need</span>
+                  <span className="rounded px-1.5 py-0.5 text-[10px] font-black leading-none text-blue-500 bg-blue-500/20">{split.needsPct}%</span>
+                </div>
+                <div className="flex items-center gap-1.5 justify-end">
+                  <span className="rounded px-1.5 py-0.5 text-[10px] font-black leading-none text-pink-500 bg-pink-500/20">{split.wantsPct}%</span>
+                  <span className="text-[11px] font-black uppercase tracking-wider text-brutal-black/55">Want</span>
+                  <div className="w-2 h-2 rounded-[2px] bg-pink-500" />
+                </div>
+              </div>
+              <div className="relative flex h-3 overflow-hidden rounded-full mb-3 bg-brutal-black/10">
                 {split.needsPct > 0 && (
                   <div className="bg-blue-500 transition-all duration-500" style={{ width: `${split.needsPct}%` }} />
                 )}
                 {split.wantsPct > 0 && (
                   <div className="bg-pink-500 transition-all duration-500" style={{ width: `${split.wantsPct}%` }} />
                 )}
+                {split.needsPct > 0 && split.wantsPct > 0 && (
+                  <div
+                    className="absolute top-0 bottom-0 w-px bg-[#242424]"
+                    style={{ left: `${split.needsPct}%` }}
+                  />
+                )}
                 {split.needs === 0 && split.wants === 0 && (
-                  <div className="flex-1 bg-brutal-black/10 flex items-center justify-center">
+                  <div className="flex-1 flex items-center justify-center">
                     <span className="text-[10px] font-bold text-brutal-black/40 uppercase">
                       Belum ada pengeluaran bulan ini
                     </span>
@@ -877,114 +911,102 @@ const DashboardPage: React.FC = () => {
               </div>
               <div className="flex justify-between">
                 <div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 bg-blue-500" />
-                    <span className="text-xs font-bold uppercase">Need</span>
-                    <span className="text-xs font-black">{split.needsPct}%</span>
-                  </div>
-                  <p className="text-sm font-bold mt-0.5">{fmt(split.needs)}</p>
+                  <p className="text-xs font-bold mt-0.5 text-brutal-black/55">{fmt(split.needs)}</p>
                 </div>
                 <div className="text-right">
-                  <div className="flex items-center gap-1.5 justify-end">
-                    <span className="text-xs font-black">{split.wantsPct}%</span>
-                    <span className="text-xs font-bold uppercase">Want</span>
-                    <div className="w-3 h-3 bg-pink-500" />
-                  </div>
-                  <p className="text-sm font-bold mt-0.5">{fmt(split.wants)}</p>
+                  <p className="text-xs font-bold mt-0.5 text-brutal-black/55">{fmt(split.wants)}</p>
                 </div>
               </div>
             </div>,
 
             /* Slide 2: Budget Bulanan - mirrors Need vs Want layout */
             ...(hasBudget ? [
-              <div className="px-4 py-3">
-                {/* Title row matches the Needs vs Wants label height */}
-                <p className="text-xs font-black uppercase tracking-wider mb-3 text-brutal-black/60">
-                  Budget Bulanan
-                </p>
+              <div className="px-4 py-3 min-h-[116px] flex flex-col justify-between">
+                <div className="flex items-center justify-between gap-3 mb-2.5">
+                  <p className="text-xs font-black uppercase tracking-wider text-brutal-black/60">
+                    Budget Bulanan
+                  </p>
+                  <p className="text-[11px] font-black text-brutal-black/70 whitespace-nowrap">
+                    {fmt(totalBudgetSpent)}
+                    <span className="text-[10px] text-brutal-black/35"> / {fmt(totalBudgetLimit)}</span>
+                  </p>
+                </div>
 
-                {/* Progress bars: 2 columns if both exist, 1 column if solo */}
-                <div className={`grid ${personalMonthlyBudget > 0 && familySupportMonthlyBudget > 0 ? 'grid-cols-2 gap-4' : 'grid-cols-1'} min-h-[72px]`}>
+                <div className="relative h-3 rounded-full overflow-hidden bg-brutal-black/10 mb-3 flex">
+                  {personalMonthlyBudget > 0 && personalBudgetBarPct > 0 && (
+                    <div
+                      className="h-full transition-all duration-700 ease-out"
+                      style={{
+                        width: `${personalBudgetBarPct}%`,
+                        backgroundColor: bc.bar,
+                        ...(bc.over ? {
+                          backgroundImage: `repeating-linear-gradient(
+                            -45deg,
+                            transparent,
+                            transparent 3px,
+                            rgba(0,0,0,0.3) 3px,
+                            rgba(0,0,0,0.3) 6px
+                          )`,
+                        } : {}),
+                      }}
+                    />
+                  )}
+                  {familySupportMonthlyBudget > 0 && familyBudgetBarPct > 0 && (
+                    <div
+                      className="h-full transition-all duration-700 ease-out"
+                      style={{
+                        width: `${familyBudgetBarPct}%`,
+                        backgroundColor: fc.bar,
+                        ...(fc.over ? {
+                          backgroundImage: `repeating-linear-gradient(
+                            -45deg,
+                            transparent,
+                            transparent 3px,
+                            rgba(0,0,0,0.3) 3px,
+                            rgba(0,0,0,0.3) 6px
+                          )`,
+                        } : {}),
+                      }}
+                    />
+                  )}
+                  {personalBudgetBarPct > 0 && familyBudgetBarPct > 0 && (
+                    <div
+                      className="absolute top-0 bottom-0 w-px bg-[#242424]"
+                      style={{ left: `${personalBudgetBarPct}%` }}
+                    />
+                  )}
+                </div>
 
-                  {/* Left/Only: Personal Budget */}
+                <div className={`grid translate-y-1 ${personalMonthlyBudget > 0 && familySupportMonthlyBudget > 0 ? 'grid-cols-2 gap-4' : 'grid-cols-1'} min-h-[45px]`}>
                   {personalMonthlyBudget > 0 && (
-                    <div className="flex flex-col justify-between">
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <div className="flex items-center gap-1.5">
-                            <div className={`w-2 h-2 ${bc.swatch}`} />
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-brutal-black/60">Pribadi</span>
-                          </div>
-                          <span className={`text-[11px] font-black ${bc.text}`}>{budgetSpentPct}%</span>
-                        </div>
-                        <div
-                          className="h-2 overflow-hidden"
-                          style={{ backgroundColor: budgetTrackColor(bc.bar) }}
-                        >
-                          <div
-                            className="h-full transition-all duration-700 ease-out"
-                            style={{
-                              width: `${Math.min(100, budgetSpentPct)}%`,
-                              backgroundColor: bc.bar,
-                              ...(bc.over ? {
-                                backgroundImage: `repeating-linear-gradient(
-                                  -45deg,
-                                  transparent,
-                                  transparent 3px,
-                                  rgba(0,0,0,0.3) 3px,
-                                  rgba(0,0,0,0.3) 6px
-                                )`,
-                              } : {}),
-                            }}
-                          />
-                        </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-2 h-2 rounded-[2px] ${bc.swatch}`} />
+                        <span className="text-[10px] font-black uppercase tracking-wider text-brutal-black/55">Pribadi</span>
+                        <span className={`rounded px-1 py-0.5 text-[9px] font-black leading-none ${bc.text}`} style={{ backgroundColor: budgetTrackColor(bc.bar) }}>
+                          {budgetSpentPct}%
+                        </span>
                       </div>
-                      <div className="mt-2">
-                        <p className="text-sm font-bold leading-none">{fmt(personalSpent)}</p>
-                        <p className={`text-[10px] font-medium mt-1 ${budgetRemaining < 0 ? 'text-red-400 font-bold' : 'text-brutal-black/40'}`}>
+                      <div className="mt-1 flex items-baseline gap-1.5 min-w-0">
+                        <p className="text-xs font-black leading-none">{fmt(personalSpent)}</p>
+                        <p className={`text-[9px] font-medium leading-none whitespace-nowrap ${budgetRemaining < 0 ? 'text-red-400 font-bold' : 'text-brutal-black/40'}`}>
                           {budgetRemaining >= 0 ? `sisa ${fmt(budgetRemaining)}` : `lebih ${fmt(Math.abs(budgetRemaining))}`}
                         </p>
                       </div>
                     </div>
                   )}
-
-                  {/* Right: Keluarga Budget */}
                   {familySupportMonthlyBudget > 0 && (
-                    <div className="flex flex-col justify-between">
-                      <div>
-                        {/* Reversed Header for Right Alignment */}
-                        <div className="flex items-center justify-between mb-1.5 flex-row-reverse">
-                          <div className="flex items-center gap-1.5 flex-row-reverse">
-                            <div className={`w-2 h-2 ${fc.swatch}`} />
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-brutal-black/60">Keluarga</span>
-                          </div>
-                          <span className={`text-[11px] font-black ${fc.text}`}>{familySpentPct}%</span>
-                        </div>
-                        <div
-                          className="h-2 overflow-hidden"
-                          style={{ backgroundColor: budgetTrackColor(fc.bar) }}
-                        >
-                          <div
-                            className="h-full transition-all duration-700 ease-out float-right"
-                            style={{
-                              width: `${Math.min(100, familySpentPct)}%`,
-                              backgroundColor: fc.bar,
-                              ...(fc.over ? {
-                                backgroundImage: `repeating-linear-gradient(
-                                  -45deg,
-                                  transparent,
-                                  transparent 3px,
-                                  rgba(0,0,0,0.3) 3px,
-                                  rgba(0,0,0,0.3) 6px
-                                )`,
-                              } : {}),
-                            }}
-                          />
-                        </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-2 h-2 rounded-[2px] ${fc.swatch}`} />
+                        <span className="text-[10px] font-black uppercase tracking-wider text-brutal-black/55">Keluarga</span>
+                        <span className={`rounded px-1 py-0.5 text-[9px] font-black leading-none ${fc.text}`} style={{ backgroundColor: budgetTrackColor(fc.bar) }}>
+                          {familySpentPct}%
+                        </span>
                       </div>
-                      <div className="mt-2 text-right">
-                        <p className="text-sm font-bold leading-none">{fmt(familySupportSpent)}</p>
-                        <p className={`text-[10px] font-medium mt-1 ${familyRemaining < 0 ? 'text-red-400 font-bold' : 'text-brutal-black/40'}`}>
+                      <div className="mt-1 flex items-baseline gap-1.5 min-w-0">
+                        <p className="text-xs font-black leading-none">{fmt(familySupportSpent)}</p>
+                        <p className={`text-[9px] font-medium leading-none whitespace-nowrap ${familyRemaining < 0 ? 'text-red-400 font-bold' : 'text-brutal-black/40'}`}>
                           {familyRemaining >= 0 ? `sisa ${fmt(familyRemaining)}` : `lebih ${fmt(Math.abs(familyRemaining))}`}
                         </p>
                       </div>
