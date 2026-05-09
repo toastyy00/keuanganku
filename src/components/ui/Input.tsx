@@ -18,6 +18,8 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   rightSection?: React.ReactNode;
   /** Container className override */
   wrapperClassName?: string;
+  /** Label className override */
+  labelClassName?: string;
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
@@ -30,6 +32,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       leftSection,
       rightSection,
       wrapperClassName,
+      labelClassName,
       id,
       ...props
     },
@@ -44,7 +47,8 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             htmlFor={inputId}
             className={cn(
               'text-xs font-bold uppercase tracking-wider',
-              error ? 'text-brutal-red' : 'text-brutal-black'
+              error ? 'text-brutal-red' : 'text-brutal-black',
+              labelClassName
             )}
           >
             {label}
@@ -114,10 +118,11 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
   error?: string;
   hint?: string;
   wrapperClassName?: string;
+  labelClassName?: string;
 }
 
 const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ className, label, error, hint, wrapperClassName, id, ...props }, ref) => {
+  ({ className, label, error, hint, wrapperClassName, labelClassName, id, ...props }, ref) => {
     const inputId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
 
     return (
@@ -127,7 +132,8 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
             htmlFor={inputId}
             className={cn(
               'text-xs font-bold uppercase tracking-wider',
-              error ? 'text-brutal-red' : 'text-brutal-black'
+              error ? 'text-brutal-red' : 'text-brutal-black',
+              labelClassName
             )}
           >
             {label}

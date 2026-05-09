@@ -46,6 +46,7 @@ const AddAssetSheet: React.FC<AddAssetSheetProps> = ({ isOpen, onClose, lockedTi
   const [errors, setErrors] = useState<{ ticker?: string; amount?: string; location?: string }>({});
   const activeTicker = lockedTicker ?? ticker;
   const normalizedTicker = activeTicker.trim().toUpperCase();
+  const holdingTypeIndex = Math.max(0, HOLDING_TYPES.findIndex((type) => type.value === holdingType));
 
   useEffect(() => {
     if (isOpen) {
@@ -92,7 +93,7 @@ const AddAssetSheet: React.FC<AddAssetSheetProps> = ({ isOpen, onClose, lockedTi
       >
         {lockedTicker ? (
           <div className="neo-card flex items-center justify-between px-3 py-2">
-            <p className="text-xs font-black uppercase text-brutal-black/50">Ticker Locked</p>
+            <p className="text-xs font-black uppercase text-brutal-black/50">Ticker Selected</p>
             <p className="text-lg font-black">{lockedTicker}</p>
           </div>
         ) : (
@@ -101,7 +102,8 @@ const AddAssetSheet: React.FC<AddAssetSheetProps> = ({ isOpen, onClose, lockedTi
               label="Ticker"
               value={ticker}
               error={errors.ticker}
-              className="pr-12"
+              wrapperClassName="!gap-1"
+              className="rounded-md pr-12"
               onKeyDown={(event) => {
                 if (event.key !== 'Enter') return;
                 event.preventDefault();
@@ -180,6 +182,8 @@ const AddAssetSheet: React.FC<AddAssetSheetProps> = ({ isOpen, onClose, lockedTi
         <Input
           label="Amount"
           type="number"
+          wrapperClassName="!gap-1"
+          className="rounded-md"
           value={amount}
           error={errors.amount}
           onChange={(e) => {
@@ -189,6 +193,8 @@ const AddAssetSheet: React.FC<AddAssetSheetProps> = ({ isOpen, onClose, lockedTi
         />
         <Input
           label="Location"
+          wrapperClassName="!gap-1"
+          className="rounded-md"
           value={location}
           error={errors.location}
           onChange={(e) => {
@@ -197,28 +203,34 @@ const AddAssetSheet: React.FC<AddAssetSheetProps> = ({ isOpen, onClose, lockedTi
           }}
           placeholder="Wallet, Hydro, Ledger..."
         />
-        <Input label="Chain Optional" value={chain} onChange={(e) => setChain(e.target.value)} placeholder="Ethereum, Base, Ink..." />
+        <Input label="Chain Optional" wrapperClassName="!gap-1" className="rounded-md" value={chain} onChange={(e) => setChain(e.target.value)} placeholder="Ethereum, Base, Ink..." />
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <p className="text-xs font-bold uppercase tracking-wider text-brutal-black">Holding Type</p>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="relative grid w-full grid-cols-3 rounded-full bg-[#1B1B1B] p-1">
+            <span
+              className="pointer-events-none absolute inset-y-1 left-1 rounded-full transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform"
+              style={{
+                width: 'calc((100% - 0.5rem) / 3)',
+                transform: `translateX(${holdingTypeIndex * 100}%)`,
+                backgroundColor: colorTheme,
+              }}
+              aria-hidden="true"
+            />
             {HOLDING_TYPES.map((type) => (
               <button
                 key={type.value}
                 type="button"
-                className={`neo-btn-secondary px-2 py-2 !text-xs !font-black leading-tight ${holdingType === type.value ? '!text-[#1A1A1A]' : '!text-[#F5F0E8]'}`}
-                style={holdingType === type.value ? { backgroundColor: colorTheme } : undefined}
+                className={`relative z-10 flex items-center justify-center gap-1 rounded-full px-2 py-1.5 text-[11px] font-black uppercase leading-none tracking-wider transition-colors duration-200 ${holdingType === type.value ? 'text-[#1A1A1A]' : 'text-[#F5F0E8]/45 hover:text-[#F5F0E8]/75'}`}
                 onClick={() => setHoldingType(type.value)}
               >
-                <span className="inline-flex items-center justify-center gap-1">
-                  {type.icon}
-                  {type.label}
-                </span>
+                {type.icon}
+                {type.label}
               </button>
             ))}
           </div>
         </div>
-        <Textarea label="Note Optional" value={note} onChange={(e) => setNote(e.target.value)} />
+        <Textarea label="Note Optional" wrapperClassName="!gap-1" className="rounded-md" value={note} onChange={(e) => setNote(e.target.value)} />
         <Button
           fullWidth
           loading={saving}

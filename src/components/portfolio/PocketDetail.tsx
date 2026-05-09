@@ -54,7 +54,6 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
   const refreshChartSeries = usePortfolioStore((s) => s.refreshChartSeries);
   const addAsset = usePortfolioStore((s) => s.addAsset);
   const addHolding = usePortfolioStore((s) => s.addHolding);
-  const updateAssetMetadata = usePortfolioStore((s) => s.updateAssetMetadata);
   const updateAssetAmount = usePortfolioStore((s) => s.updateAssetAmount);
   const removeAsset = usePortfolioStore((s) => s.removeAsset);
   const updatePocket = usePortfolioStore((s) => s.updatePocket);
@@ -427,11 +426,6 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
         colorTheme={pocket.color_theme}
         onApply={async (assetId, newAmount, action, note) => {
           await updateAssetAmount(assetId, newAmount, action, note);
-          await refreshPrices(pocketId);
-          await refreshChartSeries(pocketId, timeframe);
-        }}
-        onSaveMetadata={async (assetId, input) => {
-          await updateAssetMetadata(assetId, input);
           await refreshPrices(pocketId);
           await refreshChartSeries(pocketId, timeframe);
         }}

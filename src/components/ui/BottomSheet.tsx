@@ -24,6 +24,8 @@ interface BottomSheetProps {
   panelClassName?: string;
   /** Extra class for the inner content wrapper */
   contentClassName?: string;
+  /** Optional style for the inner content wrapper */
+  contentStyle?: React.CSSProperties;
   /** Keep mobile swipe gestures inside this sheet so page pull-to-refresh is not triggered */
   containPageOverscroll?: boolean;
   children?: React.ReactNode;
@@ -70,6 +72,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
   disableBackdropClose = false,
   panelClassName,
   contentClassName,
+  contentStyle,
   containPageOverscroll = false,
   children,
 }) => {
@@ -423,7 +426,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
         )}
 
         {/* Content */}
-        <div ref={contentRef} className={cn("px-4 py-4", contentClassName)}>
+        <div ref={contentRef} className={cn("px-4 py-4", contentClassName)} style={contentStyle}>
           {children}
         </div>
 

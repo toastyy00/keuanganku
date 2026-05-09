@@ -5,7 +5,6 @@ import { Button } from '../components/ui/Button';
 import { Input, Textarea } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
 import { CategoryPicker } from '../components/ui/CategoryPicker';
-import { Toggle } from '../components/ui/Toggle';
 import { Card, CardBody } from '../components/ui/Card';
 import { useExpenseStore } from '../store/useExpenseStore';
 import { useUIStore } from '../store/useAppStore';
@@ -14,6 +13,11 @@ import { formatCurrency, friendlyDate } from '../lib/utils';
 import type { ExpenseType, RecurringTemplate } from '../types';
 
 function haptic() { if ('vibrate' in navigator) navigator.vibrate(10); }
+
+const RECURRING_TYPE_OPTIONS: Array<{ id: ExpenseType; label: string; color: string }> = [
+  { id: 'NEED', label: 'Need', color: '#5B9CF6' },
+  { id: 'WANT', label: 'Want', color: '#F472B6' },
+];
 
 interface RecurringFormState {
   name: string;
@@ -40,6 +44,8 @@ const AddRecurringSheet: React.FC<AddRecurringSheetProps> = ({ isOpen, onClose, 
   const [saving, setSaving] = useState(false);
 
   const amountInput = useCurrencyInput(currency);
+  const activeTypeIndex = Math.max(0, RECURRING_TYPE_OPTIONS.findIndex((item) => item.id === form.type));
+  const activeTypeColor = RECURRING_TYPE_OPTIONS[activeTypeIndex]?.color ?? '#5B9CF6';
 
   useEffect(() => {
     if (!isOpen) return;
@@ -109,27 +115,53 @@ const AddRecurringSheet: React.FC<AddRecurringSheetProps> = ({ isOpen, onClose, 
             {errors.root}
           </div>
         )}
-        <Toggle
-          label="Tipe"
-          value={form.type}
-          onChange={(v) => setForm((f) => ({ ...f, type: v }))}
-          options={['NEED', 'WANT']}
-        />
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-bold uppercase leading-none tracking-wider text-brutal-black">
+            Tipe
+          </label>
+          <div className="relative grid w-full grid-cols-2 rounded-full bg-[#1B1B1B] p-1">
+            <span
+              className="pointer-events-none absolute inset-y-1 left-1 rounded-full transition-[transform,background-color] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform"
+              style={{
+                width: 'calc((100% - 0.5rem) / 2)',
+                transform: `translateX(${activeTypeIndex * 100}%)`,
+                backgroundColor: activeTypeColor,
+              }}
+              aria-hidden="true"
+            />
+            {RECURRING_TYPE_OPTIONS.map((item) => {
+              const isActive = form.type === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, type: item.id }))}
+                  className={`relative z-10 rounded-full px-3 py-1.5 text-[11px] font-black uppercase leading-none tracking-wider transition-colors duration-200 ${isActive ? 'text-[#1A1A1A]' : 'text-[#F5F0E8]/45 hover:text-[#F5F0E8]/75'}`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <Input
           label="Nama"
           placeholder="Nama pengeluaran..."
           value={form.name}
           onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
           error={errors.name}
+          wrapperClassName="!gap-1"
+          labelClassName="!leading-none"
+          className="rounded-md"
           style={{ fontSize: '16px' }}
         />
 
         {/* Amount with live formatting */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold uppercase tracking-wider">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-bold uppercase leading-none tracking-wider">
             Nominal ({currency})
           </label>
-          <div className={`flex border-2 border-[#555555] bg-[#222222] transition-all duration-150 ${errors.amount ? 'border-red-500' : 'focus-within:border-brutal-yellow focus-within:shadow-[3px_3px_0px_0px_#7ABF3A]'}`}>
+          <div className={`flex overflow-hidden rounded-md border-2 border-[#555555] bg-[#222222] transition-all duration-150 ${errors.amount ? 'border-red-500' : 'focus-within:border-brutal-yellow focus-within:shadow-[3px_3px_0px_0px_#7ABF3A]'}`}>
             <span className="flex items-center pl-3 text-sm font-bold text-brutal-black/60 shrink-0">
               {currency === 'IDR' ? 'Rp' : '$'}
             </span>
@@ -146,12 +178,14 @@ const AddRecurringSheet: React.FC<AddRecurringSheetProps> = ({ isOpen, onClose, 
           {errors.amount && <p className="text-xs font-bold text-red-500">{errors.amount}</p>}
         </div>
 
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-bold uppercase leading-none tracking-wider">Kategori</label>
           <CategoryPicker
-            label="Kategori"
+            label=""
             value={form.category}
             onChange={(slug) => setForm((f) => ({ ...f, category: slug }))}
             categories={categories}
+            buttonClassName="rounded-md"
           />
         </div>
 
@@ -160,6 +194,9 @@ const AddRecurringSheet: React.FC<AddRecurringSheetProps> = ({ isOpen, onClose, 
           placeholder="Kapan pengeluaran ini biasa terjadi..."
           value={form.schedule_detail}
           onChange={(e) => setForm((f) => ({ ...f, schedule_detail: e.target.value }))}
+          wrapperClassName="!gap-1"
+          labelClassName="!leading-none"
+          className="rounded-md"
           style={{ fontSize: '16px' }}
         />
 
@@ -168,6 +205,9 @@ const AddRecurringSheet: React.FC<AddRecurringSheetProps> = ({ isOpen, onClose, 
           placeholder="Catatan tambahan..."
           value={form.note}
           onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
+          wrapperClassName="!gap-1"
+          labelClassName="!leading-none"
+          className="rounded-md"
           style={{ fontSize: '16px' }}
         />
 

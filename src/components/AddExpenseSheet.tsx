@@ -15,6 +15,12 @@ import type { Currency, ExpenseType } from '../types';
 //  ADD / EDIT EXPENSE BOTTOM SHEET
 // ============================================================
 
+const EXPENSE_TYPE_OPTIONS: Array<{ id: ExpenseType; label: string; color: string }> = [
+  { id: 'NEED', label: 'Need', color: '#5B9CF6' },
+  { id: 'WANT', label: 'Want', color: '#F472B6' },
+  { id: 'TRANSFER', label: 'Transfer', color: '#FB923C' },
+];
+
 function haptic() {
   if ('vibrate' in navigator) navigator.vibrate(10);
 }
@@ -241,6 +247,8 @@ const AddExpenseSheet: React.FC = () => {
   // ── Render ─────────────────────────────────────────────────
   const symbol = entryCurrency === 'IDR' ? 'Rp' : '$';
   const isTransfer = type === 'TRANSFER';
+  const activeTypeIndex = Math.max(0, EXPENSE_TYPE_OPTIONS.findIndex((item) => item.id === type));
+  const activeTypeColor = EXPENSE_TYPE_OPTIONS[activeTypeIndex]?.color ?? '#5B9CF6';
   const formattedDate = date
     ? new Intl.DateTimeFormat('id-ID', {
       weekday: 'long',
@@ -266,29 +274,28 @@ const AddExpenseSheet: React.FC = () => {
         )}
 
         {/* Tipe Transaksi Chips */}
-        <div className="flex flex-col gap-1.5 pt-1">
-          <label className="text-sm font-bold uppercase tracking-wider text-brutal-black/80">
+        <div className="flex flex-col gap-1 pt-1">
+          <label className="text-sm font-bold uppercase leading-none tracking-wider text-brutal-black/80">
             Jenis Pengeluaran
           </label>
-          <div className="flex gap-2.5">
-            {[
-              { id: 'NEED', label: 'Need', color: '#5B9CF6' }, // Blue
-              { id: 'WANT', label: 'Want', color: '#F472B6' }, // Pink
-              { id: 'TRANSFER', label: 'Transfer', color: '#FB923C' }, // Orange
-            ].map((item) => {
+          <div className="relative grid w-full grid-cols-3 rounded-full bg-[#1B1B1B] p-1">
+            <span
+              className="pointer-events-none absolute inset-y-1 left-1 rounded-full transition-[transform,background-color] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform"
+              style={{
+                width: 'calc((100% - 0.5rem) / 3)',
+                transform: `translateX(${activeTypeIndex * 100}%)`,
+                backgroundColor: activeTypeColor,
+              }}
+              aria-hidden="true"
+            />
+            {EXPENSE_TYPE_OPTIONS.map((item) => {
               const isActive = type === item.id;
               return (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => handleTypeChange(item.id as ExpenseType)}
-                  className="flex-1 flex items-center justify-center py-2 px-0.5 border-2 font-black uppercase text-sm transition-[transform,box-shadow,border-color,color,background-color] duration-150 ease-out [box-shadow:3px_3px_0px_0px_var(--chip-shadow)] active:translate-x-[3px] active:translate-y-[3px] active:[box-shadow:0px_0px_0px_0px_transparent]"
-                  style={{
-                    borderColor: isActive ? item.color : '#555555',
-                    color: isActive ? item.color : '#A09890',
-                    backgroundColor: isActive ? '#1A1A1A' : 'transparent',
-                    '--chip-shadow': isActive ? item.color : 'transparent',
-                  } as React.CSSProperties & { '--chip-shadow': string }}
+                  className={`relative z-10 flex items-center justify-center rounded-full px-2 py-1.5 text-[11px] font-black uppercase leading-none tracking-wider transition-colors duration-200 ${isActive ? 'text-[#1A1A1A]' : 'text-[#F5F0E8]/45 hover:text-[#F5F0E8]/75'}`}
                 >
                   <span className="inline-block min-w-[54px] text-center leading-none">
                     {item.label}
@@ -307,19 +314,22 @@ const AddExpenseSheet: React.FC = () => {
           value={name}
           onChange={(e) => setName(e.target.value)}
           error={errors.name}
+          wrapperClassName="!gap-1"
+          labelClassName="!leading-none"
+          className="rounded-md"
           style={{ fontSize: '16px' }}
           autoComplete="off"
           autoCapitalize="words"
         />
 
         {/* Amount + Currency pill */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold uppercase tracking-wider">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-bold uppercase leading-none tracking-wider">
             Nominal
           </label>
           <div className="flex gap-2">
             <div
-              className={`flex-1 flex border-2 border-[#555555] bg-[#222222] transition-all duration-150 ${flashAmount ? 'bg-brutal-yellow' : ''
+              className={`flex-1 flex overflow-hidden rounded-md border-2 border-[#555555] bg-[#222222] transition-all duration-150 ${flashAmount ? 'bg-brutal-yellow' : ''
                 } ${errors.amount ? 'border-red-500' : 'focus-within:border-brutal-yellow focus-within:shadow-[3px_3px_0px_0px_#7ABF3A]'}`}
             >
               <span className="flex items-center pl-3 text-sm font-bold text-brutal-black/60 shrink-0">
@@ -341,7 +351,7 @@ const AddExpenseSheet: React.FC = () => {
             <button
               type="button"
               onClick={handleCurrencySwitch}
-              className="shrink-0 px-3 border-2 border-[#555555] font-black text-sm uppercase min-w-[56px] min-h-[44px] transition-all duration-150 text-brutal-yellow hover:opacity-80"
+              className="min-h-[44px] min-w-[56px] shrink-0 rounded-md border-2 border-[#555555] px-3 text-sm font-black uppercase text-brutal-yellow transition-all duration-150 hover:opacity-80"
               aria-label={`Switch to ${entryCurrency === 'IDR' ? 'USD' : 'IDR'}`}
             >
               {entryCurrency}
@@ -353,15 +363,15 @@ const AddExpenseSheet: React.FC = () => {
         </div>
 
         {/* Date */}
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="expense-date" className="text-xs font-bold uppercase tracking-wider">
+        <div className="flex flex-col gap-1">
+          <label htmlFor="expense-date" className="text-xs font-bold uppercase leading-none tracking-wider">
             Tanggal
           </label>
           <div className="relative">
             <button
               type="button"
               onClick={openDatePicker}
-              className={`neo-input min-h-[44px] w-full px-3 py-2.5 pr-10 flex items-center text-left font-bold text-brutal-black transition-all duration-150 ${isDateFieldFocused ? '!border-brutal-yellow !shadow-[3px_3px_0px_0px_#7ABF3A]' : ''
+              className={`neo-input flex min-h-[44px] w-full items-center rounded-md px-3 py-2.5 pr-10 text-left font-bold text-brutal-black transition-all duration-150 ${isDateFieldFocused ? '!border-brutal-yellow !shadow-[3px_3px_0px_0px_#7ABF3A]' : ''
                 }`}
               aria-label={`Tanggal: ${formattedDate}`}
             >
@@ -395,19 +405,22 @@ const AddExpenseSheet: React.FC = () => {
             value={destination}
             onChange={(e) => setDestination(e.target.value)}
             error={errors.destination}
+            wrapperClassName="!gap-1"
+            labelClassName="!leading-none"
+            className="rounded-md"
             style={{ fontSize: '16px' }}
           />
         ) : (
           /* Category + AI suggest */
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider">Kategori</label>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold uppercase leading-none tracking-wider">Kategori</label>
             <CategoryPicker
               label=""
               value={category}
               onChange={setCategory}
               categories={categories}
               panelClassName="sm:max-h-[260px]"
-              buttonClassName="!min-h-[44px]"
+              buttonClassName="!min-h-[44px] rounded-md"
             />
           </div>
         )}
@@ -419,6 +432,9 @@ const AddExpenseSheet: React.FC = () => {
           placeholder="Catatan tambahan..."
           value={note}
           onChange={(e) => setNote(e.target.value)}
+          wrapperClassName="!gap-1"
+          labelClassName="!leading-none"
+          className="rounded-md"
           style={{ fontSize: '16px' }}
         />
 

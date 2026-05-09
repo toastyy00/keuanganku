@@ -38,6 +38,7 @@ const PocketSettingsSheet: React.FC<PocketSettingsSheetProps> = ({ isOpen, onClo
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [errors, setErrors] = useState<{ name?: string }>({});
+  const sourceTypeIndex = Math.max(0, SOURCES.findIndex((item) => item === sourceType));
 
   useEffect(() => {
     setName(pocket?.name ?? '');
@@ -72,52 +73,70 @@ const PocketSettingsSheet: React.FC<PocketSettingsSheetProps> = ({ isOpen, onClo
             label="Name"
             value={name}
             error={errors.name}
+            wrapperClassName="!gap-1"
             onChange={(e) => {
               setName(e.target.value);
               setErrors((current) => ({ ...current, name: undefined }));
             }}
-            className="!py-2.5"
+            className="rounded-md !py-2.5"
           />
           <div>
-            <p className="mb-2 text-xs font-bold uppercase">Source Type</p>
-            <div className="grid grid-cols-4 gap-1.5">
+            <p className="mb-1.5 text-xs font-bold uppercase">Source Type</p>
+            <div className="relative grid w-full grid-cols-4 rounded-full bg-[#1B1B1B] p-1">
+              <span
+                className="pointer-events-none absolute inset-y-1 left-1 rounded-full transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform"
+                style={{
+                  width: 'calc((100% - 0.5rem) / 4)',
+                  transform: `translateX(${sourceTypeIndex * 100}%)`,
+                  backgroundColor: colorTheme,
+                }}
+                aria-hidden="true"
+              />
               {SOURCES.map((item) => (
                 <button
                   key={item}
                   type="button"
                   onClick={() => setSourceType(item)}
-                  className={`border-2 px-2 py-2 text-[11px] font-black uppercase transition-colors ${sourceType === item ? 'text-[#1A1A1A]' : 'border-[#F5F0E8] bg-transparent text-[#F5F0E8]'}`}
-                  style={sourceType === item ? { borderColor: colorTheme, backgroundColor: colorTheme } : undefined}
+                  className={`relative z-10 flex items-center justify-center rounded-full px-2 py-1.5 text-[11px] font-black uppercase leading-none tracking-wider transition-colors duration-200 ${sourceType === item ? 'text-[#1A1A1A]' : 'text-[#F5F0E8]/45 hover:text-[#F5F0E8]/75'}`}
                 >
                   {item}
                 </button>
               ))}
             </div>
           </div>
-          <Input label="Source" value={source} onChange={(e) => setSource(e.target.value)} placeholder="Optional" className="!py-2.5" />
+          <Input label="Source" wrapperClassName="!gap-1" value={source} onChange={(e) => setSource(e.target.value)} placeholder="Optional" className="rounded-md !py-2.5" />
           <div>
-            <p className="mb-2 text-xs font-bold uppercase">Theme</p>
-            <div className="grid grid-cols-5 gap-2">
+            <p className="mb-1.5 text-xs font-bold uppercase">Theme</p>
+            <div className="grid grid-cols-5 gap-2 rounded-lg bg-[#1B1B1B] p-2">
               {COLORS.map((item) => (
                 <button
                   key={item}
                   type="button"
                   onClick={() => setColorTheme(item)}
-                  className={`h-8 w-full border-[3px] ${colorTheme === item ? 'border-[#F5F0E8]' : 'border-transparent'}`}
+                  className={`h-8 rounded-full border transition-all duration-150 ${
+                    colorTheme === item
+                      ? 'border-[#F5F0E8] shadow-[0_0_0_2px_rgba(245,240,232,0.16)]'
+                      : 'border-[#F5F0E8]/10 hover:border-[#F5F0E8]/45 hover:saturate-125'
+                  }`}
                   style={{ backgroundColor: item }}
+                  aria-label={`Use theme color ${item}`}
                 />
               ))}
             </div>
           </div>
           <div>
-            <p className="mb-2 text-xs font-bold uppercase">Icon</p>
+            <p className="mb-1.5 text-xs font-bold uppercase">Icon</p>
             <div className="grid grid-cols-5 gap-2">
               {ICONS.map((item) => (
                 <button
                   key={item}
                   type="button"
                   onClick={() => setIcon(item)}
-                  className={`flex h-10 items-center justify-center border-2 transition-colors ${icon === item ? '' : 'border-[#F5F0E8] text-[#F5F0E8]'}`}
+                  className={`flex h-10 items-center justify-center rounded-md border transition-all duration-150 ${
+                    icon === item
+                      ? 'bg-[#1B1B1B] shadow-[2px_2px_0_0_rgba(245,240,232,0.22)]'
+                      : 'border-[#F5F0E8]/20 bg-[#242424] text-[#F5F0E8]/45 hover:border-[#F5F0E8]/45 hover:text-[#F5F0E8]/75'
+                  }`}
                   style={icon === item ? { borderColor: colorTheme, color: colorTheme } : undefined}
                 >
                   {renderIcon(item)}
@@ -125,53 +144,55 @@ const PocketSettingsSheet: React.FC<PocketSettingsSheetProps> = ({ isOpen, onClo
               ))}
             </div>
           </div>
-          <button
-            type="button"
-            disabled={saving}
-            className="w-full border-2 py-3 text-sm font-black uppercase text-[#1A1A1A] shadow-[4px_4px_0_0_#000] transition-transform active:translate-x-1 active:translate-y-1 active:shadow-none disabled:opacity-60"
-            style={{ borderColor: colorTheme, backgroundColor: colorTheme }}
-            onClick={async () => {
-              const nextErrors = {
-                name: !name.trim() ? 'Name wajib diisi' : undefined,
-              };
-              setErrors(nextErrors);
-              if (nextErrors.name) return;
-              setSaving(true);
-              try {
-                await onSave({
-                  name: name.trim(),
-                  source_type: sourceType,
-                  source: source.trim() || undefined,
-                  color_theme: colorTheme,
-                  icon,
-                  sort_order: pocket?.sort_order ?? 0,
-                });
-                onClose();
-              } finally {
-                setSaving(false);
-              }
-            }}
-          >
-            {saving ? 'SAVING...' : 'SAVE'}
-          </button>
-          {!!pocket && !!onDelete && (
+          <div className={`grid gap-2 ${pocket && onDelete ? 'grid-cols-[1fr_auto]' : 'grid-cols-1'}`}>
             <button
               type="button"
-              className="w-full border-2 border-[#F87171] bg-[#2A1A1A] py-3 text-sm font-black uppercase text-[#F87171] shadow-[4px_4px_0_0_#000] transition-transform active:translate-x-1 active:translate-y-1 active:shadow-none"
-              onClick={() => {
-                onClose();
-                setConfirmDeleteOpen(true);
+              disabled={saving}
+              className="w-full border-2 py-3 text-sm font-black uppercase text-[#1A1A1A] shadow-[4px_4px_0_0_#000] transition-transform active:translate-x-1 active:translate-y-1 active:shadow-none disabled:opacity-60"
+              style={{ borderColor: colorTheme, backgroundColor: colorTheme }}
+              onClick={async () => {
+                const nextErrors = {
+                  name: !name.trim() ? 'Name wajib diisi' : undefined,
+                };
+                setErrors(nextErrors);
+                if (nextErrors.name) return;
+                setSaving(true);
+                try {
+                  await onSave({
+                    name: name.trim(),
+                    source_type: sourceType,
+                    source: source.trim() || undefined,
+                    color_theme: colorTheme,
+                    icon,
+                    sort_order: pocket?.sort_order ?? 0,
+                  });
+                  onClose();
+                } finally {
+                  setSaving(false);
+                }
               }}
             >
-              DELETE POCKET
+              {saving ? 'SAVING...' : 'SAVE'}
             </button>
-          )}
+            {!!pocket && !!onDelete && (
+              <button
+                type="button"
+                className="whitespace-nowrap border-2 border-[#F87171] bg-[#2A1A1A] px-3 py-3 text-sm font-black uppercase text-[#F87171] shadow-[4px_4px_0_0_#000] transition-transform active:translate-x-1 active:translate-y-1 active:shadow-none"
+                onClick={() => {
+                  onClose();
+                  setConfirmDeleteOpen(true);
+                }}
+              >
+                DELETE
+              </button>
+            )}
+          </div>
         </div>
       </BottomSheet>
       <ConfirmModal
         isOpen={confirmDeleteOpen}
         title="Hapus Pocket?"
-        description="Aset dan aktivitas di pocket ini juga akan ikut terhapus."
+        description={`Pocket "${pocket?.name ?? (name || 'ini')}" beserta aset dan aktivitas di dalamnya akan ikut terhapus.`}
         confirmLabel="Ya, Hapus"
         cancelLabel="Batal"
         loading={deleting}

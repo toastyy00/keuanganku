@@ -661,6 +661,12 @@
   transform: translate3d(0, 0, 0);
 }
 
+.portfolio-remove-hold-button:active:not(.is-complete) {
+  transition-duration: 45ms;
+  box-shadow: 2px 2px 0px 0px #000;
+  transform: translate3d(2px, 2px, 0);
+}
+
 .portfolio-remove-hold-button.is-complete {
   box-shadow: 0px 0px 0px 0px #000;
   transform: translate3d(4px, 4px, 0);
