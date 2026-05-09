@@ -1,10 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, BriefcaseBusiness, Ellipsis, Landmark, Link2, Shield, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { usePortfolioStore } from '../../store/usePortfolioStore';
 import type { PortfolioPocket } from '../../types';
 import { PocketSettingsSheet } from './PocketSettingsSheet';
 import { TotalPortfolioCard } from './TotalPortfolioCard';
+
+type PocketListTimeframe = '24H';
 
 interface PocketListProps {
   onOpenPocket: (pocket: PortfolioPocket) => void;
@@ -31,6 +33,23 @@ function renderPocketIcon(icon?: string) {
   return <BriefcaseBusiness size={26} strokeWidth={2.4} />;
 }
 
+function getPocketChangePct(points: { timestamp: number; value: number }[]): number | null {
+  if (points.length < 2) return null;
+
+  const first = points[0]?.value ?? 0;
+  const last = points[points.length - 1]?.value ?? 0;
+  if (!Number.isFinite(first) || !Number.isFinite(last) || first === 0) return null;
+
+  return ((last - first) / first) * 100;
+}
+
+function formatPocketChangePct(changePct: number): string {
+  const sign = changePct >= 0 ? '+' : '-';
+  return `${sign}${Math.abs(changePct).toFixed(2)}%`;
+}
+
+const POCKET_LIST_CHANGE_TIMEFRAME: PocketListTimeframe = '24H';
+
 const PocketList: React.FC<PocketListProps> = ({
   onOpenPocket,
   shouldAnimateTotalSparkline,
@@ -40,6 +59,8 @@ const PocketList: React.FC<PocketListProps> = ({
   const pockets = usePortfolioStore((s) => s.pockets);
   const assets = usePortfolioStore((s) => s.assets);
   const prices = usePortfolioStore((s) => s.prices);
+  const chartSeriesByCacheKey = usePortfolioStore((s) => s.chartSeriesByCacheKey);
+  const refreshChartSeries = usePortfolioStore((s) => s.refreshChartSeries);
   const addPocket = usePortfolioStore((s) => s.addPocket);
   const updatePocket = usePortfolioStore((s) => s.updatePocket);
   const deletePocket = usePortfolioStore((s) => s.deletePocket);
@@ -62,6 +83,29 @@ const PocketList: React.FC<PocketListProps> = ({
       return b.created_at.localeCompare(a.created_at);
     });
   }, [assets, pockets, prices]);
+
+  const pocketChartRefreshKey = useMemo(
+    () => assets
+      .map((asset) => [
+        asset.pocket_id,
+        asset.id,
+        asset.ticker,
+        asset.coingecko_id ?? '',
+        asset.amount,
+      ].join(':'))
+      .sort()
+      .join('|'),
+    [assets],
+  );
+
+  useEffect(() => {
+    const pocketIdsWithAssets = Array.from(new Set(assets.map((asset) => asset.pocket_id)));
+    if (pocketIdsWithAssets.length === 0) return;
+
+    void Promise.allSettled(
+      pocketIdsWithAssets.map((pocketId) => refreshChartSeries(pocketId, POCKET_LIST_CHANGE_TIMEFRAME)),
+    );
+  }, [pocketChartRefreshKey, assets, refreshChartSeries]);
 
   return (
     <div className="space-y-4">
@@ -105,7 +149,9 @@ const PocketList: React.FC<PocketListProps> = ({
       <div className="space-y-2.5">
         {sortedPockets.map((pocket) => {
           const count = assets.filter((item) => item.pocket_id === pocket.id).length;
-          const sourceLine = `${pocket.source_type}${pocket.source ? ` - ${pocket.source.toUpperCase()}` : ''} - ${count} ASSETS`;
+          const sourceLine = `${pocket.source_type}${pocket.source ? ` ${pocket.source.toUpperCase()}` : ''} - ${count} ASSETS`;
+          const changePct = getPocketChangePct(chartSeriesByCacheKey[`${pocket.id}::${POCKET_LIST_CHANGE_TIMEFRAME}`] ?? []);
+          const isPositiveChange = changePct !== null && changePct >= 0;
 
           return (
             <div
@@ -145,7 +191,14 @@ const PocketList: React.FC<PocketListProps> = ({
 
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[17px] font-black leading-[0.95] tracking-[-0.01em] text-[#F5F0E8]">{pocket.name}</p>
-                  <p className="mt-0.5 text-[8px] font-black uppercase tracking-[0.08em] text-[#F5F0E8]/90">{sourceLine}</p>
+                  <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                    <p className="truncate text-[8px] font-black uppercase tracking-[0.08em] text-[#F5F0E8]/90">{sourceLine}</p>
+                    {changePct !== null && (
+                      <span className="shrink-0 text-[8px] font-black leading-none tracking-[0.08em]" style={{ color: isPositiveChange ? '#22C55E' : '#EF4444' }}>
+                        {formatPocketChangePct(changePct)}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <button
