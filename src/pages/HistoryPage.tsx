@@ -53,6 +53,7 @@ import type { ExpenseType, Expense } from '../types';
 
 type TypeFilter = 'ALL' | ExpenseType;
 type InsightIntent = 'combined' | 'deep_analysis' | 'breakdown';
+type InsightActionFeedback = { intent: InsightIntent; state: 'loading' | 'done' | 'active' };
 type SearchScope = 'month' | 'all';
 
 export interface BreakdownItem {
@@ -343,6 +344,7 @@ const HistoryPage: React.FC = () => {
   }, [openHistoryInsight, closeHistoryInsight]);
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
+  const [insightActionFeedback, setInsightActionFeedback] = useState<InsightActionFeedback | null>(null);
   const [assistantError, setAssistantError] = useState<string | null>(null);
   const [isQuickInsightExpanded, setIsQuickInsightExpanded] = useState(false);
   const [pendingDeletes, setPendingDeletes] = useState<Record<string, PendingDeleteEntry>>({});
@@ -354,6 +356,7 @@ const HistoryPage: React.FC = () => {
   const deleteTokenSeqRef = useRef(0);
   const activeDeleteTokensRef = useRef<Record<string, number>>({});
   const previousFlowMonthPrefixRef = useRef<string | null>(null);
+  const insightFeedbackTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     getExchangeRate().then((res) => setRateInfo(res));
@@ -1042,12 +1045,44 @@ const HistoryPage: React.FC = () => {
     setAssistantMessages((prev) => prev.length === 0 ? [introMessage(resolvedScopeLabel)] : prev);
   }, [resolvedScopeLabel]);
 
+  useEffect(() => () => {
+    if (insightFeedbackTimeoutRef.current) {
+      window.clearTimeout(insightFeedbackTimeoutRef.current);
+    }
+  }, []);
+
+  const clearInsightActionFeedback = useCallback(() => {
+    if (insightFeedbackTimeoutRef.current) {
+      window.clearTimeout(insightFeedbackTimeoutRef.current);
+      insightFeedbackTimeoutRef.current = null;
+    }
+    setInsightActionFeedback(null);
+  }, []);
+
+  const markInsightActionDone = useCallback((intent: InsightIntent) => {
+    if (insightFeedbackTimeoutRef.current) {
+      window.clearTimeout(insightFeedbackTimeoutRef.current);
+    }
+
+    setInsightActionFeedback({ intent, state: 'done' });
+    insightFeedbackTimeoutRef.current = window.setTimeout(() => {
+      setInsightActionFeedback((current) => (
+        current?.intent === intent && current.state === 'done'
+          ? { intent, state: 'active' }
+          : current
+      ));
+      insightFeedbackTimeoutRef.current = null;
+    }, 700);
+  }, []);
+
   const runInsight = useCallback(async (
     intent: InsightIntent,
     promptLabel: string
   ) => {
     setAssistantOpen(true);
     setAssistantError(null);
+    clearInsightActionFeedback();
+    setInsightActionFeedback({ intent, state: 'loading' });
     setAssistantMessages((prev) => [
       ...prev,
       { id: uid('user'), role: 'user', variant: 'prompt', content: `${promptLabel}: ${resolvedScopeLabel}` },
@@ -1055,6 +1090,7 @@ const HistoryPage: React.FC = () => {
 
     if (!hasSelectedScopeData) {
       setAssistantError('Belum ada transaksi di periode ini, jadi insight belum bisa dibuat.');
+      clearInsightActionFeedback();
       return;
     }
 
@@ -1062,6 +1098,7 @@ const HistoryPage: React.FC = () => {
 
     if (intent === 'deep_analysis' && !activeAiKey) {
       setAssistantError('AI key belum diatur. Tambahkan dulu di Settings > AI Provider.');
+      clearInsightActionFeedback();
       return;
     }
 
@@ -1081,6 +1118,7 @@ const HistoryPage: React.FC = () => {
           ...prev,
           { id: uid('assistant'), role: 'assistant', variant: 'insight', insight: cached.insight },
         ]);
+        markInsightActionDone(intent);
         return;
       }
     }
@@ -1115,6 +1153,7 @@ const HistoryPage: React.FC = () => {
         { id: uid('assistant'), role: 'assistant', variant: 'breakdown', breakdown: groupsList },
       ]);
       haptic();
+      markInsightActionDone(intent);
       return;
     }
 
@@ -1280,8 +1319,10 @@ const HistoryPage: React.FC = () => {
         { id: uid('assistant'), role: 'assistant', variant: 'insight', insight },
       ]);
       haptic();
+      markInsightActionDone(intent);
     } catch (err) {
       setAssistantError(err instanceof Error ? err.message : 'Gagal membuat insight.');
+      clearInsightActionFeedback();
     } finally {
       setIsGeneratingInsight(false);
     }
@@ -1304,6 +1345,8 @@ const HistoryPage: React.FC = () => {
     personalMonthlyBudget,
     familySupportMonthlyBudget,
     toDisplay,
+    clearInsightActionFeedback,
+    markInsightActionDone,
   ]);
 
   const TYPE_FILTERS: { value: TypeFilter; label: string; color: string }[] = [
@@ -1319,6 +1362,11 @@ const HistoryPage: React.FC = () => {
     deep_analysis: '#FB923C',
   };
   const insightCompactYears = Array.from({ length: 10 }, (_, i) => viewYear - 5 + i);
+  const activeInsightScopeIndex = Math.max(
+    0,
+    SCOPE_OPTIONS.findIndex((item) => item.type === insightScope.type)
+  );
+  const activeInsightScopeColor = SCOPE_OPTIONS[activeInsightScopeIndex]?.color ?? '#B8F55A';
 
 
   return (
@@ -1789,8 +1837,17 @@ const HistoryPage: React.FC = () => {
 
               {isGeneratingInsight && (
                 <div className="flex justify-start">
-                  <div className="border-2 border-[#3A3A3A] bg-[#181818] px-3 py-2 text-sm font-medium">
-                    Sedang menyusun insight...
+                  <div className="w-full max-w-[92%] rounded-lg border border-[#F5F0E8]/10 bg-[#181818] px-3 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="h-3 w-3 rounded-full border-2 border-[#B8F55A]/25 border-t-[#B8F55A] animate-spin" />
+                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#F5F0E8]/55">
+                        Menyiapkan hasil
+                      </p>
+                    </div>
+                    <div className="mt-3 space-y-1.5">
+                      <div className="h-2 w-2/3 rounded-full bg-[#F5F0E8]/10 animate-pulse" />
+                      <div className="h-2 w-5/6 rounded-full bg-[#F5F0E8]/5 animate-pulse" />
+                    </div>
                   </div>
                 </div>
               )}
@@ -1812,7 +1869,16 @@ const HistoryPage: React.FC = () => {
                 </p>
               </div>
 
-              <div className="grid grid-cols-4 gap-2">
+              <div className="relative grid w-full grid-cols-4 rounded-full bg-[#1B1B1B] p-1">
+                <span
+                  className="pointer-events-none absolute inset-y-1 left-1 rounded-full transition-[transform,background-color] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform"
+                  style={{
+                    width: 'calc((100% - 0.5rem) / 4)',
+                    transform: `translateX(${activeInsightScopeIndex * 100}%)`,
+                    backgroundColor: activeInsightScopeColor,
+                  }}
+                  aria-hidden="true"
+                />
                 {SCOPE_OPTIONS.map((opt) => {
                   const isActive = insightScope.type === opt.type;
                   return (
@@ -1846,15 +1912,11 @@ const HistoryPage: React.FC = () => {
                           setInsightScope({ type: 'all', label: 'Semua' });
                         }
                       }}
-                      className="min-h-[30px] px-1 py-1 flex items-center justify-center text-center text-[8px] sm:text-[9px] font-black uppercase leading-[1.05] tracking-[0.08em] border-2 transition-all duration-150 active:translate-y-0.5 active:translate-x-0.5"
-                      style={{
-                        borderColor: isActive ? opt.color : '#555555',
-                        color: isActive ? opt.color : '#A09890',
-                        boxShadow: isActive ? `3px 3px 0px 0px ${opt.color}` : 'none',
-                        backgroundColor: isActive ? '#1A1A1A' : 'transparent',
-                      }}
+                      className={`relative z-10 min-h-[30px] rounded-full px-1 py-0.5 flex items-center justify-center text-center text-[10px] sm:text-[11px] font-black uppercase leading-none tracking-[0.06em] transition-colors duration-200 ${isActive ? 'text-[#1A1A1A]' : 'text-[#F5F0E8]/45 hover:text-[#F5F0E8]/75'}`}
                     >
-                      {opt.label}
+                      <span className="inline-block min-w-[42px] text-center leading-none">
+                        {opt.label}
+                      </span>
                     </button>
                   );
                 })}
@@ -1866,7 +1928,7 @@ const HistoryPage: React.FC = () => {
                   <select
                     value={insightScope.month ?? viewMonth}
                     onChange={(e) => setInsightScope((s) => ({ ...s, month: Number(e.target.value) }))}
-                    className="neo-input !py-1 !px-1.5 !text-[10px] min-w-0"
+                    className="neo-input !rounded-lg !py-1 !px-2 !text-[10px] min-w-0"
                     style={{ fontSize: '16px' }}
                   >
                     {SCOPE_MONTH_NAMES_COMPACT.map((name, i) => (
@@ -1876,7 +1938,7 @@ const HistoryPage: React.FC = () => {
                   <select
                     value={insightScope.year ?? viewYear}
                     onChange={(e) => setInsightScope((s) => ({ ...s, year: Number(e.target.value) }))}
-                    className="neo-input !py-1 !px-1.5 !text-[10px] min-w-0"
+                    className="neo-input !rounded-lg !py-1 !px-2 !text-[10px] min-w-0"
                     style={{ fontSize: '16px' }}
                   >
                     {insightCompactYears.map((y) => (
@@ -1891,7 +1953,7 @@ const HistoryPage: React.FC = () => {
                   <select
                     value={insightScope.fromMonth ?? 1}
                     onChange={(e) => setInsightScope((s) => ({ ...s, fromMonth: Number(e.target.value) }))}
-                    className="neo-input !py-1 !px-1.5 !text-[10px] min-w-0"
+                    className="neo-input !rounded-lg !py-1 !px-2 !text-[10px] min-w-0"
                     style={{ fontSize: '16px' }}
                   >
                     {SCOPE_MONTH_NAMES_COMPACT.map((name, i) => (
@@ -1901,7 +1963,7 @@ const HistoryPage: React.FC = () => {
                   <select
                     value={insightScope.fromYear ?? viewYear}
                     onChange={(e) => setInsightScope((s) => ({ ...s, fromYear: Number(e.target.value) }))}
-                    className="neo-input !py-1 !px-1.5 !text-[10px] min-w-0"
+                    className="neo-input !rounded-lg !py-1 !px-2 !text-[10px] min-w-0"
                     style={{ fontSize: '16px' }}
                   >
                     {insightCompactYears.map((y) => (
@@ -1911,7 +1973,7 @@ const HistoryPage: React.FC = () => {
                   <select
                     value={insightScope.toMonth ?? 12}
                     onChange={(e) => setInsightScope((s) => ({ ...s, toMonth: Number(e.target.value) }))}
-                    className="neo-input !py-1 !px-1.5 !text-[10px] min-w-0"
+                    className="neo-input !rounded-lg !py-1 !px-2 !text-[10px] min-w-0"
                     style={{ fontSize: '16px' }}
                   >
                     {SCOPE_MONTH_NAMES_COMPACT.map((name, i) => (
@@ -1921,7 +1983,7 @@ const HistoryPage: React.FC = () => {
                   <select
                     value={insightScope.toYear ?? viewYear}
                     onChange={(e) => setInsightScope((s) => ({ ...s, toYear: Number(e.target.value) }))}
-                    className="neo-input !py-1 !px-1.5 !text-[10px] min-w-0"
+                    className="neo-input !rounded-lg !py-1 !px-2 !text-[10px] min-w-0"
                     style={{ fontSize: '16px' }}
                   >
                     {insightCompactYears.map((y) => (
@@ -1936,7 +1998,7 @@ const HistoryPage: React.FC = () => {
                   <select
                     value={insightScope.year ?? viewYear}
                     onChange={(e) => setInsightScope((s) => ({ ...s, year: Number(e.target.value) }))}
-                    className="neo-input !py-1 !px-1.5 !text-[10px] w-full"
+                    className="neo-input !rounded-lg !py-1 !px-2 !text-[10px] w-full"
                     style={{ fontSize: '16px' }}
                   >
                     {insightCompactYears.map((y) => (
@@ -1947,31 +2009,55 @@ const HistoryPage: React.FC = () => {
               )}
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
-              {QUICK_PROMPTS.map((prompt) => (
-                (() => {
-                  const accentColor = insightActionColorMap[prompt.intent];
-                  return (
-                    <button
-                      key={prompt.intent}
-                      type="button"
-                      onClick={() => void runInsight(prompt.intent, prompt.label)}
-                      disabled={isGeneratingInsight}
-                      className="min-h-[46px] px-1.5 py-1 flex flex-col items-center justify-center gap-0.5 border-2 font-black uppercase text-[7px] sm:text-[8px] leading-[1.05] tracking-[0.1em] text-center transition-all duration-150 shadow-none [border-color:var(--insight-idle)] [color:var(--insight-idle)] active:translate-y-0.5 active:translate-x-0.5 active:[border-color:var(--insight-accent)] active:[color:var(--insight-accent)] active:[box-shadow:3px_3px_0px_0px_var(--insight-accent)] disabled:opacity-50"
-                      style={{
-                        '--insight-accent': accentColor,
-                        '--insight-idle': '#A09890',
-                      } as React.CSSProperties & {
-                        '--insight-accent': string;
-                        '--insight-idle': string;
-                      }}
-                    >
-                      <span className="shrink-0">{prompt.icon}</span>
-                      <span>{prompt.label}</span>
-                    </button>
-                  );
-                })()
-              ))}
+            <div className="space-y-1.5">
+              <div className="relative grid grid-cols-3 rounded-full bg-[#1B1B1B] p-1">
+                {QUICK_PROMPTS.map((prompt) => (
+                  (() => {
+                    const accentColor = insightActionColorMap[prompt.intent];
+                    const feedbackState = insightActionFeedback?.intent === prompt.intent
+                      ? insightActionFeedback.state
+                      : null;
+                    const isActionLoading = feedbackState === 'loading';
+                    const isActionDone = feedbackState === 'done';
+                    const isActionActive = isActionLoading || isActionDone || feedbackState === 'active';
+                    const isAnyActionLoading = insightActionFeedback?.state === 'loading';
+                    return (
+                      <button
+                        key={prompt.intent}
+                        type="button"
+                        onClick={() => void runInsight(prompt.intent, prompt.label)}
+                        disabled={isGeneratingInsight || isAnyActionLoading}
+                        aria-busy={isActionLoading}
+                        className={`min-h-[42px] rounded-full px-2 py-1 flex flex-col items-center justify-center gap-0.5 font-black uppercase text-[7px] sm:text-[8px] leading-[1.05] tracking-[0.1em] text-center transition-[background-color,color,transform,opacity] duration-200 shadow-none [color:var(--insight-idle)] hover:[color:var(--insight-accent)] active:scale-[0.97] active:[background-color:var(--insight-accent)] active:!text-[#111111] disabled:cursor-not-allowed ${isActionActive ? '[background-color:var(--insight-accent)] !text-[#111111] opacity-100' : 'disabled:opacity-45'}`}
+                        style={{
+                          '--insight-accent': accentColor,
+                          '--insight-idle': '#A09890',
+                        } as React.CSSProperties & {
+                          '--insight-accent': string;
+                          '--insight-idle': string;
+                        }}
+                      >
+                        <span className="shrink-0">
+                          {isActionLoading ? (
+                            <span className="block h-3.5 w-3.5 rounded-full border-2 border-[#111111]/30 border-t-[#111111] animate-spin" />
+                          ) : (
+                            prompt.icon
+                          )}
+                        </span>
+                        <span>{isActionDone ? 'Selesai' : prompt.label}</span>
+                      </button>
+                    );
+                  })()
+                ))}
+              </div>
+
+              {insightActionFeedback && insightActionFeedback.state !== 'active' && (
+                <p className="px-2 text-[9px] font-bold uppercase tracking-[0.12em] text-[#F5F0E8]/35">
+                  {insightActionFeedback.state === 'loading'
+                    ? 'Menyiapkan hasil...'
+                    : 'Hasil sudah ditambahkan'}
+                </p>
+              )}
             </div>
 
             {assistantError && (
