@@ -69,6 +69,33 @@ const AppInner: React.FC = () => {
   const activeScope = userId ?? GUEST_DATA_SCOPE;
   const isScopeReady = cacheScope === activeScope;
 
+  // Suppress mobile long-press browser menus so the installed PWA feels native.
+  // Text inputs remain editable/selectable.
+  useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false;
+
+      return Boolean(
+        target.closest(
+          'input, textarea, select, [contenteditable="true"], [data-allow-context-menu="true"]'
+        )
+      );
+    };
+
+    const onContextMenu = (event: MouseEvent) => {
+      const isTouchDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+      if (!isTouchDevice || isEditableTarget(event.target)) return;
+
+      event.preventDefault();
+    };
+
+    document.addEventListener('contextmenu', onContextMenu);
+
+    return () => {
+      document.removeEventListener('contextmenu', onContextMenu);
+    };
+  }, []);
+
   // 1. Resolve auth session on mount (must happen before render)
   useEffect(() => {
     if (demoMode) {

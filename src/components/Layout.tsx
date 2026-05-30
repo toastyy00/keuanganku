@@ -647,106 +647,49 @@ const Layout: React.FC = () => {
         </div>
       </button>
 
-      {/* ══ Mobile bottom navigation — Single Full Pill + Floating FAB ══ */}
-      {/* Wrapper: positions the pill and anchors the floating FAB */}
-      <div
-        className="md:hidden fixed z-[45] bottom-0 left-0 right-0 w-full"
-      >
-        {/* ── Floating FAB — absolute, center-top, overlaps pill ── */}
+      {/* Mobile bottom navigation: dark glass dock + detached route-aware FAB */}
+      <div className="mobile-nav-shell md:hidden">
+        <nav
+          aria-label="Mobile navigation"
+          className="mobile-glass-dock"
+          style={{
+            '--mobile-active-x': `calc(${Math.max(0, activeIndex)} * var(--mobile-item-width))`,
+          } as React.CSSProperties}
+        >
+          {ALL_ITEMS.map(({ label, to, icon: Icon, end }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              title={label}
+              onClick={preventIfAlreadyActive(isRouteActive(to, end))}
+              className={({ isActive }) => cn('mobile-dock-item', isActive && 'active')}
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon
+                    size={20}
+                    strokeWidth={isActive ? 2.75 : 2.25}
+                    aria-hidden="true"
+                    className="mobile-dock-icon"
+                  />
+                  <span className="mobile-dock-label">{label}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
         <button
           id="mobile-fab"
           onClick={fab.action}
           aria-label={fab.label}
-          className="fab-tap absolute left-1/2 flex items-center justify-center rounded-full z-[50]"
-          style={{
-            width: '60px',
-            height: '60px',
-            transform: 'translateX(-50%) translateY(-20%)',
-            top: 0,
-            backgroundColor: '#232019',
-            borderTop: '3px solid #9FD65C',
-            borderLeft: '3px solid #9FD65C',
-            borderRight: '3px solid #9FD65C',
-            borderBottom: '3px solid #0A0A0A',
-            boxShadow: '0 5px 0 #17130F',
-            color: '#9FD65C',
-            transition: 'transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.15s ease',
-          }}
+          className="mobile-detached-fab"
         >
           <div key={location.pathname} className="animate-pop-rotate flex items-center justify-center">
             {fab.icon}
           </div>
         </button>
-
-        {/* ── Flat Bottom Bar ── */}
-        <nav
-          aria-label="Mobile navigation"
-          className="relative flex items-center w-full px-2 pt-1.5 border-t-2 overflow-hidden"
-          style={{
-            paddingBottom: 'calc(6px + env(safe-area-inset-bottom, 0px))',
-            backgroundColor: '#0A0A0A',
-            borderColor: '#3A3A3A',
-            boxShadow: '0 -4px 20px rgba(0,0,0,0.5)',
-          }}
-        >
-          {/* Nav items with FAB-width spacer in the middle */}
-          <div className="relative z-10 flex w-full items-center">
-            {/* Left 2 items */}
-             {ALL_ITEMS.slice(0, 2).map(({ label, to, icon: Icon, end }) => (
-               <NavLink
-                 key={to}
-                 to={to}
-                 end={end}
-                 onClick={preventIfAlreadyActive(isRouteActive(to, end))}
-                 className={({ isActive }) => cn('nav-item flex-1', isActive && 'active')}
-               >
-                {({ isActive }) => (
-                  <>
-                    <Icon
-                      size={21}
-                      strokeWidth={isActive ? 2.55 : 2.05}
-                      aria-hidden="true"
-                      className="nav-item-icon"
-                      style={{ color: isActive ? '#F5F0E8' : 'currentColor' }}
-                    />
-                    <span className="nav-item-label" style={{ color: isActive ? '#F5F0E8' : 'currentColor' }}>
-                      {label}
-                    </span>
-                  </>
-                )}
-              </NavLink>
-            ))}
-
-            {/* Transparent spacer matching FAB footprint — prevents nav items colliding with FAB */}
-            <div aria-hidden="true" style={{ width: '60px', flexShrink: 0 }} />
-
-            {/* Right 2 items */}
-             {ALL_ITEMS.slice(2).map(({ label, to, icon: Icon, end }) => (
-               <NavLink
-                 key={to}
-                 to={to}
-                 end={end}
-                 onClick={preventIfAlreadyActive(isRouteActive(to, end))}
-                 className={({ isActive }) => cn('nav-item flex-1', isActive && 'active')}
-               >
-                {({ isActive }) => (
-                  <>
-                    <Icon
-                      size={21}
-                      strokeWidth={isActive ? 2.55 : 2.05}
-                      aria-hidden="true"
-                      className="nav-item-icon"
-                      style={{ color: isActive ? '#F5F0E8' : 'currentColor' }}
-                    />
-                    <span className="nav-item-label" style={{ color: isActive ? '#F5F0E8' : 'currentColor' }}>
-                      {label}
-                    </span>
-                  </>
-                )}
-              </NavLink>
-            ))}
-          </div>
-        </nav>
       </div>
         </>
       )}

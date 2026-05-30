@@ -15,8 +15,10 @@ import {
   Layers,
   CalendarDays,
   History,
+  PencilLine,
 } from 'lucide-react';
 import { BottomSheet } from '../components/ui/BottomSheet';
+import { Button } from '../components/ui/Button';
 import { useExpenseStore } from '../store/useExpenseStore';
 import { useUIStore } from '../store/useAppStore';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -153,6 +155,18 @@ function longDate(isoDate: string): string {
   return new Intl.DateTimeFormat('id-ID', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   }).format(new Date(isoDate + 'T00:00:00'));
+}
+
+function getExpenseTypeLabel(type: ExpenseType): string {
+  if (type === 'NEED') return 'Need';
+  if (type === 'WANT') return 'Want';
+  return 'Transfer';
+}
+
+function getExpenseTypeColor(type: ExpenseType): string {
+  if (type === 'NEED') return '#3B82F6';
+  if (type === 'WANT') return '#EC4899';
+  return '#FB923C';
 }
 
 const QUICK_PROMPTS: Array<{ intent: InsightIntent; label: string; icon: React.ReactNode }> = [
@@ -347,6 +361,7 @@ const HistoryPage: React.FC = () => {
   const [insightActionFeedback, setInsightActionFeedback] = useState<InsightActionFeedback | null>(null);
   const [assistantError, setAssistantError] = useState<string | null>(null);
   const [isQuickInsightExpanded, setIsQuickInsightExpanded] = useState(false);
+  const [selectedSummaryExpenseId, setSelectedSummaryExpenseId] = useState<string | null>(null);
   const [pendingDeletes, setPendingDeletes] = useState<Record<string, PendingDeleteEntry>>({});
   const listScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [listScrollTop, setListScrollTop] = useState(0);
@@ -357,6 +372,7 @@ const HistoryPage: React.FC = () => {
   const activeDeleteTokensRef = useRef<Record<string, number>>({});
   const previousFlowMonthPrefixRef = useRef<string | null>(null);
   const insightFeedbackTimeoutRef = useRef<number | null>(null);
+  const summaryEditTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     getExchangeRate().then((res) => setRateInfo(res));
@@ -515,6 +531,14 @@ const HistoryPage: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (summaryEditTimerRef.current !== null) {
+        window.clearTimeout(summaryEditTimerRef.current);
+      }
+    };
+  }, []);
+
   // Filtered
   const filtered = useMemo(() => {
     if (isAllHistoryMode && !normalizedSearch) return [];
@@ -554,6 +578,22 @@ const HistoryPage: React.FC = () => {
     () => new Map(categories.map((category) => [category.slug, category])),
     [categories]
   );
+  const selectedSummaryExpense = useMemo(
+    () => selectedSummaryExpenseId
+      ? expenses.find((expense) => expense.id === selectedSummaryExpenseId) ?? null
+      : null,
+    [expenses, selectedSummaryExpenseId]
+  );
+  const selectedSummaryCategory = selectedSummaryExpense
+    ? categoryBySlug.get(selectedSummaryExpense.category) ?? null
+    : null;
+
+  useEffect(() => {
+    if (selectedSummaryExpenseId && !selectedSummaryExpense) {
+      setSelectedSummaryExpenseId(null);
+    }
+  }, [selectedSummaryExpenseId, selectedSummaryExpense]);
+
   const historyRows = useMemo<HistoryListRow[]>(() => {
     const rows: HistoryListRow[] = [];
 
@@ -812,6 +852,30 @@ const HistoryPage: React.FC = () => {
     setDeletingIds(() => new Set());
   }, [viewYear, viewMonth, typeFilter, searchScope, search, catFilter, viewMode]);
 
+  const openExpenseSummary = useCallback((id: string) => {
+    setSelectedSummaryExpenseId(id);
+  }, []);
+
+  const closeExpenseSummary = useCallback(() => {
+    setSelectedSummaryExpenseId(null);
+  }, []);
+
+  const editSelectedSummaryExpense = useCallback(() => {
+    if (!selectedSummaryExpense) return;
+
+    const expenseId = selectedSummaryExpense.id;
+    setSelectedSummaryExpenseId(null);
+
+    if (summaryEditTimerRef.current !== null) {
+      window.clearTimeout(summaryEditTimerRef.current);
+    }
+
+    summaryEditTimerRef.current = window.setTimeout(() => {
+      setActiveExpense(expenseId);
+      summaryEditTimerRef.current = null;
+    }, 210);
+  }, [selectedSummaryExpense, setActiveExpense]);
+
   const renderHistoryRow = useCallback((row: HistoryListRow) => {
     if (row.kind === 'date') {
       return (
@@ -902,11 +966,11 @@ const HistoryPage: React.FC = () => {
           <div
             role="button"
             tabIndex={0}
-            onClick={() => setActiveExpense(expense.id)}
+            onClick={() => openExpenseSummary(expense.id)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
-                setActiveExpense(expense.id);
+                openExpenseSummary(expense.id);
               }
             }}
             className="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors duration-150 cursor-pointer md:hover:bg-[rgba(245,240,232,0.04)] active:bg-[rgba(245,240,232,0.06)]"
@@ -961,7 +1025,7 @@ const HistoryPage: React.FC = () => {
         )}
       </div>
     );
-  }, [cancelDeleteConfirm, categoryBySlug, currency, deletingIds, pendingDeletes, queueDeleteWithUndo, setActiveExpense, startDeleteConfirm, undoPendingDelete]);
+  }, [cancelDeleteConfirm, categoryBySlug, currency, deletingIds, openExpenseSummary, pendingDeletes, queueDeleteWithUndo, startDeleteConfirm, undoPendingDelete]);
 
   const monthTotal = useMemo(
     () => filtered
@@ -1719,6 +1783,119 @@ const HistoryPage: React.FC = () => {
         />
 
       </div>{/* end scrollable content */}
+
+      <BottomSheet
+        isOpen={Boolean(selectedSummaryExpense)}
+        onClose={closeExpenseSummary}
+        title="Ringkasan Pengeluaran"
+        description={selectedSummaryExpense ? longDate(selectedSummaryExpense.date) : undefined}
+        panelClassName="sm:max-w-md"
+        containPageOverscroll
+      >
+        {selectedSummaryExpense && (
+          <div className="space-y-4">
+            <div
+              className="overflow-hidden rounded-md border-2 border-[#3A3A3A] bg-[#151515]"
+              style={{ boxShadow: `3px 3px 0 0 ${getExpenseTypeColor(selectedSummaryExpense.type)}` }}
+            >
+              <div className="flex items-start gap-3 border-b-2 border-[#3A3A3A] p-3">
+                <span
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[6px] text-3xl"
+                  style={{
+                    backgroundColor: getExpenseTypeColor(selectedSummaryExpense.type),
+                    textShadow: '0 2px 2px rgba(0,0,0,0.35)',
+                  }}
+                  aria-hidden="true"
+                >
+                  {selectedSummaryExpense.type === 'TRANSFER'
+                    ? '\u{1F4B8}'
+                    : (selectedSummaryCategory?.emoji ?? '\u{1F6CD}\uFE0F')}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-brutal-black/45">
+                    {getExpenseTypeLabel(selectedSummaryExpense.type)}
+                  </p>
+                  <h4 className="mt-1 text-lg font-black leading-tight text-brutal-white normal-case tracking-normal">
+                    {selectedSummaryExpense.name}
+                  </h4>
+                </div>
+              </div>
+
+              <div className="p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-brutal-black/45">
+                  Nominal
+                </p>
+                <p className="mt-1 break-words text-3xl font-black leading-none text-brutal-yellow">
+                  {formatCurrency(selectedSummaryExpense.amount, selectedSummaryExpense.currency)}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-md border-2 border-[#3A3A3A] bg-[#181818] p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-brutal-black/45">
+                  {selectedSummaryExpense.type === 'TRANSFER' ? 'Tujuan' : 'Kategori'}
+                </p>
+                <p className="mt-1 text-sm font-bold leading-snug text-brutal-white">
+                  {selectedSummaryExpense.type === 'TRANSFER'
+                    ? (selectedSummaryExpense.destination || 'Tanpa tujuan')
+                    : (selectedSummaryCategory?.label ?? (selectedSummaryExpense.category || 'Tanpa kategori'))}
+                </p>
+              </div>
+
+              <div className="rounded-md border-2 border-[#3A3A3A] bg-[#181818] p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-brutal-black/45">
+                  Tanggal
+                </p>
+                <p className="mt-1 text-sm font-bold leading-snug text-brutal-white">
+                  {longDate(selectedSummaryExpense.date)}
+                </p>
+              </div>
+
+              <div className="rounded-md border-2 border-[#3A3A3A] bg-[#181818] p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-brutal-black/45">
+                  Recurring
+                </p>
+                <p className="mt-1 text-sm font-bold leading-snug text-brutal-white">
+                  {selectedSummaryExpense.is_recurring ? 'Rutin' : 'Manual'}
+                </p>
+              </div>
+
+              <div className="rounded-md border-2 border-[#3A3A3A] bg-[#181818] p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-brutal-black/45">
+                  Sync
+                </p>
+                <p className="mt-1 text-sm font-bold leading-snug text-brutal-white">
+                  {selectedSummaryExpense.synced ? 'Tersinkron' : 'Belum sync'}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-md border-2 border-[#3A3A3A] bg-[#181818] p-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-brutal-black/45">
+                Catatan
+              </p>
+              <p className={`mt-1 text-sm font-medium leading-6 ${selectedSummaryExpense.note ? 'text-brutal-white' : 'text-brutal-black/45 italic'}`}>
+                {selectedSummaryExpense.note || 'Tidak ada catatan'}
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <Button variant="secondary" fullWidth onClick={closeExpenseSummary}>
+                Tutup
+              </Button>
+              <Button
+                variant="primary"
+                fullWidth
+                onClick={editSelectedSummaryExpense}
+                leftIcon={<PencilLine size={16} strokeWidth={2.5} aria-hidden="true" />}
+              >
+                Edit
+              </Button>
+            </div>
+          </div>
+        )}
+      </BottomSheet>
 
       <BottomSheet
         isOpen={assistantOpen}
