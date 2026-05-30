@@ -187,9 +187,9 @@
     width: min(336px, calc(100vw - 1rem));
     height: 64px;
     transform: translateX(-50%);
-    --mobile-glass-bg: rgba(10, 11, 11, 0.28);
-    --mobile-glass-bg-blur: rgba(245, 248, 250, 0.055);
-    --mobile-dock-border-color: rgba(255, 255, 255, 0.16);
+    --mobile-glass-bg: rgba(10, 11, 11, 0.24);
+    --mobile-glass-bg-blur: rgba(245, 248, 250, 0.045);
+    --mobile-dock-border-color: rgba(255, 255, 255, 0.2);
     pointer-events: none;
   }
 
@@ -242,8 +242,8 @@
   @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
     .mobile-glass-dock::after {
       background: var(--mobile-glass-bg-blur);
-      -webkit-backdrop-filter: blur(34px) saturate(1.85) contrast(1.12) brightness(1.08);
-      backdrop-filter: blur(34px) saturate(1.85) contrast(1.12) brightness(1.08);
+      -webkit-backdrop-filter: blur(22px) saturate(2.05) contrast(1.28) brightness(1.04);
+      backdrop-filter: blur(22px) saturate(2.05) contrast(1.28) brightness(1.04);
     }
   }
 
@@ -258,7 +258,7 @@
     border-left: 1px solid var(--mobile-dock-border-color);
     border-right: 1px solid var(--mobile-dock-border-color);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.14);
     transform: translateX(var(--mobile-active-x, 0px));
     transition:
       transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
@@ -268,8 +268,8 @@
 
   @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
     .mobile-glass-dock::before {
-      -webkit-backdrop-filter: blur(18px) saturate(1.75) brightness(1.12);
-      backdrop-filter: blur(18px) saturate(1.75) brightness(1.12);
+      -webkit-backdrop-filter: blur(14px) saturate(2.05) contrast(1.18) brightness(1.16);
+      backdrop-filter: blur(14px) saturate(2.05) contrast(1.18) brightness(1.16);
     }
   }
 
@@ -391,8 +391,8 @@
   @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
     .mobile-detached-fab {
       background: var(--mobile-glass-bg-blur);
-      -webkit-backdrop-filter: blur(34px) saturate(1.85) contrast(1.12) brightness(1.08);
-      backdrop-filter: blur(34px) saturate(1.85) contrast(1.12) brightness(1.08);
+      -webkit-backdrop-filter: blur(22px) saturate(2.05) contrast(1.28) brightness(1.04);
+      backdrop-filter: blur(22px) saturate(2.05) contrast(1.28) brightness(1.04);
     }
   }
 
