@@ -128,3 +128,58 @@ export interface PortfolioActivityLog {
   note?: string;
   created_at: string;
 }
+
+// ── Income Entry ──────────────────────────────────────────────
+
+export type IncomeAssetType = 'FIAT' | 'CRYPTO';
+
+export interface IncomeEntry {
+  id: string;
+  title: string;
+  source_type: string;              // free text, e.g. "Gaji", "Trading", "LP DLMM"
+
+  // ── Received ──────────────────────────────────────
+  asset_type: IncomeAssetType;
+  amount: number;
+  ticker?: string;
+  coingecko_id?: string;
+  currency: Currency;               // IDR | USD
+  price_at_time?: number;           // USD per unit at recording
+  is_manual_price?: boolean;
+  value_usd: number;                // total in USD at recording
+  value_idr: number;                // total in IDR at recording
+
+  // ── Cost Basis (optional) ─────────────────────────
+  has_cost_basis: boolean;
+  cost_amount?: number;
+  cost_ticker?: string;             // 'SOL', 'ETH', any token, or null = fiat
+  cost_coingecko_id?: string;
+  cost_price_per_unit?: number;     // USD per cost token at recording
+  cost_is_manual_price?: boolean;
+  cost_value_usd?: number;
+  cost_value_idr?: number;
+
+  // ── Metadata ──────────────────────────────────────
+  chain?: string;                   // free text
+  platform?: string;                // free text
+  pocket_id?: string;
+  contract_address?: string;
+  mcap_at_time?: number;
+  cost_mcap?: number;
+  token_ticker?: string;
+  token_price_entry?: number;
+  token_price_exit?: number;
+  date: string;                     // "YYYY-MM-DD"
+  note?: string;
+
+  // ── Sync ──────────────────────────────────────────
+  created_at: string;
+  synced: boolean;
+}
+
+export interface IncomeRepository {
+  getAll(): Promise<IncomeEntry[]>;
+  create(data: Omit<IncomeEntry, 'id' | 'created_at' | 'synced'>): Promise<IncomeEntry>;
+  update(id: string, data: Partial<IncomeEntry>): Promise<IncomeEntry>;
+  delete(id: string): Promise<void>;
+}

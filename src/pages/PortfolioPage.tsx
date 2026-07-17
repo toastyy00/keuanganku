@@ -17,7 +17,6 @@ function slugifyPocketName(name: string): string {
 }
 
 let hasPlayedPortfolioSparklineReveal = false;
-let portfolioVisitResetTimer: number | null = null;
 
 const PortfolioPage: React.FC = () => {
   const navigate = useNavigate();
@@ -48,25 +47,6 @@ const PortfolioPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    if (portfolioVisitResetTimer !== null) {
-      window.clearTimeout(portfolioVisitResetTimer);
-      portfolioVisitResetTimer = null;
-    }
-
-    return () => {
-      portfolioVisitResetTimer = window.setTimeout(() => {
-        const isStillInsidePortfolio = /(?:^|\/)pockets(?:\/|$)/.test(window.location.pathname);
-        if (!isStillInsidePortfolio) {
-          hasPlayedPortfolioSparklineReveal = false;
-        }
-        portfolioVisitResetTimer = null;
-      }, 0);
-    };
-  }, []);
-
-  useEffect(() => {
     if (!portfolioHydrated) return;
     ensureScope(activeScope);
   }, [activeScope, ensureScope, portfolioHydrated]);
@@ -90,22 +70,37 @@ const PortfolioPage: React.FC = () => {
 
   return (
     <div className="portfolio-touch mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 pb-10 pt-6 md:px-6">
-      {activePocketId ? (
-        <PocketDetail
-          pocketId={activePocketId}
-          onBack={() => navigate('/pockets')}
-        />
-      ) : (
-        <PocketList
-          shouldAnimateTotalSparkline={!hasPlayedMiniSparklineReveal}
-          onTotalSparklineRevealComplete={markMiniSparklineRevealComplete}
-          onOpenPocket={(pocket) => {
-            markMiniSparklineRevealComplete();
-            const slug = slugifyPocketName(pocket.name);
-            navigate(slug ? `/pockets/${pocket.id}/${slug}` : `/pockets/${pocket.id}`);
-          }}
-        />
-      )}
+      <div className="flex-1">
+        {activePocketId ? (
+          <PocketDetail
+            pocketId={activePocketId}
+            onBack={() => navigate('/pockets')}
+          />
+        ) : (
+          <PocketList
+            shouldAnimateTotalSparkline={!hasPlayedMiniSparklineReveal}
+            onTotalSparklineRevealComplete={markMiniSparklineRevealComplete}
+            onOpenPocket={(pocket) => {
+              markMiniSparklineRevealComplete();
+              const slug = slugifyPocketName(pocket.name);
+              navigate(slug ? `/pockets/${pocket.id}/${slug}` : `/pockets/${pocket.id}`);
+            }}
+          />
+        )}
+      </div>
+
+      <footer className="mt-auto pt-10 pb-4 text-center text-[10px] font-black uppercase tracking-[0.18em] text-[#44474D]">
+        Powered by{' '}
+        <a
+          href="https://www.coingecko.com/?utm_source=keuanganku&utm_medium=referral"
+          target="_blank"
+          rel="noreferrer"
+          className="underline decoration-[#44474D]/50 underline-offset-2 hover:text-[#F5F0E8] hover:decoration-[#F5F0E8] transition-colors"
+          onClick={(event) => event.stopPropagation()}
+        >
+          CoinGecko API
+        </a>
+      </footer>
 
       {!activePocketId && (
         <button

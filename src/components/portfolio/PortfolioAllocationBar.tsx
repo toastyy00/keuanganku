@@ -162,8 +162,8 @@ const PortfolioAllocationBar: React.FC<PortfolioAllocationBarProps> = ({ assets,
           : undefined
       }
     >
-      <p className="mb-1 text-[10px] font-black uppercase tracking-[0.16em] text-brutal-black/60">Allocation</p>
-      <div className="flex h-[10px] w-full overflow-hidden rounded-full bg-transparent">
+      <p className="mb-1 text-[9px] font-black uppercase tracking-[0.16em] text-white/40">Allocation</p>
+      <div className="flex h-[7px] w-full overflow-hidden rounded-full bg-white/[0.08]">
         {allocation.assets.map((asset, index) => (
           <div
             key={asset.key}
@@ -181,7 +181,7 @@ const PortfolioAllocationBar: React.FC<PortfolioAllocationBarProps> = ({ assets,
         ))}
       </div>
       <div
-        className={`mt-2.5 flex items-center gap-x-2 gap-y-1.5 overflow-hidden ${
+        className={`mt-2 flex items-center gap-x-2.5 gap-y-1.5 overflow-hidden ${
           isCollapsed ? 'max-h-[10px] flex-nowrap' : 'max-h-28 flex-wrap'
         }`}
       >
@@ -190,8 +190,8 @@ const PortfolioAllocationBar: React.FC<PortfolioAllocationBarProps> = ({ assets,
             <span className="mr-0.5 text-[8px] leading-none" style={{ color: asset.color }}>
               {'\u25CF'}
             </span>
-            <span className="mr-1 text-[9px] font-medium uppercase text-brutal-black/70">{asset.ticker}</span>
-            <span className="text-[9px] font-black text-brutal-black">{asset.percentage.toFixed(1)}%</span>
+            <span className="mr-1 text-[9px] font-semibold uppercase text-white/50">{asset.ticker}</span>
+            <span className="text-[9px] font-bold text-[#F5F0E8]">{asset.percentage.toFixed(1)}%</span>
           </div>
         ))}
       </div>

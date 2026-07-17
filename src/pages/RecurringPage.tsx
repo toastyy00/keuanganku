@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { RefreshCcw, Trash2, ToggleLeft, ToggleRight, CalendarClock, Zap, AlertCircle } from 'lucide-react';
 import { BottomSheet } from '../components/ui/BottomSheet';
-import { Button } from '../components/ui/Button';
-import { Input, Textarea } from '../components/ui/Input';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { Badge } from '../components/ui/Badge';
 import { CategoryPicker } from '../components/ui/CategoryPicker';
 import { Card, CardBody } from '../components/ui/Card';
@@ -31,6 +30,19 @@ const EMPTY_FORM: RecurringFormState = {
   name: '', category: '', type: 'NEED', schedule_detail: '', note: '',
 };
 
+// —— Sleek form helpers ——
+const FieldGroup: React.FC<{
+  label: string;
+  error?: string;
+  children: React.ReactNode;
+}> = ({ label, error, children }) => (
+  <div className="flex flex-col gap-1.5">
+    <p className={`text-[11px] font-medium ${error ? 'text-red-400' : 'text-white/40'}`}>{label}</p>
+    {children}
+    {error && <p className="text-[10px] text-red-400">{error}</p>}
+  </div>
+);
+
 interface AddRecurringSheetProps {
   isOpen: boolean;
   onClose: () => void;
@@ -42,6 +54,7 @@ const AddRecurringSheet: React.FC<AddRecurringSheetProps> = ({ isOpen, onClose, 
   const [form, setForm] = useState<RecurringFormState>({ ...EMPTY_FORM, category: categories[0]?.slug ?? '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [showConfirmClose, setShowConfirmClose] = useState(false);
 
   const amountInput = useCurrencyInput(currency);
   const activeTypeIndex = Math.max(0, RECURRING_TYPE_OPTIONS.findIndex((item) => item.id === form.type));
@@ -106,22 +119,75 @@ const AddRecurringSheet: React.FC<AddRecurringSheetProps> = ({ isOpen, onClose, 
     }
   };
 
+  const isDirty = React.useMemo(() => {
+    const baseName = editing?.name ?? '';
+    const baseCategory = editing?.category ?? categories[0]?.slug ?? '';
+    const baseType = editing?.type ?? 'NEED';
+    const baseSchedule = editing?.schedule_detail ?? '';
+    const baseNote = editing?.note ?? '';
+    const baseAmount = editing?.amount ?? 0;
+
+    return (
+      form.name !== baseName ||
+      form.category !== baseCategory ||
+      form.type !== baseType ||
+      form.schedule_detail !== baseSchedule ||
+      form.note !== baseNote ||
+      amountInput.rawValue !== baseAmount
+    );
+  }, [editing, categories, form, amountInput.rawValue]);
+
+  const handleClose = React.useCallback(() => {
+    if (isDirty) {
+      setShowConfirmClose(true);
+    } else {
+      onClose();
+    }
+  }, [isDirty, onClose]);
+
   return (
-    <BottomSheet isOpen={isOpen} onClose={onClose} title={editing ? 'Edit Rutin' : 'Tambah Rutin'}>
-      <div className="flex flex-col gap-4">
+    <BottomSheet
+      isOpen={isOpen}
+      onClose={handleClose}
+      hasUnsavedChanges={isDirty}
+      containPageOverscroll
+      title={editing ? 'Edit Rutin' : 'Tambah Rutin'}
+      footer={
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={handleClose}
+            className="flex-1 h-11 rounded-xl bg-white/[0.08] hover:bg-white/[0.12] text-white text-sm font-semibold transition-all active:scale-[0.98]"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 h-11 rounded-xl bg-[#B8F55A] disabled:opacity-50 text-[#1A1A1A] text-sm font-semibold transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+          >
+            {saving && <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />}
+            {editing ? 'Simpan' : 'Tambah'}
+          </button>
+        </div>
+      }
+    >
+      <div className="flex flex-col gap-3.5 pb-2">
+        {/* Root error banner */}
         {errors.root && (
-          <div className="flex items-center gap-2 p-3 bg-red-500 border-2 border-[#555555] text-white font-bold text-sm">
-            <AlertCircle size={16} strokeWidth={2.5} />
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+            <AlertCircle size={14} />
             {errors.root}
           </div>
         )}
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-bold uppercase leading-none tracking-wider text-brutal-black">
-            Tipe
-          </label>
-          <div className="relative grid w-full grid-cols-2 rounded-full bg-[#1B1B1B] p-1">
+
+        {/* Type toggle */}
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[11px] font-medium text-white/40">Tipe</p>
+          <div className="relative grid w-full grid-cols-2 rounded-xl bg-white/[0.05] p-1">
             <span
-              className="pointer-events-none absolute inset-y-1 left-1 rounded-full transition-[transform,background-color] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform"
+              className="pointer-events-none absolute inset-y-1 left-1 rounded-lg transition-[transform,background-color] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform"
               style={{
                 width: 'calc((100% - 0.5rem) / 2)',
                 transform: `translateX(${activeTypeIndex * 100}%)`,
@@ -136,7 +202,7 @@ const AddRecurringSheet: React.FC<AddRecurringSheetProps> = ({ isOpen, onClose, 
                   key={item.id}
                   type="button"
                   onClick={() => setForm((f) => ({ ...f, type: item.id }))}
-                  className={`relative z-10 rounded-full px-3 py-1.5 text-[11px] font-black uppercase leading-none tracking-wider transition-colors duration-200 ${isActive ? 'text-[#1A1A1A]' : 'text-[#F5F0E8]/45 hover:text-[#F5F0E8]/75'}`}
+                  className={`relative z-10 rounded-lg px-3 py-1.5 text-[11px] font-medium leading-none transition-colors duration-200 ${isActive ? 'text-[#1A1A1A] font-semibold' : 'text-white/40 hover:text-white/70'}`}
                 >
                   {item.label}
                 </button>
@@ -144,25 +210,22 @@ const AddRecurringSheet: React.FC<AddRecurringSheetProps> = ({ isOpen, onClose, 
             })}
           </div>
         </div>
-        <Input
-          label="Nama"
-          placeholder="Nama pengeluaran..."
-          value={form.name}
-          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          error={errors.name}
-          wrapperClassName="!gap-1"
-          labelClassName="!leading-none"
-          className="rounded-md"
-          style={{ fontSize: '16px' }}
-        />
 
-        {/* Amount with live formatting */}
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-bold uppercase leading-none tracking-wider">
-            Nominal ({currency})
-          </label>
-          <div className={`flex overflow-hidden rounded-md border-2 border-[#555555] bg-[#222222] transition-all duration-150 ${errors.amount ? 'border-red-500' : 'focus-within:border-brutal-yellow focus-within:shadow-[3px_3px_0px_0px_#7ABF3A]'}`}>
-            <span className="flex items-center pl-3 text-sm font-bold text-brutal-black/60 shrink-0">
+        {/* Nama */}
+        <FieldGroup label="Nama" error={errors.name}>
+          <input
+            className="slim-input"
+            placeholder="Nama pengeluaran..."
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            style={{ fontSize: '16px' }}
+          />
+        </FieldGroup>
+
+        {/* Nominal */}
+        <FieldGroup label={`Nominal (${currency})`} error={errors.amount}>
+          <div className="relative flex items-center">
+            <span className="absolute left-3 text-sm text-white/40 select-none">
               {currency === 'IDR' ? 'Rp' : '$'}
             </span>
             <input
@@ -171,53 +234,57 @@ const AddRecurringSheet: React.FC<AddRecurringSheetProps> = ({ isOpen, onClose, 
               placeholder={currency === 'IDR' ? '0' : '0.00'}
               value={amountInput.displayValue}
               onChange={(e) => amountInput.handleChange(e.target.value)}
-              className="flex-1 bg-transparent px-2 py-2.5 font-bold text-brutal-black focus:outline-none focus-visible:shadow-none"
+              className="slim-input pl-10"
               style={{ fontSize: '16px' }}
             />
           </div>
-          {errors.amount && <p className="text-xs font-bold text-red-500">{errors.amount}</p>}
-        </div>
+        </FieldGroup>
 
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-bold uppercase leading-none tracking-wider">Kategori</label>
-          <CategoryPicker
-            label=""
-            value={form.category}
-            onChange={(slug) => setForm((f) => ({ ...f, category: slug }))}
-            categories={categories}
-            buttonClassName="rounded-md"
+        {/* Kategori */}
+        <CategoryPicker
+          label="Kategori"
+          value={form.category}
+          onChange={(slug) => setForm((f) => ({ ...f, category: slug }))}
+          categories={categories}
+          buttonClassName="!min-h-[38px] !h-10 !rounded-xl !bg-white/[0.05] !border !border-white/[0.09] !font-medium"
+        />
+
+        {/* Jadwal */}
+        <FieldGroup label="Jadwal / Frekuensi">
+          <input
+            className="slim-input"
+            placeholder="Kapan pengeluaran ini biasa terjadi..."
+            value={form.schedule_detail}
+            onChange={(e) => setForm((f) => ({ ...f, schedule_detail: e.target.value }))}
+            style={{ fontSize: '16px' }}
           />
-        </div>
+        </FieldGroup>
 
-        <Input
-          label="Jadwal / Frekuensi"
-          placeholder="Kapan pengeluaran ini biasa terjadi..."
-          value={form.schedule_detail}
-          onChange={(e) => setForm((f) => ({ ...f, schedule_detail: e.target.value }))}
-          wrapperClassName="!gap-1"
-          labelClassName="!leading-none"
-          className="rounded-md"
-          style={{ fontSize: '16px' }}
-        />
-
-        <Textarea
-          label="Catatan (opsional)"
-          placeholder="Catatan tambahan..."
-          value={form.note}
-          onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
-          wrapperClassName="!gap-1"
-          labelClassName="!leading-none"
-          className="rounded-md"
-          style={{ fontSize: '16px' }}
-        />
-
-        <div className="flex gap-3 pt-2">
-          <Button variant="secondary" fullWidth onClick={onClose}>Batal</Button>
-          <Button variant="primary" fullWidth onClick={handleSave} loading={saving}>
-            {editing ? 'Simpan' : 'Tambah'}
-          </Button>
-        </div>
+        {/* Catatan */}
+        <FieldGroup label="Catatan (opsional)">
+          <textarea
+            className="slim-input resize-none h-16 min-h-16"
+            placeholder="Catatan tambahan..."
+            value={form.note}
+            onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
+          />
+        </FieldGroup>
       </div>
+
+      <ConfirmModal
+        isOpen={showConfirmClose}
+        title="Discard Changes?"
+        description="You have unsaved changes. Are you sure you want to discard them and close?"
+        confirmLabel="Discard"
+        cancelLabel="Keep Editing"
+        onConfirm={() => {
+          setShowConfirmClose(false);
+          onClose();
+        }}
+        onCancel={() => {
+          setShowConfirmClose(false);
+        }}
+      />
     </BottomSheet>
   );
 };

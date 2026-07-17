@@ -6,6 +6,7 @@ import { Card, CardBody } from '../components/ui/Card';
 import NumberFlow, { continuous } from '@number-flow/react';
 import { SkeletonDashboard } from '../components/SkeletonCard';
 import { useExpenseStore } from '../store/useExpenseStore';
+import { useIncomeStore } from '../store/useIncomeStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useUIStore } from '../store/useAppStore';
 import {
@@ -119,11 +120,17 @@ function SwipeCarousel({
   const onTouchStart = (e: React.TouchEvent) => {
     markHintSeen();
     startX.current = e.touches[0].clientX;
+    isDragging.current = false;
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (startX.current !== null && Math.abs(e.touches[0].clientX - startX.current) > 8) {
+      isDragging.current = true;
+    }
   };
   const onTouchEnd = (e: React.TouchEvent) => {
     if (startX.current === null) return;
     const dx = e.changedTouches[0].clientX - startX.current;
-    if (Math.abs(dx) > 40) goTo(active + (dx < 0 ? 1 : -1));
+    if (isDragging.current && Math.abs(dx) > 40) goTo(active + (dx < 0 ? 1 : -1));
     startX.current = null;
   };
 
@@ -135,7 +142,7 @@ function SwipeCarousel({
     setDragging(false);
   };
   const onMouseMove = (e: React.MouseEvent) => {
-    if (startX.current !== null && Math.abs(e.clientX - startX.current) > 5) {
+    if (startX.current !== null && Math.abs(e.clientX - startX.current) > 8) {
       isDragging.current = true;
       setDragging(true);
     }
@@ -145,8 +152,14 @@ function SwipeCarousel({
     const dx = e.clientX - startX.current;
     if (isDragging.current && Math.abs(dx) > 40) goTo(active + (dx < 0 ? 1 : -1));
     startX.current = null;
-    isDragging.current = false;
     setDragging(false);
+  };
+
+  const handleClickCapture = (e: React.MouseEvent) => {
+    if (isDragging.current) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
   };
 
   return (
@@ -154,11 +167,13 @@ function SwipeCarousel({
       className="relative overflow-hidden select-none"
       data-no-swipe="true"
       onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseUp}
+      onClickCapture={handleClickCapture}
       style={{ cursor: dragging ? 'grabbing' : 'grab' }}
     >
       {/* Slide track */}
@@ -300,6 +315,7 @@ const DashboardPage: React.FC = () => {
 
   const { expenses, categories, isLoading } =
     useExpenseStore();
+  const { incomes, loadIncomes } = useIncomeStore();
   const { activeYear: year, activeMonth: month, resetToCurrentMonth, prevMonth, nextMonth } = useUIStore();
   const { personalMonthlyBudget, familySupportMonthlyBudget } = useSettingsStore();
 
@@ -390,7 +406,8 @@ const DashboardPage: React.FC = () => {
       _cachedRateInfo = res;
       setRateInfo(res);
     });
-  }, []);
+    void loadIncomes();
+  }, [loadIncomes]);
 
   // Conversion helper
   const toDisplay = useCallback(
@@ -569,6 +586,34 @@ const DashboardPage: React.FC = () => {
     : null;
   const trend: 'up' | 'down' | 'same' = delta === null || delta === 0 ? 'same' : delta > 0 ? 'up' : 'down';
 
+  // Income calculations
+  const monthIncomes = useMemo(
+    () => incomes.filter((i) => i.date.startsWith(monthPrefix)),
+    [incomes, monthPrefix]
+  );
+  const incomeTotal = useMemo(() => {
+    return monthIncomes.reduce((sum, i) => {
+      const costBasis = i.has_cost_basis ? (dashCurrency === 'USD' ? (i.cost_value_usd ?? 0) : (i.cost_value_idr ?? 0)) : 0;
+      const netVal = (dashCurrency === 'USD' ? i.value_usd : i.value_idr) - costBasis;
+      return sum + netVal;
+    }, 0);
+  }, [monthIncomes, dashCurrency]);
+
+  const lastMonthIncomesTotal = useMemo(() => {
+    return incomes
+      .filter((i) => i.date.startsWith(lastMonthPrefix))
+      .reduce((sum, i) => {
+        const costBasis = i.has_cost_basis ? (dashCurrency === 'USD' ? (i.cost_value_usd ?? 0) : (i.cost_value_idr ?? 0)) : 0;
+        const netVal = (dashCurrency === 'USD' ? i.value_usd : i.value_idr) - costBasis;
+        return sum + netVal;
+      }, 0);
+  }, [incomes, lastMonthPrefix, dashCurrency]);
+
+  const incomeDelta = lastMonthIncomesTotal === 0 ? null : incomeTotal - lastMonthIncomesTotal;
+  const incomeDeltaPct = incomeDelta !== null && lastMonthIncomesTotal > 0
+    ? Math.round((incomeDelta / lastMonthIncomesTotal) * 100)
+    : null;
+
   // Budget calculations and base values
   const familySupportSpent = useMemo(
     () => spendingExpenses
@@ -707,7 +752,7 @@ const DashboardPage: React.FC = () => {
       {/* neo-card border/shadow wrapper, overflow-hidden so slides clip properly */}
       <div className="neo-card overflow-hidden !p-0 !border-0 !shadow-[4px_4px_0_0_#F5F0E8]">
         <SwipeCarousel
-          accentColors={['#1A1A1A', '#B8F55A']}
+          accentColors={['#1A1A1A', '#B8F55A', '#10B981']}
           slides={[
             /* Slide 1: Total Bulan Ini - yellow highlight background */
             <div className="h-full p-5 pt-4 pb-5 bg-brutal-yellow text-[#1A1A1A] flex flex-col justify-between" style={{ minHeight: 148 }}>
@@ -857,6 +902,49 @@ const DashboardPage: React.FC = () => {
                   </span>
                 </div>
               )}
+            </div>,
+
+            /* Slide 3: Income Tracker Card */
+            <div
+              onClick={() => navigate('/income')}
+              className="h-full p-5 flex flex-col justify-between cursor-pointer group hover:opacity-95 transition-opacity"
+              style={{ backgroundColor: '#1B3A1B', minHeight: 148 }}
+            >
+              <div className="flex justify-between items-start">
+                <p className="text-xs font-black uppercase tracking-widest text-[#F5F0E8]/60">
+                  Income This Month
+                </p>
+                <span className="text-[9px] font-black uppercase bg-[#B8F55A] text-[#1A1A1A] px-2 py-0.5 rounded tracking-wider border-2 border-[#1A1A1A]">
+                  Open Tracker
+                </span>
+              </div>
+              <div>
+                <AnimatedNumberFlow
+                  key="dash-income-total"
+                  id="dash-income-total"
+                  value={incomeTotal}
+                  initialDelay={200}
+                  locales="id-ID"
+                  format={dashCurrency === 'IDR'
+                    ? { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }
+                    : { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }
+                  }
+                  plugins={[continuous]}
+                  spinTiming={{ duration: 1100, easing: 'ease-out' }}
+                  className="block text-[34px] font-black leading-none tracking-tight translate-y-1 text-[#B8F55A]"
+                  style={{ fontVariantNumeric: 'tabular-nums' }}
+                />
+                <div className="flex items-center justify-between mt-1 text-[10px] font-black uppercase text-[#F5F0E8]/50">
+                  <p>
+                    {monthIncomes.length} {monthIncomes.length === 1 ? 'entry' : 'entries'}
+                  </p>
+                  {incomeDelta !== null && incomeDelta !== 0 && (
+                    <span className={incomeDelta > 0 ? 'text-[#B8F55A]' : 'text-red-400'}>
+                      {incomeDelta > 0 ? '▲' : '▼'} {Math.abs(incomeDeltaPct ?? 0)}% vs last month
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>,
           ]}
         />

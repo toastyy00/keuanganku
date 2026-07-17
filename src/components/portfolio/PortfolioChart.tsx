@@ -20,10 +20,11 @@ interface PortfolioChartProps {
   revealFromProgress?: number | null;
   revealDurationMs?: number;
   revealKey?: string;
+  showLastPointMarker?: boolean;
 }
 
-const SCRUB_GAIN_COLOR = '#22C55E';
-const SCRUB_LOSS_COLOR = '#EF4444';
+const SCRUB_GAIN_COLOR = '#1B9066';
+const SCRUB_LOSS_COLOR = '#B93E50';
 const SCRUB_FLAT_COLOR = '#F5F0E8';
 const CHART_PAD_TOP = 28;
 const CHART_PAD_BOTTOM = 14;
@@ -125,12 +126,37 @@ function drawSmoothPath(ctx: CanvasRenderingContext2D, points: CanvasPoint[], mi
   }
 }
 
+/**
+ * Interpolates the precise Y on the smooth curve path at a given X by
+ * finding the two adjacent canvas points that straddle X and lerping.
+ * This keeps the scrub dot exactly on the visible line at all times.
+ */
+function getYAtX(x: number, points: CanvasPoint[]): number {
+  if (points.length === 0) return 0;
+  if (points.length === 1) return points[0].y;
+  if (x <= points[0].x) return points[0].y;
+  if (x >= points[points.length - 1].x) return points[points.length - 1].y;
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    if (x >= a.x && x <= b.x) {
+      const spanX = b.x - a.x;
+      if (spanX <= 0) return a.y;
+      const t = (x - a.x) / spanX;
+      // Cubic ease-in-out for a smoother interpolation matching bezier feel
+      const tSmooth = t * t * (3 - 2 * t);
+      return a.y + (b.y - a.y) * tSmooth;
+    }
+  }
+  return points[points.length - 1].y;
+}
+
 function drawPulsingDot(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   color: string,
-  elapsedMs: number,
   intensity = 1,
   emergence = 1,
 ): void {
@@ -138,36 +164,27 @@ function drawPulsingDot(
   const visibleEmergence = clamp(emergence, 0, 1);
   if (visibleIntensity <= 0 || visibleEmergence <= 0) return;
 
-  const elapsed = Math.max(0, elapsedMs);
-  const pulsePhase = (elapsed % 1040) / 1040;
-  const pulseEase = 1 - Math.pow(1 - pulsePhase, 2.4);
-  const pulseFade = Math.pow(1 - pulsePhase, 1.7);
-  const pulsePresence = clamp((visibleEmergence - 0.5) / 0.5, 0, 1);
-  const pulseRadius = 6.4 + pulseEase * 8.8;
-  const pulseAlpha = Math.max(0, 0.58 * pulseFade * visibleIntensity * pulsePresence);
   const haloRadius = 2.8 + (8.5 - 2.8) * visibleEmergence;
   const coreRadius = 2.3 + (5.2 - 2.3) * visibleEmergence;
 
-  if (pulseAlpha > 0) {
-    ctx.beginPath();
-    ctx.arc(x, y, pulseRadius, 0, Math.PI * 2);
-    ctx.strokeStyle = hexToRgba(color, pulseAlpha);
-    ctx.lineWidth = 2.4 + pulseFade * 0.6;
-    ctx.shadowColor = hexToRgba(color, pulseAlpha * 0.65);
-    ctx.shadowBlur = 5 + pulseFade * 3;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-
+  // Outer halo glow
   ctx.beginPath();
   ctx.arc(x, y, haloRadius, 0, Math.PI * 2);
-  ctx.fillStyle = hexToRgba(color, 0.26 * visibleIntensity);
+  ctx.fillStyle = hexToRgba(color, 0.22 * visibleIntensity);
   ctx.fill();
 
+  // Core solid circle
   ctx.beginPath();
   ctx.arc(x, y, coreRadius, 0, Math.PI * 2);
   ctx.fillStyle = hexToRgba(color, visibleIntensity);
   ctx.fill();
+
+  // Subtle white outline for contrast pop
+  ctx.beginPath();
+  ctx.arc(x, y, coreRadius, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(255, 255, 255, ${0.85 * visibleIntensity})`;
+  ctx.lineWidth = 1.15;
+  ctx.stroke();
 }
 
 const PortfolioChart: React.FC<PortfolioChartProps> = ({
@@ -180,6 +197,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
   revealFromProgress = null,
   revealDurationMs = 0,
   revealKey,
+  showLastPointMarker = true,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -310,89 +328,138 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
       const ratio = width <= 0 ? 0 : x / width;
       const idx = Math.max(0, Math.min(dataPoints.length - 1, Math.round(ratio * (dataPoints.length - 1))));
       const point = dataPoints[idx];
-      const dotY = curvePoints[idx]?.y ?? toY(point.value);
+      // Precisely follow the bezier curve by interpolating Y at the actual pixel X
+      const dotY = getYAtX(x, curvePoints);
       const scrubColor = getScrubPerformanceColor(dataPoints[0].value, point.value);
       const pointDate = new Date(point.timestamp);
-      const currentYear = new Date().getFullYear();
-      const pointYear = pointDate.getFullYear();
-      const timeLabel = new Intl.DateTimeFormat('id-ID', {
+      const dateStr = new Intl.DateTimeFormat('id-ID', {
         day: '2-digit',
-        month: 'short',
-        ...(pointYear !== currentYear ? { year: 'numeric' as const } : {}),
+        month: 'long',
+        year: 'numeric',
+      }).format(pointDate);
+      const timeStr = new Intl.DateTimeFormat('id-ID', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false,
       }).format(pointDate);
+      const timeLabel = `${dateStr} · ${timeStr}`;
       const valueLabels = (formatScrubValues?.(point.value) ?? []).filter(Boolean).slice(0, 2);
 
       drawChartSegment(x, width, scrubColor, hexToDimmedRgba, 0.44, 2.5);
       drawChartSegment(0, x, scrubColor, hexToRgba, 1, 2.8);
 
+      // Vertical solid guide line
       ctx.beginPath();
       ctx.moveTo(x, padTop);
       ctx.lineTo(x, height - padBottom);
-      ctx.setLineDash([1.8, 1.7]);
-      ctx.lineDashOffset = -((performance.now() / 120) % 3.5);
-      ctx.strokeStyle = hexToRgba(scrubColor, 0.74);
-      ctx.lineWidth = 1.05;
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      drawPulsingDot(ctx, x, dotY, scrubColor, performance.now() - pulseStartedAtRef.current);
-
-      const dateFont = '700 9px ui-sans-serif, system-ui, -apple-system, Segoe UI';
-      const idrFont = '800 12px ui-sans-serif, system-ui, -apple-system, Segoe UI';
-      const usdFont = '700 9px ui-sans-serif, system-ui, -apple-system, Segoe UI';
-      ctx.font = idrFont;
-      const primaryValueWidth = valueLabels[0] ? ctx.measureText(valueLabels[0]).width : 0;
-      ctx.font = usdFont;
-      const secondaryValueWidth = valueLabels[1] ? ctx.measureText(valueLabels[1]).width : 0;
-      ctx.font = dateFont;
-      const timeTextWidth = ctx.measureText(timeLabel).width;
-      const labelPadX = 10;
-      const labelH = valueLabels.length > 0 ? 50 : 24;
-      const labelW = Math.max(primaryValueWidth, secondaryValueWidth, timeTextWidth) + labelPadX * 2;
-      const labelGap = 14;
-      const preferredLabelX = x + labelGap + labelW <= width - 4 ? x + labelGap : x - labelGap - labelW;
-      const labelX = Math.min(width - labelW - 4, Math.max(4, preferredLabelX));
-      const minLabelY = 6;
-      const maxLabelY = Math.max(minLabelY, height - labelH - 8);
-      const labelY = Math.min(maxLabelY, Math.max(minLabelY, dotY - labelH / 2));
-
-      ctx.fillStyle = 'rgba(18, 20, 24, 0.68)';
-      fillRoundedRect(ctx, labelX, labelY, labelW, labelH, 7);
-      ctx.strokeStyle = 'rgba(245, 240, 232, 0.14)';
+      ctx.strokeStyle = hexToRgba(scrubColor, 0.28);
       ctx.lineWidth = 1;
-      strokeRoundedRect(ctx, labelX + 0.5, labelY + 0.5, labelW - 1, labelH - 1, 7);
-      if (valueLabels.length > 0) {
-        ctx.font = dateFont;
-        ctx.fillStyle = 'rgba(245, 240, 232, 0.68)';
-        ctx.fillText(timeLabel, labelX + labelPadX, labelY + 13);
-        ctx.font = idrFont;
-        ctx.fillStyle = 'rgba(245, 240, 232, 0.96)';
-        ctx.fillText(valueLabels[0], labelX + labelPadX, labelY + 30);
-        if (valueLabels[1]) {
-          ctx.font = usdFont;
-          ctx.fillStyle = 'rgba(245, 240, 232, 0.62)';
-          ctx.fillText(valueLabels[1], labelX + labelPadX, labelY + 43);
-        }
-      } else {
-        ctx.fillStyle = 'rgba(245, 240, 232, 0.86)';
-        ctx.font = dateFont;
-        ctx.fillText(timeLabel, labelX + labelPadX, labelY + 15);
+      ctx.stroke();
+
+      drawPulsingDot(ctx, x, dotY, scrubColor);
+
+      // ── HUD-style scrub label ──────────────────────────────────────────
+      const dateFont = '600 9.5px ui-monospace, "Cascadia Code", "SF Mono", monospace';
+      const valueFont = '800 13.5px ui-sans-serif, system-ui, -apple-system, Segoe UI';
+      const subFont = '600 9px ui-sans-serif, system-ui, -apple-system, Segoe UI';
+
+      ctx.font = valueFont;
+      const primaryW = valueLabels[0] ? ctx.measureText(valueLabels[0]).width : 0;
+      ctx.font = subFont;
+      const secondaryW = valueLabels[1] ? ctx.measureText(valueLabels[1]).width : 0;
+      ctx.font = dateFont;
+      const dateW = ctx.measureText(timeLabel).width;
+
+      const labelPadX = 11;
+      const labelPadY = 9;
+      const lineGap = 4;
+      const dateH = 11;
+      const valueH = 16;
+      const subH = valueLabels[1] ? 11 : 0;
+      const labelH = labelPadY * 2 + dateH + lineGap + valueH + (subH > 0 ? lineGap + subH : 0);
+      const labelW = Math.max(primaryW, secondaryW, dateW) + labelPadX * 2 + 2;
+
+      const labelGap = 16;
+      const preferRight = x + labelGap + labelW <= width - 4;
+      const labelX = preferRight
+        ? x + labelGap
+        : Math.max(4, x - labelGap - labelW);
+      const minLY = 6;
+      const maxLY = Math.max(minLY, height - labelH - 8);
+      const labelY = Math.min(maxLY, Math.max(minLY, dotY - labelH / 2));
+
+      // Background
+      ctx.fillStyle = 'rgba(10, 12, 16, 0.88)';
+      fillRoundedRect(ctx, labelX, labelY, labelW, labelH, 5);
+
+      // Border
+      ctx.strokeStyle = `rgba(245,240,232,0.10)`;
+      ctx.lineWidth = 0.8;
+      strokeRoundedRect(ctx, labelX + 0.5, labelY + 0.5, labelW - 1, labelH - 1, 5);
+
+      // Corner bracket decorations (top-left, top-right, bottom-left, bottom-right)
+      const bLen = 6; // bracket arm length
+      const bOff = 0; // inset from corner
+      ctx.strokeStyle = 'rgba(245, 240, 232, 0.35)'; // Static dimmed cream-white matching the theme
+      ctx.lineWidth = 1.2;
+      ctx.lineCap = 'square';
+
+      // Top-left
+      ctx.beginPath();
+      ctx.moveTo(labelX + bOff + bLen, labelY + bOff);
+      ctx.lineTo(labelX + bOff, labelY + bOff);
+      ctx.lineTo(labelX + bOff, labelY + bOff + bLen);
+      ctx.stroke();
+      // Top-right
+      ctx.beginPath();
+      ctx.moveTo(labelX + labelW - bOff - bLen, labelY + bOff);
+      ctx.lineTo(labelX + labelW - bOff, labelY + bOff);
+      ctx.lineTo(labelX + labelW - bOff, labelY + bOff + bLen);
+      ctx.stroke();
+      // Bottom-left
+      ctx.beginPath();
+      ctx.moveTo(labelX + bOff, labelY + labelH - bOff - bLen);
+      ctx.lineTo(labelX + bOff, labelY + labelH - bOff);
+      ctx.lineTo(labelX + bOff + bLen, labelY + labelH - bOff);
+      ctx.stroke();
+      // Bottom-right
+      ctx.beginPath();
+      ctx.moveTo(labelX + labelW - bOff - bLen, labelY + labelH - bOff);
+      ctx.lineTo(labelX + labelW - bOff, labelY + labelH - bOff);
+      ctx.lineTo(labelX + labelW - bOff, labelY + labelH - bOff - bLen);
+      ctx.stroke();
+
+      ctx.lineCap = 'butt';
+
+      // Text content
+      let textCursorY = labelY + labelPadY + dateH;
+      ctx.font = dateFont;
+      ctx.fillStyle = 'rgba(245,240,232,0.45)';
+      ctx.fillText(timeLabel, labelX + labelPadX, textCursorY);
+
+      textCursorY += lineGap + valueH;
+      ctx.font = valueFont;
+      ctx.fillStyle = 'rgba(245,240,232,0.97)';
+      ctx.fillText(valueLabels[0] ?? timeLabel, labelX + labelPadX, textCursorY);
+
+      if (valueLabels[1]) {
+        textCursorY += lineGap + subH;
+        ctx.font = subFont;
+        ctx.fillStyle = 'rgba(245,240,232,0.45)';
+        ctx.fillText(valueLabels[1], labelX + labelPadX, textCursorY);
       }
+
     } else {
       drawChartSegment(0, width, colorTheme, hexToRgba, 1, 2.5);
       const lastPoint = curvePoints[curvePoints.length - 1];
       const markerRevealProgress = shouldClipReveal ? 0 : clamp((performance.now() - idleMarkerStartedAtRef.current) / IDLE_MARKER_REVEAL_MS, 0, 1);
       const markerEase = 1 - Math.pow(1 - markerRevealProgress, 3);
-      if (lastPoint && markerEase > 0) {
+      if (showLastPointMarker && lastPoint && markerEase > 0) {
         drawPulsingDot(
           ctx,
           lastPoint.x,
           lastPoint.y,
           colorTheme,
-          performance.now() - idlePulseStartedAtRef.current,
           0.92 * markerEase,
           markerEase,
         );
@@ -407,7 +474,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
 
     const dpr = window.devicePixelRatio || 1;
     const width = wrapper.clientWidth;
-    const height = 200;
+    const height = wrapper.clientHeight || 200;
     canvas.width = Math.floor(width * dpr);
     canvas.height = Math.floor(height * dpr);
     canvas.style.width = `${width}px`;
@@ -427,6 +494,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
 
   const startIdlePulse = useCallback(() => {
     if (idlePulseRafRef.current !== null || isScrubbingRef.current) return;
+    if (!showLastPointMarker) return;
     idlePulseStartedAtRef.current = performance.now();
 
     const tickIdlePulse = () => {
@@ -436,12 +504,21 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
         return;
       }
 
-      draw(wrapper.clientWidth, 200);
-      idlePulseRafRef.current = requestAnimationFrame(tickIdlePulse);
+      draw(wrapper.clientWidth, wrapper.clientHeight || 200);
+
+      const now = performance.now();
+      const elapsed = now - idleMarkerStartedAtRef.current;
+      const animationFinished = elapsed >= IDLE_MARKER_REVEAL_MS;
+
+      if (animationFinished) {
+        idlePulseRafRef.current = null;
+      } else {
+        idlePulseRafRef.current = requestAnimationFrame(tickIdlePulse);
+      }
     };
 
     idlePulseRafRef.current = requestAnimationFrame(tickIdlePulse);
-  }, [draw]);
+  }, [draw, showLastPointMarker]);
 
   useLayoutEffect(() => {
     if (revealRafRef.current !== null) {
@@ -515,32 +592,18 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     const wrapper = wrapperRef.current;
     if (!wrapper || dataPoints.length === 0) return;
     const rect = wrapper.getBoundingClientRect();
-    const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
+    const ratio = rect.width <= 0 ? 0 : clamp((clientX - rect.left) / rect.width, 0, 1);
+    const x = ratio * wrapper.clientWidth;
     scrubXRef.current = x;
 
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = null;
       if (!isScrubbingRef.current) return;
-      const ratio = rect.width <= 0 ? 0 : x / rect.width;
       const idx = Math.max(0, Math.min(dataPoints.length - 1, Math.round(ratio * (dataPoints.length - 1))));
       onScrub?.(dataPoints[idx]);
-      draw(rect.width, 200);
+      draw(wrapper.clientWidth, wrapper.clientHeight || 200);
     });
-
-    if (pulseRafRef.current === null) {
-      const tickPulse = () => {
-        const pulseWrapper = wrapperRef.current;
-        if (!isScrubbingRef.current || scrubXRef.current === null || !pulseWrapper) {
-          pulseRafRef.current = null;
-          return;
-        }
-
-        draw(pulseWrapper.clientWidth, 200);
-        pulseRafRef.current = requestAnimationFrame(tickPulse);
-      };
-      pulseRafRef.current = requestAnimationFrame(tickPulse);
-    }
   };
 
   const beginScrub = () => {
@@ -564,8 +627,12 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
     scrubXRef.current = null;
     pulseStartedAtRef.current = 0;
     onScrubEnd?.();
+    
+    // Reset marker reveal time so it starts animation again
+    idleMarkerStartedAtRef.current = performance.now() + IDLE_MARKER_DELAY_MS;
+    
     const wrapper = wrapperRef.current;
-    if (wrapper) draw(wrapper.clientWidth, 200);
+    if (wrapper) draw(wrapper.clientWidth, wrapper.clientHeight || 200);
     startIdlePulse();
   };
 
@@ -607,7 +674,7 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
   return (
     <div
       ref={wrapperRef}
-      className="w-full"
+      className="w-full h-full"
       onMouseDown={(e) => {
         beginScrub();
         scrubAtClientX(e.clientX);

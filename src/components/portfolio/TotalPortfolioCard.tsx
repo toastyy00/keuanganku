@@ -12,8 +12,8 @@ type Timeframe = '24H' | '1W' | '1M' | '1Y';
 const FRAMES: Timeframe[] = ['24H', '1W', '1M', '1Y'];
 const GLOBAL_ACCENT = '#B8F55A';
 const TOTAL_ALLOCATION_ACCENT = '#D8DEE9';
-const CHART_GAIN_COLOR = '#22C55E';
-const CHART_LOSS_COLOR = '#EF4444';
+const CHART_GAIN_COLOR = '#1B9066';
+const CHART_LOSS_COLOR = '#B93E50';
 const CHART_FLAT_COLOR = '#F5F0E8';
 const CARD_LOSS_ACCENT = '#F87171';
 const MINI_SPARKLINE_VIEWBOX_WIDTH = 220;
@@ -24,7 +24,6 @@ const MINI_SPARKLINE_GLOW_DURATION_MS = 2700;
 const TIMEFRAME_CHART_REVEAL_DURATION_MS = 360;
 const EMPTY_CHART_DATA: { timestamp: number; value: number }[] = [];
 const MINI_SPARKLINE_CURVE_TENSION = 0.18;
-const TOTAL_PORTFOLIO_EXPANDED_STORAGE_KEY = 'keuanganku-total-portfolio-expanded';
 
 interface TotalPortfolioCardProps {
   shouldAnimateMiniSparkline?: boolean;
@@ -100,10 +99,7 @@ function easeFullChartReveal(value: number): number {
   return 1 - Math.pow(1 - t, 3);
 }
 
-function getInitialExpandedState(): boolean {
-  if (typeof window === 'undefined') return false;
-  return window.localStorage.getItem(TOTAL_PORTFOLIO_EXPANDED_STORAGE_KEY) === 'true';
-}
+
 
 const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
   shouldAnimateMiniSparkline: shouldAnimateMiniSparklineProp = true,
@@ -121,7 +117,7 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [isRefreshPressed, setIsRefreshPressed] = useState(false);
   const [isRefreshAnimating, setIsRefreshAnimating] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(getInitialExpandedState);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [fullChartReveal, setFullChartReveal] = useState<{ fromProgress: number; key: string } | null>(null);
   const [timeframeReveal, setTimeframeReveal] = useState<{ fromProgress: number; key: string } | null>(null);
@@ -359,7 +355,6 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
         setFullChartReveal(null);
         setFullChartRevealProgress(1);
       }
-      window.localStorage.setItem(TOTAL_PORTFOLIO_EXPANDED_STORAGE_KEY, String(nextExpanded));
       return nextExpanded;
     });
   };
@@ -376,9 +371,11 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
           toggleExpanded();
         }
       }}
-      className="relative cursor-pointer overflow-hidden rounded-lg shadow-[4px_4px_0_0_#969696] transition-[transform,box-shadow] duration-200 md:hover:-translate-y-0.5 md:hover:shadow-[6px_8px_0_0_#969696]"
+      className="relative cursor-pointer overflow-hidden rounded-2xl border transition-[border-color,box-shadow] duration-200 hover:!border-white/[0.18]"
       style={{
-        background: `linear-gradient(124deg, #222326 10%, #262931 42%, ${cardAccentColor}4D 78%, ${cardAccentColor}66 100%)`,
+        borderColor: `${cardAccentColor}1C`,
+        background: `radial-gradient(circle at 100% 100%, ${cardAccentColor}12, transparent 65%), linear-gradient(135deg, #1E2025 0%, #151619 50%, #111214 100%)`,
+        boxShadow: '0 12px 35px -5px rgba(0, 0, 0, 0.45)',
       }}
     >
       {hasAssets && miniSparkline && (
@@ -501,11 +498,11 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
       <div className={`relative z-10 transition-[padding,transform] duration-300 ease-out ${isExpanded ? 'px-4 pt-4' : 'px-5 py-5'}`}>
         <div className={`flex items-start justify-between transition-[margin] duration-300 ease-out ${isExpanded ? 'mb-3' : 'mb-0'}`}>
           <div className={`transition-[transform,filter] duration-300 ease-out ${isExpanded ? 'translate-y-0 blur-0' : 'translate-y-0.5 blur-0'}`}>
-            <p className={`text-xs font-black uppercase text-brutal-black/50 transition-[opacity,transform] duration-300 ease-out ${isExpanded ? 'translate-y-0 opacity-100 delay-75' : 'translate-y-0 opacity-90 delay-0'}`}>
+            <p className={`text-xs font-black uppercase text-white/40 transition-[opacity,transform] duration-300 ease-out ${isExpanded ? 'translate-y-0 opacity-100 delay-75' : 'translate-y-0 opacity-90 delay-0'}`}>
               Total Pockets
             </p>
-            <p className={`text-2xl font-black transition-[opacity,transform] duration-300 ease-out ${isExpanded ? 'translate-y-0 opacity-100 delay-100' : 'translate-y-0.5 opacity-100 delay-0'}`}>{formatPortfolioIdrValue(displayValue)}</p>
-            <p className={`text-sm font-bold text-brutal-black/60 transition-[opacity,transform] duration-300 ease-out ${isExpanded ? 'translate-y-0 opacity-100 delay-100' : 'translate-y-0.5 opacity-95 delay-0'}`}>
+            <p className={`text-2xl font-black text-[#F5F0E8] transition-[opacity,transform] duration-300 ease-out ${isExpanded ? 'translate-y-0 opacity-100 delay-100' : 'translate-y-0.5 opacity-100 delay-0'}`}>{formatPortfolioIdrValue(displayValue)}</p>
+            <p className={`text-sm font-bold text-white/50 transition-[opacity,transform] duration-300 ease-out ${isExpanded ? 'translate-y-0 opacity-100 delay-100' : 'translate-y-0.5 opacity-95 delay-0'}`}>
               {formatCurrency(displayValue, 'USD')}
             </p>
             {hasAssets ? (
@@ -594,6 +591,7 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
               revealFromProgress={fullChartReveal?.fromProgress ?? timeframeReveal?.fromProgress ?? null}
               revealDurationMs={fullChartReveal ? MINI_SPARKLINE_REVEAL_DURATION_MS : TIMEFRAME_CHART_REVEAL_DURATION_MS}
               revealKey={fullChartReveal?.key ?? timeframeReveal?.key}
+              showLastPointMarker={!isScrubbing}
             />
           </div>
 

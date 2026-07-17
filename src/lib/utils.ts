@@ -183,7 +183,7 @@ export function currentMonth(): { year: number; month: number } {
   return { year: now.getFullYear(), month: now.getMonth() + 1 };
 }
 
-export function monthLabel(year: number, month: number, locale = 'id-ID'): string {
+export function monthLabel(year: number, month: number, locale = 'en-US'): string {
   return new Intl.DateTimeFormat(locale, {
     month: 'long',
     year: 'numeric',

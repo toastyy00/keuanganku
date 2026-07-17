@@ -9,6 +9,8 @@ import type {
   ExpenseRepository,
   CategoryRepository,
   RecurringRepository,
+  IncomeEntry,
+  IncomeRepository,
 } from '../types';
 import { DEFAULT_CATEGORIES } from './categories';
 import { getSupabaseClient } from './supabase';
@@ -23,6 +25,7 @@ const KEYS = {
   expenses: 'expenses',
   categories: 'categories',
   recurring: 'recurring',
+  income_entries: 'income_entries',
 } as const;
 const LEGACY_MIGRATION_FLAG_PREFIX = '__scope_legacy_migrated__';
 
@@ -90,6 +93,34 @@ const RECURRING_SELECT_COLUMNS = [
   'note',
   'last_logged',
   'active',
+].join(',');
+
+const INCOME_SELECT_COLUMNS = [
+  'id',
+  'title',
+  'source_type',
+  'asset_type',
+  'amount',
+  'ticker',
+  'coingecko_id',
+  'currency',
+  'price_at_time',
+  'is_manual_price',
+  'value_usd',
+  'value_idr',
+  'has_cost_basis',
+  'cost_amount',
+  'cost_ticker',
+  'cost_coingecko_id',
+  'cost_price_per_unit',
+  'cost_is_manual_price',
+  'cost_value_usd',
+  'cost_value_idr',
+  'chain',
+  'platform',
+  'pocket_id',
+  'date',
+  'note',
 ].join(',');
 
 const CATEGORY_MIGRATIONS = [
@@ -463,6 +494,78 @@ export class LocalStorageRecurringRepository implements RecurringRepository {
 }
 
 // ============================================================
+//  LOCAL STORAGE — INCOME REPOSITORY
+// ============================================================
+
+export class LocalStorageIncomeRepository implements IncomeRepository {
+  async getAll(): Promise<IncomeEntry[]> {
+    const incomes = await readScopedArray<IncomeEntry>('income_entries');
+    return incomes.sort((a, b) => {
+      const dateDiff = b.date.localeCompare(a.date);
+      if (dateDiff !== 0) return dateDiff;
+      return b.created_at.localeCompare(a.created_at);
+    });
+  }
+
+  async create(
+    data: Omit<IncomeEntry, 'id' | 'created_at' | 'synced'>
+  ): Promise<IncomeEntry> {
+    const income: IncomeEntry = {
+      ...data,
+      id: uuidv4(),
+      created_at: isoNow(),
+      synced: false,
+    };
+    const key = scopedKey('income_entries');
+    const all = await readScopedArray<IncomeEntry>('income_entries');
+    await writeIDB(key, [income, ...all]);
+
+    if (isAuthenticated()) {
+      await enqueueSyncUpsert('income_entries', income.id, income);
+      triggerBackgroundSync({ domain: 'base' });
+    }
+    return income;
+  }
+
+  async update(id: string, data: Partial<IncomeEntry>): Promise<IncomeEntry> {
+    const key = scopedKey('income_entries');
+    const all = await readScopedArray<IncomeEntry>('income_entries');
+    const index = all.findIndex((e) => e.id === id);
+    if (index === -1) {
+      throw new Error(`Income entry with id "${id}" not found.`);
+    }
+    const updated: IncomeEntry = {
+      ...all[index],
+      ...data,
+      id,
+      synced: false,
+    };
+    all[index] = updated;
+    await writeIDB(key, all);
+
+    if (isAuthenticated()) {
+      await enqueueSyncUpsert('income_entries', updated.id, updated);
+      triggerBackgroundSync({ domain: 'base' });
+    }
+    return updated;
+  }
+
+  async delete(id: string): Promise<void> {
+    const key = scopedKey('income_entries');
+    const all = await readScopedArray<IncomeEntry>('income_entries');
+    await writeIDB(
+      key,
+      all.filter((e) => e.id !== id)
+    );
+
+    if (isAuthenticated()) {
+      await enqueueSyncDelete('income_entries', id);
+      triggerBackgroundSync({ domain: 'base' });
+    }
+  }
+}
+
+// ============================================================
 //  SUPABASE — EXPENSE REPOSITORY
 // ============================================================
 
@@ -677,12 +780,75 @@ export class SupabaseRecurringRepository implements RecurringRepository {
 }
 
 // ============================================================
+//  SUPABASE — INCOME REPOSITORY
+// ============================================================
+
+export class SupabaseIncomeRepository implements IncomeRepository {
+  private get client() {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase client is not configured.');
+    return client;
+  }
+
+  async getAll(): Promise<IncomeEntry[]> {
+    const { data, error } = await this.client
+      .from('income_entries')
+      .select(INCOME_SELECT_COLUMNS)
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (error) throw new Error(`Supabase income getAll error: ${error.message}`);
+    return (data ?? []) as unknown as IncomeEntry[];
+  }
+
+  async create(data: Omit<IncomeEntry, 'id' | 'created_at' | 'synced'>): Promise<IncomeEntry> {
+    const payload = {
+      ...data,
+      id: uuidv4(),
+      user_id: requireUserId(),
+      created_at: isoNow(),
+      synced: true,
+    };
+    const { data: inserted, error } = await this.client
+      .from('income_entries')
+      .insert(payload)
+      .select(INCOME_SELECT_COLUMNS)
+      .single();
+
+    if (error) throw new Error(`Supabase create income error: ${error.message}`);
+    return inserted as unknown as IncomeEntry;
+  }
+
+  async update(id: string, data: Partial<IncomeEntry>): Promise<IncomeEntry> {
+    const { data: updated, error } = await this.client
+      .from('income_entries')
+      .update({ ...data, synced: true })
+      .eq('id', id)
+      .select(INCOME_SELECT_COLUMNS)
+      .single();
+
+    if (error) throw new Error(`Supabase update income error: ${error.message}`);
+    return updated as unknown as IncomeEntry;
+  }
+
+  async delete(id: string): Promise<void> {
+    const { error } = await this.client
+      .from('income_entries')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw new Error(`Supabase delete income error: ${error.message}`);
+  }
+}
+
+// ============================================================
 //  REPOSITORY FACTORY FUNCTIONS  (cached singletons)
 // ============================================================
 
 let _expenseRepo: ExpenseRepository | null = null;
 let _categoryRepo: CategoryRepository | null = null;
 let _recurringRepo: RecurringRepository | null = null;
+let _incomeRepo: IncomeRepository | null = null;
 let _lastAuthState: boolean | null = null;
 
 function getOrCreate<T>(
@@ -703,6 +869,7 @@ export function getExpenseRepository(): ExpenseRepository {
     _expenseRepo = null;
     _categoryRepo = null;
     _recurringRepo = null;
+    _incomeRepo = null;
     _lastAuthState = authed;
   }
   _expenseRepo = getOrCreate(_expenseRepo, LocalStorageExpenseRepository);
@@ -711,15 +878,22 @@ export function getExpenseRepository(): ExpenseRepository {
 
 export function getCategoryRepository(): CategoryRepository {
   const authed = isAuthenticated();
-  if (_lastAuthState !== authed) { _lastAuthState = authed; _expenseRepo = null; _categoryRepo = null; _recurringRepo = null; }
+  if (_lastAuthState !== authed) { _lastAuthState = authed; _expenseRepo = null; _categoryRepo = null; _recurringRepo = null; _incomeRepo = null; }
   _categoryRepo = getOrCreate(_categoryRepo, LocalStorageCategoryRepository);
   return _categoryRepo;
 }
 
 export function getRecurringRepository(): RecurringRepository {
   const authed = isAuthenticated();
-  if (_lastAuthState !== authed) { _lastAuthState = authed; _expenseRepo = null; _categoryRepo = null; _recurringRepo = null; }
+  if (_lastAuthState !== authed) { _lastAuthState = authed; _expenseRepo = null; _categoryRepo = null; _recurringRepo = null; _incomeRepo = null; }
   _recurringRepo = getOrCreate(_recurringRepo, LocalStorageRecurringRepository);
   return _recurringRepo;
+}
+
+export function getIncomeRepository(): IncomeRepository {
+  const authed = isAuthenticated();
+  if (_lastAuthState !== authed) { _lastAuthState = authed; _expenseRepo = null; _categoryRepo = null; _recurringRepo = null; _incomeRepo = null; }
+  _incomeRepo = getOrCreate(_incomeRepo, LocalStorageIncomeRepository);
+  return _incomeRepo;
 }
 

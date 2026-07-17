@@ -6,7 +6,8 @@ import type {
   PortfolioActivityLog,
   PortfolioAsset,
   PortfolioPocket,
-  RecurringTemplate
+  RecurringTemplate,
+  IncomeEntry,
 } from '../types';
 import { getSupabaseClientAsync } from './supabase';
 import { GUEST_DATA_SCOPE, getActiveDataScope, scopedDataKey } from './dataScope';
@@ -26,6 +27,7 @@ type SyncEntity =
   | 'expenses'
   | 'categories'
   | 'recurring'
+  | 'income_entries'
   | 'portfolio_pockets'
   | 'portfolio_assets'
   | 'portfolio_activity_log';
@@ -36,6 +38,7 @@ type SyncPayload =
   | Expense
   | Category
   | RecurringTemplate
+  | IncomeEntry
   | PortfolioPocket
   | PortfolioAsset
   | PortfolioActivityLog;
@@ -73,6 +76,7 @@ const BASE_KEYS = {
   expenses: 'expenses',
   categories: 'categories',
   recurring: 'recurring',
+  income_entries: 'income_entries',
   portfolio_pockets: 'portfolio_pockets',
   portfolio_assets: 'portfolio_assets',
   portfolio_activity_log: 'portfolio_activity_log',
@@ -223,10 +227,58 @@ function normalizeRecurring(record: RecurringTemplate): RecurringTemplate {
   };
 }
 
+function normalizeIncome(record: IncomeEntry): IncomeEntry {
+  return {
+    id: record.id,
+    title: record.title,
+    source_type: record.source_type,
+    asset_type: record.asset_type,
+    amount: Number(record.amount),
+    ticker: record.ticker ?? undefined,
+    coingecko_id: record.coingecko_id ?? undefined,
+    currency: record.currency,
+    price_at_time: record.price_at_time !== undefined && record.price_at_time !== null ? Number(record.price_at_time) : undefined,
+    is_manual_price: record.is_manual_price,
+    value_usd: Number(record.value_usd),
+    value_idr: Number(record.value_idr),
+    has_cost_basis: record.has_cost_basis,
+    cost_amount: record.cost_amount !== undefined && record.cost_amount !== null ? Number(record.cost_amount) : undefined,
+    cost_ticker: record.cost_ticker ?? undefined,
+    cost_coingecko_id: record.cost_coingecko_id ?? undefined,
+    cost_price_per_unit: record.cost_price_per_unit !== undefined && record.cost_price_per_unit !== null ? Number(record.cost_price_per_unit) : undefined,
+    cost_is_manual_price: record.cost_is_manual_price,
+    cost_value_usd: record.cost_value_usd !== undefined && record.cost_value_usd !== null ? Number(record.cost_value_usd) : undefined,
+    cost_value_idr: record.cost_value_idr !== undefined && record.cost_value_idr !== null ? Number(record.cost_value_idr) : undefined,
+    chain: record.chain ?? undefined,
+    platform: record.platform ?? undefined,
+    pocket_id: record.pocket_id ?? undefined,
+    contract_address: record.contract_address ?? undefined,
+    mcap_at_time: record.mcap_at_time !== undefined && record.mcap_at_time !== null ? Number(record.mcap_at_time) : undefined,
+    cost_mcap: record.cost_mcap !== undefined && record.cost_mcap !== null ? Number(record.cost_mcap) : undefined,
+    token_ticker: record.token_ticker ?? undefined,
+    token_price_entry: record.token_price_entry !== undefined && record.token_price_entry !== null ? Number(record.token_price_entry) : undefined,
+    token_price_exit: record.token_price_exit !== undefined && record.token_price_exit !== null ? Number(record.token_price_exit) : undefined,
+    date: record.date,
+    note: record.note ?? undefined,
+    created_at: record.created_at,
+    synced: true,
+  };
+}
+
 async function markExpenseSyncedLocally(scope: string, expenseId: string): Promise<void> {
   const key = scopedDataKey(BASE_KEYS.expenses, scope);
   const list = await readIDB<Expense>(key);
   const idx = list.findIndex((item) => item.id === expenseId);
+  if (idx < 0) return;
+  if (list[idx].synced) return;
+  list[idx] = { ...list[idx], synced: true };
+  await writeIDB(key, list);
+}
+
+async function markIncomeSyncedLocally(scope: string, incomeId: string): Promise<void> {
+  const key = scopedDataKey(BASE_KEYS.income_entries, scope);
+  const list = await readIDB<IncomeEntry>(key);
+  const idx = list.findIndex((item) => item.id === incomeId);
   if (idx < 0) return;
   if (list[idx].synced) return;
   list[idx] = { ...list[idx], synced: true };
@@ -437,6 +489,86 @@ async function applyRecurringOperation(
   }
 }
 
+async function applyIncomeOperation(
+  client: SupabaseClient,
+  userId: string,
+  op: SyncOperation,
+): Promise<void> {
+  if (op.kind === 'upsert') {
+    const payload = normalizeIncome(op.payload as IncomeEntry);
+    const basePayload = {
+      id: payload.id,
+      title: payload.title,
+      source_type: payload.source_type,
+      asset_type: payload.asset_type,
+      amount: payload.amount,
+      ticker: payload.ticker ?? null,
+      coingecko_id: payload.coingecko_id ?? null,
+      currency: payload.currency,
+      price_at_time: payload.price_at_time ?? null,
+      is_manual_price: payload.is_manual_price,
+      value_usd: payload.value_usd,
+      value_idr: payload.value_idr,
+      has_cost_basis: payload.has_cost_basis,
+      cost_amount: payload.cost_amount ?? null,
+      cost_ticker: payload.cost_ticker ?? null,
+      cost_coingecko_id: payload.cost_coingecko_id ?? null,
+      cost_price_per_unit: payload.cost_price_per_unit ?? null,
+      cost_is_manual_price: payload.cost_is_manual_price,
+      cost_value_usd: payload.cost_value_usd ?? null,
+      cost_value_idr: payload.cost_value_idr ?? null,
+      chain: payload.chain ?? null,
+      platform: payload.platform ?? null,
+      pocket_id: payload.pocket_id ?? null,
+      contract_address: payload.contract_address ?? null,
+      mcap_at_time: payload.mcap_at_time ?? null,
+      cost_mcap: payload.cost_mcap ?? null,
+      token_ticker: payload.token_ticker ?? null,
+      token_price_entry: payload.token_price_entry ?? null,
+      token_price_exit: payload.token_price_exit ?? null,
+      date: payload.date,
+      note: payload.note ?? null,
+      created_at: payload.created_at,
+      synced: true,
+      user_id: userId,
+    };
+
+    let { error } = await client
+      .from('income_entries')
+      .upsert({ ...basePayload, deleted_at: null }, { onConflict: 'id' });
+
+    if (error && isMissingColumnError(error, 'deleted_at')) {
+      ({ error } = await client
+        .from('income_entries')
+        .upsert(basePayload, { onConflict: 'id' }));
+    }
+
+    if (error) {
+      throw new Error(`Sync income upsert gagal: ${error.message}`);
+    }
+    await markIncomeSyncedLocally(userId, payload.id);
+    return;
+  }
+
+  let { error } = await client
+    .from('income_entries')
+    .update({ deleted_at: new Date().toISOString(), synced: true })
+    .eq('id', op.recordId)
+    .eq('user_id', userId);
+
+  if (error && isMissingColumnError(error, 'deleted_at')) {
+    ({ error } = await client
+      .from('income_entries')
+      .delete()
+      .eq('id', op.recordId)
+      .eq('user_id', userId));
+  }
+
+  if (error) {
+    throw new Error(`Sync income delete gagal: ${error.message}`);
+  }
+}
+
 async function applyOperation(client: SupabaseClient, userId: string, op: SyncOperation): Promise<void> {
   switch (op.entity) {
     case 'expenses':
@@ -447,6 +579,9 @@ async function applyOperation(client: SupabaseClient, userId: string, op: SyncOp
       return;
     case 'recurring':
       await applyRecurringOperation(client, userId, op);
+      return;
+    case 'income_entries':
+      await applyIncomeOperation(client, userId, op);
       return;
     case 'portfolio_pockets':
       await applyPortfolioPocketOp(client, userId, op);
@@ -505,6 +640,11 @@ interface RemoteCategoryRow extends Category {
 }
 
 interface RemoteRecurringRow extends RecurringTemplate {
+  updated_at?: string;
+  deleted_at?: string | null;
+}
+
+interface RemoteIncomeRow extends IncomeEntry {
   updated_at?: string;
   deleted_at?: string | null;
 }
@@ -846,19 +986,165 @@ async function pullRecurring(scope: string, client: SupabaseClient, cursor?: str
   return { pulled, changed, cursor: serializeCursor(currentCursor) ?? cursor };
 }
 
+function incomeStorageKey(scope: string): string {
+  return scopedDataKey(BASE_KEYS.income_entries, scope);
+}
+
+function areIncomesEqual(a: IncomeEntry, b: IncomeEntry): boolean {
+  return a.id === b.id
+    && a.title === b.title
+    && a.source_type === b.source_type
+    && a.asset_type === b.asset_type
+    && a.amount === b.amount
+    && a.ticker === b.ticker
+    && a.coingecko_id === b.coingecko_id
+    && a.currency === b.currency
+    && a.price_at_time === b.price_at_time
+    && a.is_manual_price === b.is_manual_price
+    && a.value_usd === b.value_usd
+    && a.value_idr === b.value_idr
+    && a.has_cost_basis === b.has_cost_basis
+    && a.cost_amount === b.cost_amount
+    && a.cost_ticker === b.cost_ticker
+    && a.cost_coingecko_id === b.cost_coingecko_id
+    && a.cost_price_per_unit === b.cost_price_per_unit
+    && a.cost_is_manual_price === b.cost_is_manual_price
+    && a.cost_value_usd === b.cost_value_usd
+    && a.cost_value_idr === b.cost_value_idr
+    && a.chain === b.chain
+    && a.platform === b.platform
+    && a.pocket_id === b.pocket_id
+    && a.contract_address === b.contract_address
+    && a.mcap_at_time === b.mcap_at_time
+    && a.cost_mcap === b.cost_mcap
+    && a.token_ticker === b.token_ticker
+    && a.token_price_entry === b.token_price_entry
+    && a.token_price_exit === b.token_price_exit
+    && a.date === b.date
+    && a.note === b.note
+    && a.created_at === b.created_at
+    && a.synced === b.synced;
+}
+
+function hasSameIncomeList(local: IncomeEntry[], remote: IncomeEntry[]): boolean {
+  if (local.length !== remote.length) return false;
+  const localById = new Map(local.map((item) => [item.id, item]));
+  for (const remoteItem of remote) {
+    const localItem = localById.get(remoteItem.id);
+    if (!localItem || !areIncomesEqual(localItem, remoteItem)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+async function pullIncomes(scope: string, client: SupabaseClient, cursor?: string): Promise<PullResult> {
+  const columns = [
+    'id', 'title', 'source_type', 'asset_type', 'amount', 'ticker', 'coingecko_id',
+    'currency', 'price_at_time', 'is_manual_price', 'value_usd', 'value_idr',
+    'has_cost_basis', 'cost_amount', 'cost_ticker', 'cost_coingecko_id', 'cost_price_per_unit',
+    'cost_is_manual_price', 'cost_value_usd', 'cost_value_idr', 'chain', 'platform',
+    'pocket_id', 'contract_address', 'mcap_at_time', 'cost_mcap', 'token_ticker', 'token_price_entry', 'token_price_exit', 'date', 'note', 'created_at', 'synced', 'updated_at', 'deleted_at'
+  ].join(',');
+
+  const key = incomeStorageKey(scope);
+  const local = await readIDB<IncomeEntry>(key);
+  const map = new Map(local.map((item) => [item.id, item]));
+  const initialCursor = parseCursor(cursor);
+  let currentCursor = initialCursor;
+  let pulled = 0;
+  let changed = false;
+
+  while (true) {
+    let query = client
+      .from('income_entries')
+      .select(columns)
+      .order('updated_at', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(PULL_PAGE_SIZE);
+
+    query = applyCursorFilter(query, currentCursor, 'id');
+
+    const result = await query;
+    const data = result.data as unknown as RemoteIncomeRow[] | null;
+    const error = result.error;
+
+    if (error) {
+      if (isMissingColumnError(error, 'updated_at') || isMissingColumnError(error, 'deleted_at')) {
+        const fallback = await client
+          .from('income_entries')
+          .select('id,title,source_type,asset_type,amount,ticker,coingecko_id,currency,price_at_time,is_manual_price,value_usd,value_idr,has_cost_basis,cost_amount,cost_ticker,cost_coingecko_id,cost_price_per_unit,cost_is_manual_price,cost_value_usd,cost_value_idr,chain,platform,pocket_id,contract_address,mcap_at_time,cost_mcap,token_ticker,token_price_entry,token_price_exit,date,note,created_at,synced')
+          .order('date', { ascending: false })
+          .order('created_at', { ascending: false });
+
+        if (fallback.error) throw new Error(`Pull income gagal: ${fallback.error.message}`);
+
+        const remote = (fallback.data ?? []).map((row) => normalizeIncome(row as IncomeEntry));
+        if (hasSameIncomeList(local, remote)) {
+          return { pulled: remote.length, changed: false, cursor };
+        }
+        await writeIDB(key, remote);
+        return { pulled: remote.length, changed: true, cursor };
+      }
+      throw new Error(`Pull income gagal: ${error.message}`);
+    }
+
+    const rows = data ?? [];
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      if (row.deleted_at) {
+        if (map.delete(row.id)) changed = true;
+      } else {
+        const nextValue = normalizeIncome(row);
+        const current = map.get(nextValue.id);
+        if (!current || !areIncomesEqual(current, nextValue)) {
+          map.set(nextValue.id, nextValue);
+          changed = true;
+        }
+      }
+      pulled += 1;
+    }
+
+    const lastRow = rows[rows.length - 1];
+    if (!lastRow.updated_at || !lastRow.id) break;
+    currentCursor = { updatedAt: lastRow.updated_at, tieBreaker: lastRow.id };
+
+    if (rows.length < PULL_PAGE_SIZE) break;
+  }
+
+  const finalCursorStr = serializeCursor(currentCursor);
+  if (changed) {
+    const list = Array.from(map.values()).sort((a, b) => {
+      const dateDiff = b.date.localeCompare(a.date);
+      if (dateDiff !== 0) return dateDiff;
+      return b.created_at.localeCompare(a.created_at);
+    });
+    await writeIDB(key, list);
+  }
+
+  return {
+    pulled,
+    changed,
+    cursor: finalCursorStr || cursor,
+  };
+}
+
 async function pullBaseFromRemote(scope: string, client: SupabaseClient, meta: SyncMeta): Promise<DomainPullResult> {
   const expensesResult = await pullExpenses(scope, client, meta.cursorByEntity.expenses);
   const categoriesResult = await pullCategories(scope, client, meta.cursorByEntity.categories);
   const recurringResult = await pullRecurring(scope, client, meta.cursorByEntity.recurring);
+  const incomesResult = await pullIncomes(scope, client, meta.cursorByEntity.income_entries);
   const cursorPatch: Partial<Record<SyncEntity, string>> = {};
 
   if (expensesResult.cursor) cursorPatch.expenses = expensesResult.cursor;
   if (categoriesResult.cursor) cursorPatch.categories = categoriesResult.cursor;
   if (recurringResult.cursor) cursorPatch.recurring = recurringResult.cursor;
+  if (incomesResult.cursor) cursorPatch.income_entries = incomesResult.cursor;
 
   return {
-    pulled: expensesResult.pulled + categoriesResult.pulled + recurringResult.pulled,
-    changed: expensesResult.changed || categoriesResult.changed || recurringResult.changed,
+    pulled: expensesResult.pulled + categoriesResult.pulled + recurringResult.pulled + incomesResult.pulled,
+    changed: expensesResult.changed || categoriesResult.changed || recurringResult.changed || incomesResult.changed,
     cursorPatch,
   };
 }

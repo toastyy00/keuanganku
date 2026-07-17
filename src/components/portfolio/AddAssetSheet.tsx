@@ -2,10 +2,35 @@ import React, { useEffect, useState } from 'react';
 import { CheckCircle2, Coins, Loader2, LockKeyhole, Search, Sprout } from 'lucide-react';
 import { isBinanceSpotSymbolSupported, resolveCoingeckoId, searchCoinGeckoTickerOptions } from '../../lib/portfolio-prices';
 import { BottomSheet } from '../ui/BottomSheet';
-import { Button } from '../ui/Button';
-import { Input, Textarea } from '../ui/Input';
+import { ConfirmModal } from '../ui/ConfirmModal';
 import type { CoinGeckoTickerOption } from '../../lib/portfolio-prices';
 import type { PortfolioAsset } from '../../types';
+
+// —— Sleek form helpers ——
+const FieldGroup: React.FC<{
+  label: string;
+  error?: string;
+  children: React.ReactNode;
+}> = ({ label, error, children }) => (
+  <div className="flex flex-col gap-1.5">
+    <p className={`text-[11px] font-medium ${error ? 'text-red-400' : 'text-white/40'}`}>{label}</p>
+    {children}
+    {error && <p className="text-[10px] text-red-400">{error}</p>}
+  </div>
+);
+
+const SlimInput = React.forwardRef<
+  HTMLInputElement,
+  React.InputHTMLAttributes<HTMLInputElement>
+>((props, ref) => (
+  <input
+    ref={ref}
+    {...props}
+    className={`slim-input ${props.className ?? ''}`}
+  />
+));
+SlimInput.displayName = 'SlimInput';
+
 
 interface AddAssetSheetProps {
   isOpen: boolean;
@@ -31,6 +56,7 @@ const HOLDING_TYPES: Array<{ value: PortfolioAsset['holding_type']; label: strin
 ];
 
 const AddAssetSheet: React.FC<AddAssetSheetProps> = ({ isOpen, onClose, lockedTicker, title, colorTheme = '#B8F55A', onAdd }) => {
+  const [showConfirmClose, setShowConfirmClose] = useState(false);
   const [ticker, setTicker] = useState('');
   const [amount, setAmount] = useState('');
   const [location, setLocation] = useState('');
@@ -80,136 +106,234 @@ const AddAssetSheet: React.FC<AddAssetSheetProps> = ({ isOpen, onClose, lockedTi
     }
   };
 
+  const handleSave = async () => {
+    const parsed = Number(amount);
+    const nextErrors = {
+      ticker: !activeTicker.trim() ? 'Ticker wajib diisi' : undefined,
+      amount: !Number.isFinite(parsed) || parsed <= 0 ? 'Amount harus lebih dari 0' : undefined,
+      location: !location.trim() ? 'Location wajib diisi' : undefined,
+    };
+    setErrors(nextErrors);
+    if (nextErrors.ticker || nextErrors.amount || nextErrors.location) return;
+    const coingeckoId = selectedCoingeckoId || undefined;
+    const hasKnownLocalMapping = resolveCoingeckoId(normalizedTicker) !== normalizedTicker.toLowerCase();
+    if (!lockedTicker && !coingeckoId && !hasKnownLocalMapping) {
+      const binanceSupport = await isBinanceSpotSymbolSupported(`${normalizedTicker}USDT`);
+      if (binanceSupport !== true) {
+        const options = coinOptions.length > 0 ? coinOptions : await loadTickerOptions();
+        if (options.length > 0) {
+          setErrors((current) => ({ ...current, ticker: 'Pilih CoinGecko ID dulu' }));
+          return;
+        }
+      }
+    }
+    setSaving(true);
+    try {
+      await onAdd({
+        ticker: activeTicker.trim(),
+        amount: parsed,
+        location: location.trim(),
+        holding_type: holdingType,
+        coingecko_id: coingeckoId,
+        chain: chain.trim() || undefined,
+        note: note.trim() || undefined,
+      });
+      setTicker('');
+      setAmount('');
+      setLocation('');
+      setHoldingType('liquid');
+      setChain('');
+      setNote('');
+      resetResolver();
+      setErrors({});
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const isDirty = React.useMemo(() => {
+    const hasTicker = lockedTicker ? false : ticker.trim() !== '';
+    return (
+      hasTicker ||
+      amount.trim() !== '' ||
+      location.trim() !== '' ||
+      chain.trim() !== '' ||
+      note.trim() !== ''
+    );
+  }, [lockedTicker, ticker, amount, location, chain, note]);
+
+  const handleClose = React.useCallback(() => {
+    if (isDirty) {
+      setShowConfirmClose(true);
+    } else {
+      onClose();
+    }
+  }, [isDirty, onClose]);
+
   return (
     <BottomSheet
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleClose}
+      hasUnsavedChanges={isDirty}
       title={title ?? (lockedTicker ? 'ADD HOLDING' : 'ADD ASSET')}
       containPageOverscroll
+      footer={
+        <button
+          type="button"
+          disabled={saving}
+          style={{ backgroundColor: colorTheme }}
+          onClick={() => void handleSave()}
+          className="w-full h-11 rounded-xl text-[#1A1A1A] text-sm font-semibold transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+        >
+          {saving && (
+            <Loader2 size={15} className="animate-spin" strokeWidth={3} />
+          )}
+          {lockedTicker ? 'ADD HOLDING' : 'ADD'}
+        </button>
+      }
     >
       <div
-        className="portfolio-theme-sheet space-y-4"
+        className="portfolio-theme-sheet flex flex-col gap-3.5 pb-2"
         style={{ '--portfolio-pocket-accent': colorTheme } as React.CSSProperties}
       >
         {lockedTicker ? (
-          <div className="neo-card flex items-center justify-between px-3 py-2">
-            <p className="text-xs font-black uppercase text-brutal-black/50">Ticker Selected</p>
-            <p className="text-lg font-black">{lockedTicker}</p>
+          <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] flex items-center justify-between px-3 py-2">
+            <p className="text-[11px] font-medium text-white/40">Ticker Selected</p>
+            <p className="text-base font-semibold text-white/95">{lockedTicker}</p>
           </div>
         ) : (
           <>
-            <Input
-              label="Ticker"
-              value={ticker}
-              error={errors.ticker}
-              wrapperClassName="!gap-1"
-              className="rounded-md pr-12"
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter') return;
-                event.preventDefault();
-                void loadTickerOptions();
-              }}
-              onChange={(e) => {
-                setTicker(e.target.value.toUpperCase());
-                setErrors((current) => ({ ...current, ticker: undefined }));
-                resetResolver();
-              }}
-              rightSection={(
+            <FieldGroup label="Ticker" error={errors.ticker}>
+              <div className="relative flex items-center">
+                <input
+                  type="text"
+                  value={ticker}
+                  placeholder="Ticker"
+                  className="slim-input pr-10 uppercase"
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter') return;
+                    event.preventDefault();
+                    void loadTickerOptions();
+                  }}
+                  onChange={(e) => {
+                    setTicker(e.target.value.toUpperCase());
+                    setErrors((current) => ({ ...current, ticker: undefined }));
+                    resetResolver();
+                  }}
+                />
                 <button
                   type="button"
-                  className="pointer-events-auto inline-flex h-8 w-8 items-center justify-center border-2 border-[#1A1A1A] bg-[#2A2A2A] text-[#F5F0E8] transition-transform active:translate-x-[2px] active:translate-y-[2px] disabled:opacity-40"
+                  className="absolute right-2 text-white/30 hover:text-white/70 transition-colors disabled:opacity-30"
                   title="Find CoinGecko ID"
                   aria-label="Find CoinGecko ID"
                   disabled={!normalizedTicker || resolvingTicker}
                   onClick={() => void loadTickerOptions()}
                 >
-                  {resolvingTicker ? <Loader2 size={15} className="animate-spin" strokeWidth={3} /> : <Search size={15} strokeWidth={3} />}
+                  {resolvingTicker ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <Search size={12} strokeWidth={2.5} />
+                  )}
                 </button>
-              )}
-            />
+              </div>
+            </FieldGroup>
+
             {resolverOpen && (
-              <div className="space-y-2 border-2 border-[#4A4A4A] bg-[#202020] p-2">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#F5F0E8]/60">CoinGecko ID</p>
+              <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] overflow-hidden p-2.5 space-y-2">
+                <div className="flex items-center justify-between gap-2 border-b border-white/[0.04] pb-1.5">
+                  <p className="text-[10px] font-medium text-white/35 uppercase tracking-widest">CoinGecko ID</p>
                   {!!selectedCoingeckoId && (
-                    <p className="max-w-[58%] truncate text-[10px] font-black uppercase text-[#F5F0E8]" title={selectedCoingeckoId}>
+                    <p className="max-w-[58%] truncate text-[10px] text-white/50" title={selectedCoingeckoId}>
                       {selectedCoingeckoId}
                     </p>
                   )}
                 </div>
                 {resolvingTicker ? (
-                  <div className="flex items-center gap-2 px-1 py-2 text-[11px] font-black uppercase text-[#F5F0E8]/65">
-                    <Loader2 size={14} className="animate-spin" strokeWidth={3} />
-                    Searching
+                  <div className="flex items-center gap-2 px-1 py-1.5 text-[11px] text-white/40">
+                    <Loader2 size={12} className="animate-spin" strokeWidth={2.5} />
+                    Searching...
                   </div>
                 ) : coinOptions.length > 0 ? (
-                  <div className="grid gap-2">
+                  <div className="grid gap-1.5 max-h-36 overflow-y-auto divide-y divide-white/[0.04]">
                     {coinOptions.map((option) => {
                       const isSelected = selectedCoingeckoId === option.id;
                       return (
                         <button
                           key={option.id}
                           type="button"
-                          className={`flex w-full items-center gap-2 border-2 px-2 py-2 text-left transition-transform active:translate-x-[2px] active:translate-y-[2px] ${
-                            isSelected ? 'border-[#1A1A1A] bg-[var(--portfolio-pocket-accent)] text-[#1A1A1A]' : 'border-[#5D5D5D] bg-[#2A2A2A] text-[#F5F0E8]'
+                          className={`flex w-full items-center gap-2.5 px-2 py-2 text-left transition-colors rounded-lg text-xs ${
+                            isSelected
+                              ? 'bg-[var(--portfolio-pocket-accent)]/10 text-[var(--portfolio-pocket-accent)]'
+                              : 'text-white/80 hover:bg-white/[0.05]'
                           }`}
                           onClick={() => {
                             setSelectedCoingeckoId(option.id);
                             setErrors((current) => ({ ...current, ticker: undefined }));
                           }}
                         >
-                          {option.thumb ? <img src={option.thumb} alt="" className="h-5 w-5 shrink-0 rounded-full" /> : <Coins size={18} strokeWidth={3} className="shrink-0" />}
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-[12px] font-black uppercase leading-tight">{option.name}</span>
-                            <span className="block truncate text-[10px] font-bold uppercase opacity-70">
-                              {option.symbol} - {option.id}
+                          {option.thumb ? (
+                            <img src={option.thumb} alt="" className="h-5 w-5 shrink-0 rounded-full" />
+                          ) : (
+                            <Coins size={14} className="shrink-0 text-white/30" />
+                          )}
+                          <span className="min-w-0 flex-1 truncate">
+                            <span className="font-semibold uppercase">{option.name}</span>
+                            <span className="opacity-45 ml-1.5 text-[10px]">
+                              {option.symbol}
                             </span>
                           </span>
-                          {typeof option.market_cap_rank === 'number' && <span className="shrink-0 text-[10px] font-black opacity-70">#{option.market_cap_rank}</span>}
-                          {isSelected && <CheckCircle2 size={16} strokeWidth={3} className="shrink-0" />}
+                          {typeof option.market_cap_rank === 'number' && (
+                            <span className="shrink-0 text-[10px] opacity-40">#{option.market_cap_rank}</span>
+                          )}
+                          {isSelected && <CheckCircle2 size={12} className="shrink-0 text-current" />}
                         </button>
                       );
                     })}
                   </div>
                 ) : (
-                  <p className="px-1 py-2 text-[11px] font-black uppercase text-[#F5F0E8]/55">{resolverMessage}</p>
+                  <p className="px-1 py-1 text-[11px] text-white/35">{resolverMessage}</p>
                 )}
               </div>
             )}
           </>
         )}
 
-        <Input
-          label="Amount"
-          type="number"
-          wrapperClassName="!gap-1"
-          className="rounded-md"
-          value={amount}
-          error={errors.amount}
-          onChange={(e) => {
-            setAmount(e.target.value);
-            setErrors((current) => ({ ...current, amount: undefined }));
-          }}
-        />
-        <Input
-          label="Location"
-          wrapperClassName="!gap-1"
-          className="rounded-md"
-          value={location}
-          error={errors.location}
-          onChange={(e) => {
-            setLocation(e.target.value);
-            setErrors((current) => ({ ...current, location: undefined }));
-          }}
-          placeholder="Wallet, Hydro, Ledger..."
-        />
-        <Input label="Chain Optional" wrapperClassName="!gap-1" className="rounded-md" value={chain} onChange={(e) => setChain(e.target.value)} placeholder="Ethereum, Base, Ink..." />
+        <FieldGroup label="Amount" error={errors.amount}>
+          <SlimInput
+            type="number"
+            value={amount}
+            onChange={(e) => {
+              setAmount(e.target.value);
+              setErrors((current) => ({ ...current, amount: undefined }));
+            }}
+          />
+        </FieldGroup>
 
-        <div className="space-y-1.5">
-          <p className="text-xs font-bold uppercase tracking-wider text-brutal-black">Holding Type</p>
-          <div className="relative grid w-full grid-cols-3 rounded-full bg-[#1B1B1B] p-1">
+        <FieldGroup label="Location" error={errors.location}>
+          <SlimInput
+            value={location}
+            placeholder="Wallet, Hydro, Ledger..."
+            onChange={(e) => {
+              setLocation(e.target.value);
+              setErrors((current) => ({ ...current, location: undefined }));
+            }}
+          />
+        </FieldGroup>
+
+        <FieldGroup label="Chain Optional">
+          <SlimInput
+            value={chain}
+            placeholder="Ethereum, Base, Ink..."
+            onChange={(e) => setChain(e.target.value)}
+          />
+        </FieldGroup>
+
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[11px] font-medium text-white/40">Holding Type</p>
+          <div className="relative grid w-full grid-cols-3 rounded-xl bg-white/[0.05] p-1">
             <span
-              className="pointer-events-none absolute inset-y-1 left-1 rounded-full transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform"
+              className="pointer-events-none absolute inset-y-1 left-1 rounded-lg transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform"
               style={{
                 width: 'calc((100% - 0.5rem) / 3)',
                 transform: `translateX(${holdingTypeIndex * 100}%)`,
@@ -221,7 +345,7 @@ const AddAssetSheet: React.FC<AddAssetSheetProps> = ({ isOpen, onClose, lockedTi
               <button
                 key={type.value}
                 type="button"
-                className={`relative z-10 flex items-center justify-center gap-1 rounded-full px-2 py-1.5 text-[11px] font-black uppercase leading-none tracking-wider transition-colors duration-200 ${holdingType === type.value ? 'text-[#1A1A1A]' : 'text-[#F5F0E8]/45 hover:text-[#F5F0E8]/75'}`}
+                className={`relative z-10 flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium transition-colors duration-200 ${holdingType === type.value ? 'text-[#1A1A1A] font-semibold' : 'text-white/40 hover:text-white/70'}`}
                 onClick={() => setHoldingType(type.value)}
               >
                 {type.icon}
@@ -230,61 +354,30 @@ const AddAssetSheet: React.FC<AddAssetSheetProps> = ({ isOpen, onClose, lockedTi
             ))}
           </div>
         </div>
-        <Textarea label="Note Optional" wrapperClassName="!gap-1" className="rounded-md" value={note} onChange={(e) => setNote(e.target.value)} />
-        <Button
-          fullWidth
-          loading={saving}
-          className="!font-black"
-          style={{ backgroundColor: colorTheme, borderColor: '#2A2A2A', color: '#1A1A1A' }}
-          onClick={async () => {
-            const parsed = Number(amount);
-            const nextErrors = {
-              ticker: !activeTicker.trim() ? 'Ticker wajib diisi' : undefined,
-              amount: !Number.isFinite(parsed) || parsed <= 0 ? 'Amount harus lebih dari 0' : undefined,
-              location: !location.trim() ? 'Location wajib diisi' : undefined,
-            };
-            setErrors(nextErrors);
-            if (nextErrors.ticker || nextErrors.amount || nextErrors.location) return;
-            const coingeckoId = selectedCoingeckoId || undefined;
-            const hasKnownLocalMapping = resolveCoingeckoId(normalizedTicker) !== normalizedTicker.toLowerCase();
-            if (!lockedTicker && !coingeckoId && !hasKnownLocalMapping) {
-              const binanceSupport = await isBinanceSpotSymbolSupported(`${normalizedTicker}USDT`);
-              if (binanceSupport !== true) {
-                const options = coinOptions.length > 0 ? coinOptions : await loadTickerOptions();
-                if (options.length > 0) {
-                  setErrors((current) => ({ ...current, ticker: 'Pilih CoinGecko ID dulu' }));
-                  return;
-                }
-              }
-            }
-            setSaving(true);
-            try {
-              await onAdd({
-                ticker: activeTicker.trim(),
-                amount: parsed,
-                location: location.trim(),
-                holding_type: holdingType,
-                coingecko_id: coingeckoId,
-                chain: chain.trim() || undefined,
-                note: note.trim() || undefined,
-              });
-              setTicker('');
-              setAmount('');
-              setLocation('');
-              setHoldingType('liquid');
-              setChain('');
-              setNote('');
-              resetResolver();
-              setErrors({});
-              onClose();
-            } finally {
-              setSaving(false);
-            }
-          }}
-        >
-          {lockedTicker ? 'ADD HOLDING' : 'ADD'}
-        </Button>
+
+        <FieldGroup label="Note Optional">
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            className="slim-input resize-none h-16 min-h-16"
+          />
+        </FieldGroup>
       </div>
+
+      <ConfirmModal
+        isOpen={showConfirmClose}
+        title="Discard Changes?"
+        description="You have unsaved changes. Are you sure you want to discard them and close?"
+        confirmLabel="Discard"
+        cancelLabel="Keep Editing"
+        onConfirm={() => {
+          setShowConfirmClose(false);
+          onClose();
+        }}
+        onCancel={() => {
+          setShowConfirmClose(false);
+        }}
+      />
     </BottomSheet>
   );
 };

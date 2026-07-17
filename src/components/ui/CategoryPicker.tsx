@@ -61,7 +61,7 @@ const CategoryPicker: React.FC<CategoryPickerProps> = ({
   }, [isOpen]);
 
   React.useLayoutEffect(() => {
-    if (!isOpen || window.innerWidth >= 640) return;
+    if (!isOpen) return;
 
     const measurePanel = () => {
       const trigger = triggerRef.current;
@@ -95,91 +95,55 @@ const CategoryPicker: React.FC<CategoryPickerProps> = ({
   return (
     <div ref={rootRef} className="flex-1 flex flex-col gap-1.5">
       {label && (
-        <label
-          htmlFor={triggerId}
-          className={cn(
-            'text-xs font-bold uppercase tracking-wider',
-            error ? 'text-brutal-red' : 'text-brutal-black'
-          )}
-        >
+        <p className={`text-[11px] font-medium ${error ? 'text-red-400' : 'text-white/40'}`}>
           {label}
-        </label>
+        </p>
       )}
 
       <div className="relative">
-        <div className="sm:hidden">
-          <button
-            id={triggerId}
-            ref={triggerRef}
-            type="button"
-            aria-haspopup="listbox"
-            aria-expanded={isOpen}
-            aria-controls={isOpen ? listboxId : undefined}
-            onClick={() => setIsOpen((prev) => !prev)}
-            className={cn(
-              'neo-input w-full min-h-[44px] px-3 py-2.5 flex items-center justify-between gap-3 text-left',
-              'transition-all duration-150',
-              isOpen && 'border-brutal-yellow shadow-[3px_3px_0px_0px_#7ABF3A]',
-              error && '!border-brutal-red focus:!shadow-[4px_4px_0px_0px_#EF4444]',
-              buttonClassName
-            )}
-          >
-            <span className="min-w-0 flex items-center gap-2.5">
-              {selectedCategory ? (
-                <>
-                  <span className="text-lg leading-none shrink-0" aria-hidden="true">
-                    {selectedCategory.emoji}
-                  </span>
-                  <span className="truncate font-bold text-brutal-black">
-                    {selectedCategory.label}
-                  </span>
-                </>
-              ) : (
-                <span className="truncate font-bold text-brutal-black/45">
-                  {placeholder}
+        <button
+          id={triggerId}
+          ref={triggerRef}
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={isOpen}
+          aria-controls={isOpen ? listboxId : undefined}
+          onClick={() => setIsOpen((prev) => !prev)}
+          className={cn(
+            'slim-input w-full px-3 py-2 flex items-center justify-between gap-3 text-left font-normal text-white/90',
+            'transition-all duration-150',
+            isOpen && 'border-[#B8F55A]/50 bg-[#B8F55A]/[0.04]',
+            error && '!border-red-500/50',
+            buttonClassName
+          )}
+        >
+          <span className="min-w-0 flex items-center gap-2.5">
+            {selectedCategory ? (
+              <>
+                <span className="text-lg leading-none shrink-0" aria-hidden="true">
+                  {selectedCategory.emoji}
                 </span>
-              )}
-            </span>
-
-            <ChevronDown
-              size={18}
-              strokeWidth={2.5}
-              className={cn(
-                'shrink-0 text-brutal-black/60 transition-transform duration-150',
-                isOpen && 'rotate-180'
-              )}
-              aria-hidden="true"
-            />
-          </button>
-        </div>
-
-        <div className="relative hidden sm:block">
-          <select
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className={cn(
-              'neo-input w-full appearance-none pr-10',
-              error && '!border-brutal-red focus:!shadow-[4px_4px_0px_0px_#EF4444]',
-              buttonClassName
+                <span className="truncate font-medium text-white/95">
+                  {selectedCategory.label}
+                </span>
+              </>
+            ) : (
+              <span className="truncate text-white/30">
+                {placeholder}
+              </span>
             )}
-            style={{ fontSize: '16px' }}
-          >
-            {!selectedCategory && (
-              <option value="" disabled>{placeholder}</option>
-            )}
-            {categories.map((cat) => (
-              <option key={cat.slug} value={cat.slug}>
-                {cat.emoji} {cat.label}
-              </option>
-            ))}
-          </select>
+          </span>
+
           <ChevronDown
-            size={18}
-            strokeWidth={2.5}
-            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-brutal-black/60"
+            size={14}
+            strokeWidth={2}
+            className={cn(
+              'shrink-0 text-white/30 transition-transform duration-150',
+              isOpen && 'rotate-180'
+            )}
             aria-hidden="true"
           />
-        </div>
+        </button>
 
         {isOpen && (
           <div
@@ -187,12 +151,12 @@ const CategoryPicker: React.FC<CategoryPickerProps> = ({
             role="listbox"
             aria-labelledby={triggerId}
             className={cn(
-              'absolute left-0 right-[-3px] z-30 overflow-hidden border-2 border-[#555555] bg-[#242424]',
-              openDirection === 'up' ? 'bottom-[calc(100%+3px)]' : 'top-[calc(100%+3px)]',
+              'absolute left-0 right-0 z-30 overflow-hidden border border-white/[0.08] bg-[#1c1c1c] rounded-xl shadow-2xl shadow-black/60',
+              openDirection === 'up' ? 'bottom-[calc(100%+6px)]' : 'top-[calc(100%+6px)]',
               panelClassName
             )}
           >
-            <div className="overflow-y-auto" style={{ maxHeight: `${panelMaxHeight}px` }}>
+            <div className="overflow-y-auto divide-y divide-white/[0.04]" style={{ maxHeight: `${panelMaxHeight}px` }}>
               {categories.map((cat) => {
                 const isSelected = cat.slug === value;
 
@@ -207,17 +171,17 @@ const CategoryPicker: React.FC<CategoryPickerProps> = ({
                       setIsOpen(false);
                     }}
                     className={cn(
-                      'w-full flex items-center justify-between gap-2.5 px-3 py-1.5 text-left',
-                      'border-b-2 border-[#3A3A3A] last:border-b-0',
-                      'transition-colors duration-150 hover:bg-[#2A2A2A] active:bg-[#2F2F2F]',
-                      isSelected && 'bg-[#2D2D2D]'
+                      'w-full flex items-center justify-between gap-2.5 px-3 py-2.5 text-left text-sm transition-colors border-b border-white/[0.04] last:border-b-0',
+                      isSelected
+                        ? 'bg-[#B8F55A]/8 text-[#B8F55A]'
+                        : 'text-white/75 hover:bg-white/[0.05] hover:text-white/95'
                     )}
                   >
                     <span className="min-w-0 flex items-center gap-2">
                       <span className="text-[15px] leading-none shrink-0" aria-hidden="true">
                         {cat.emoji}
                       </span>
-                      <span className="truncate text-sm font-medium leading-tight text-brutal-white">
+                      <span className="truncate text-sm font-medium leading-tight">
                         {cat.label}
                       </span>
                     </span>
@@ -230,13 +194,13 @@ const CategoryPicker: React.FC<CategoryPickerProps> = ({
       </div>
 
       {error && (
-        <p className="text-xs font-bold text-brutal-red uppercase tracking-wider" role="alert">
+        <p className="text-[10px] text-red-400" role="alert">
           {error}
         </p>
       )}
 
       {!error && hint && (
-        <p className="text-xs text-brutal-black/60 font-medium">{hint}</p>
+        <p className="text-xs text-white/40 font-medium">{hint}</p>
       )}
     </div>
   );

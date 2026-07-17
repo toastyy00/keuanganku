@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { create } from 'zustand';
 import { SankeyChart } from '../components/ui/SankeyChart';
@@ -584,9 +584,16 @@ const HistoryPage: React.FC = () => {
       : null,
     [expenses, selectedSummaryExpenseId]
   );
-  const selectedSummaryCategory = selectedSummaryExpense
-    ? categoryBySlug.get(selectedSummaryExpense.category) ?? null
-    : null;
+
+  const [activeSummaryExpense, setActiveSummaryExpense] = useState<Expense | null>(null);
+
+  useEffect(() => {
+    if (selectedSummaryExpense) {
+      setActiveSummaryExpense(selectedSummaryExpense);
+    }
+  }, [selectedSummaryExpense]);
+
+  const displaySummaryExpense = selectedSummaryExpense || activeSummaryExpense;
 
   useEffect(() => {
     if (selectedSummaryExpenseId && !selectedSummaryExpense) {
@@ -1788,11 +1795,16 @@ const HistoryPage: React.FC = () => {
         isOpen={Boolean(selectedSummaryExpense)}
         onClose={closeExpenseSummary}
         title="Ringkasan Pengeluaran"
-        description={selectedSummaryExpense ? longDate(selectedSummaryExpense.date) : undefined}
+        description={displaySummaryExpense ? longDate(displaySummaryExpense.date) : undefined}
         panelClassName="sm:max-w-md"
         containPageOverscroll
       >
-        {selectedSummaryExpense && (
+        {displaySummaryExpense && (() => {
+          const selectedSummaryExpense = displaySummaryExpense;
+          const selectedSummaryCategory = displaySummaryExpense
+            ? categoryBySlug.get(displaySummaryExpense.category) ?? null
+            : null;
+          return (
           <div className="space-y-4">
             <div
               className="overflow-hidden rounded-md border-2 border-[#3A3A3A] bg-[#151515]"
@@ -1845,28 +1857,20 @@ const HistoryPage: React.FC = () => {
 
               <div className="rounded-md border-2 border-[#3A3A3A] bg-[#181818] p-3">
                 <p className="text-[10px] font-black uppercase tracking-[0.14em] text-brutal-black/45">
-                  Tanggal
+                  Waktu
                 </p>
                 <p className="mt-1 text-sm font-bold leading-snug text-brutal-white">
-                  {longDate(selectedSummaryExpense.date)}
-                </p>
-              </div>
-
-              <div className="rounded-md border-2 border-[#3A3A3A] bg-[#181818] p-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-brutal-black/45">
-                  Recurring
-                </p>
-                <p className="mt-1 text-sm font-bold leading-snug text-brutal-white">
-                  {selectedSummaryExpense.is_recurring ? 'Rutin' : 'Manual'}
-                </p>
-              </div>
-
-              <div className="rounded-md border-2 border-[#3A3A3A] bg-[#181818] p-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-brutal-black/45">
-                  Sync
-                </p>
-                <p className="mt-1 text-sm font-bold leading-snug text-brutal-white">
-                  {selectedSummaryExpense.synced ? 'Tersinkron' : 'Belum sync'}
+                  {(() => {
+                    try {
+                      const d = new Date(selectedSummaryExpense.created_at);
+                      if (isNaN(d.getTime())) return '--:--';
+                      const hours = String(d.getHours()).padStart(2, '0');
+                      const minutes = String(d.getMinutes()).padStart(2, '0');
+                      return `${hours}:${minutes}`;
+                    } catch {
+                      return '--:--';
+                    }
+                  })()}
                 </p>
               </div>
             </div>
@@ -1894,12 +1898,13 @@ const HistoryPage: React.FC = () => {
               </Button>
             </div>
           </div>
-        )}
+        ); })()}
       </BottomSheet>
 
       <BottomSheet
         isOpen={assistantOpen}
         onClose={() => setAssistantOpen(false)}
+        containPageOverscroll
         title="Insight Pengeluaran"
         description={`Analisis untuk: ${resolvedScopeLabel}`}
         panelClassName="history-insight-sheet flex flex-col h-[90dvh] lg:h-auto !overflow-hidden sm:max-w-4xl"

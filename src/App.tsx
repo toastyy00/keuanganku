@@ -2,6 +2,8 @@ import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { AddExpenseSheet } from './components/AddExpenseSheet';
+import { AddIncomeSheet } from './components/income/AddIncomeSheet';
+import { IncomeDetailSheet } from './components/income/IncomeDetailSheet';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { SkeletonDashboard } from './components/SkeletonCard';
@@ -10,6 +12,7 @@ import { appConfig, isDemoMode } from './lib/appConfig';
 import { seedDemoData } from './lib/demoData';
 import { GUEST_DATA_SCOPE } from './lib/dataScope';
 import { useExpenseStore } from './store/useExpenseStore';
+import { useIncomeStore } from './store/useIncomeStore';
 import { useAuthStore } from './store/useAuthStore';
 import { useSettingsStore } from './store/useSettingsStore';
 
@@ -21,6 +24,7 @@ const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const PortfolioPage = lazy(() => import('./pages/PortfolioPage'));
 const HistoryPage = lazy(() => import('./pages/HistoryPage'));
 const RecurringPage = lazy(() => import('./pages/RecurringPage'));
+const IncomePage = lazy(() => import('./pages/IncomePage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
@@ -61,6 +65,7 @@ const AppInner: React.FC = () => {
   const { isInitializing, session, user, loadSession } = useAuthStore();
   const loadExpenses = useExpenseStore((s) => s.loadExpenses);
   const _hasHydrated = useExpenseStore((s) => s._hasHydrated);
+  const _incomeHydrated = useIncomeStore((s) => s._hasHydrated);
   const cacheScope = useExpenseStore((s) => s.cacheScope);
   const ensureScope = useExpenseStore((s) => s.ensureScope);
   const ensureSettingsScope = useSettingsStore((s) => s.ensureScope);
@@ -143,12 +148,12 @@ const AppInner: React.FC = () => {
       window.removeEventListener('focus', revalidate);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [isInitializing, _hasHydrated, isScopeReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isInitializing, _hasHydrated, _incomeHydrated, isScopeReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Block render until we know auth state AND cache is hydrated
   // This prevents a flash of login for authenticated users AND prevents
   // overwriting IDB cache with empty state during async Zustand hydration.
-  if (isInitializing || !_hasHydrated || !isScopeReady) {
+  if (isInitializing || !_hasHydrated || !_incomeHydrated || !isScopeReady) {
     return <AppLoadingScreen />;
   }
 
@@ -189,6 +194,7 @@ const AppInner: React.FC = () => {
             <Route path="/pockets/:pocketId/:slug" element={<PortfolioPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/recurring" element={<RecurringPage />} />
+            <Route path="/income" element={<IncomePage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
 
@@ -200,6 +206,8 @@ const AppInner: React.FC = () => {
       {(session || demoMode) && (
         <>
           <AddExpenseSheet />
+          <AddIncomeSheet />
+          <IncomeDetailSheet />
           <PWAInstallBanner />
         </>
       )}

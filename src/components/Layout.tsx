@@ -8,6 +8,7 @@ import {
   Wallet,
   Plus,
   LineChart,
+  TrendingUp,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -48,7 +49,14 @@ const DESKTOP_POCKET_ITEM: SidebarNavItem = {
   end: false,
   index: 4,
 };
-const DESKTOP_MAIN_ITEMS = [...LEFT_ITEMS, RIGHT_ITEMS[0], DESKTOP_POCKET_ITEM];
+const DESKTOP_INCOME_ITEM: SidebarNavItem = {
+  label: 'Income',
+  to: '/income',
+  icon: TrendingUp,
+  end: false,
+  index: 5,
+};
+const DESKTOP_MAIN_ITEMS = [...LEFT_ITEMS, RIGHT_ITEMS[0], DESKTOP_POCKET_ITEM, DESKTOP_INCOME_ITEM];
 const DESKTOP_SETTINGS_ITEM = RIGHT_ITEMS[1];
 
 const SWIPE_MIN_DISTANCE_BASE = 72;
@@ -87,6 +95,8 @@ const Layout: React.FC = () => {
   const isPortfolioRoute =
     location.pathname === '/pockets'
     || location.pathname.startsWith('/pockets/');
+  const isIncomeRoute = location.pathname === '/income';
+  const hideNav = isPortfolioRoute || isIncomeRoute;
   const isDashboardRoute = location.pathname === '/';
   const demoMode = isDemoMode();
   const sidebarUserName = (() => {
@@ -625,7 +635,7 @@ const Layout: React.FC = () => {
           <Outlet />
         </div>
         {/* Spacer so mobile content clears the bottom nav/FAB — not needed for /history which manages its own */}
-        {location.pathname !== '/history' && !isPortfolioRoute && (
+        {location.pathname !== '/history' && !hideNav && (
           <div
             className="md:hidden"
             style={{ height: 'calc(76px + env(safe-area-inset-bottom, 0px))' }}
@@ -635,7 +645,7 @@ const Layout: React.FC = () => {
       </main>
 
       {/* ── Desktop FAB ── */}
-      {!isPortfolioRoute && (
+      {!hideNav && (
         <>
       <button
         className="fab hidden md:flex"

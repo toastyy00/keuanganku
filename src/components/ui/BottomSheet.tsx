@@ -28,7 +28,11 @@ interface BottomSheetProps {
   contentStyle?: React.CSSProperties;
   /** Keep mobile swipe gestures inside this sheet so page pull-to-refresh is not triggered */
   containPageOverscroll?: boolean;
+  /** Sticky footer rendered below the scrollable content area */
+  footer?: React.ReactNode;
   children?: React.ReactNode;
+  /** If true, prompts user before closing if they have unsaved changes */
+  hasUnsavedChanges?: boolean;
 }
 
 const SWIPE_THRESHOLD = 60;
@@ -47,10 +51,12 @@ function syncBottomSheetBodyState() {
 
   if (activeSheetCount > 0) {
     document.body.dataset.bottomSheetOpen = 'true';
+    document.documentElement.dataset.bottomSheetOpen = 'true';
     return;
   }
 
   delete document.body.dataset.bottomSheetOpen;
+  delete document.documentElement.dataset.bottomSheetOpen;
 }
 
 function getFocusableElements(container: HTMLElement | null): HTMLElement[] {
@@ -74,7 +80,9 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
   contentClassName,
   contentStyle,
   containPageOverscroll = false,
+  footer,
   children,
+  hasUnsavedChanges = false,
 }) => {
   const [isRendered, setIsRendered] = useState(isOpen);
   const [isVisible, setIsVisible] = useState(false);
@@ -91,6 +99,10 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
   const dragStartX = useRef<number | null>(null);
   const isDragDismiss = useRef(false);
   const currentOffset = useRef(0);
+
+  const attemptClose = useCallback(() => {
+    onClose();
+  }, [onClose]);
 
   useEffect(() => {
     if (isOpen) {
@@ -138,9 +150,9 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
       const panel = panelRef.current;
       if (!panel) return;
 
-      const focusableElements = getFocusableElements(panel);
-      const nextFocusTarget = closeButtonRef.current ?? focusableElements[0] ?? panel;
-      nextFocusTarget.focus();
+      // Focus the panel container itself on open. This establishes the focus trap
+      // context for screen readers and keyboard navigation without visually highlighting the close button.
+      panel.focus({ preventScroll: true });
     }, 30);
 
     return () => {
@@ -160,7 +172,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
       if (!isOpen) return;
 
       if (e.key === 'Escape') {
-        onClose();
+        attemptClose();
         return;
       }
 
@@ -196,7 +208,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
         firstElement.focus();
       }
     },
-    [isOpen, onClose]
+    [isOpen, attemptClose]
   );
 
   useEffect(() => {
@@ -266,6 +278,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
       overlayRef.current.style.opacity = '';
     }
   }, []);
+
 
   const animateDismiss = useCallback(() => {
     if (panelRef.current) {
@@ -343,8 +356,13 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
     }
 
     if (currentOffset.current > SWIPE_THRESHOLD) {
-      // Dismiss: animate out from current position
-      animateDismiss();
+      if (hasUnsavedChanges) {
+        resetDrag();
+        onClose();
+      } else {
+        // Dismiss: animate out from current position
+        animateDismiss();
+      }
     } else {
       // Snap back
       resetDrag();
@@ -352,7 +370,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
 
     dragStartY.current = null;
     isDragDismiss.current = false;
-  }, [animateDismiss, resetDrag]);
+  }, [animateDismiss, resetDrag, hasUnsavedChanges, onClose]);
 
   // ── Render ───────────────────────────────────────────────
   if (!isRendered) return null;
@@ -366,11 +384,11 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
         data-no-swipe="true"
         data-contain-page-overscroll={containPageOverscroll ? 'true' : undefined}
         data-state={isVisible ? 'open' : 'closed'}
-        onClick={disableBackdropClose ? undefined : onClose}
+        onClick={disableBackdropClose ? undefined : attemptClose}
         aria-hidden="true"
       />
 
-      {/* Panel */}
+      {/* Panel — flex column: sticky header + scrollable content + sticky footer */}
       <div
         ref={panelRef}
         role="dialog"
@@ -387,22 +405,22 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
         onTouchEnd={handleTouchEnd}
         tabIndex={-1}
       >
-        {/* Handle bar */}
-        <div className="flex items-center justify-center pt-3 pb-1">
-          <div className="w-10 h-1.5 rounded-full bg-brutal-black/30" />
+        {/* Handle bar — sticky, never scrolls */}
+        <div className="flex items-center justify-center pt-3 pb-2 shrink-0">
+          <div className="w-9 h-1 rounded-full bg-white/20" />
         </div>
 
-        {/* Header */}
+        {/* Header — sticky, never scrolls */}
         {(title || description) && (
-          <div className="flex items-start justify-between px-4 pt-2 pb-3 border-b-2 border-[#555555]">
+          <div className="flex items-center justify-between px-4 pt-1 pb-3 border-b border-white/[0.07] shrink-0">
             <div>
               {title && (
-                <h3 id={titleId} className="text-lg font-bold uppercase tracking-tight leading-tight">
+                <h3 id={titleId} className="text-base font-semibold tracking-tight leading-tight text-white/90">
                   {title}
                 </h3>
               )}
               {description && (
-                <p id={descriptionId} className="text-sm text-brutal-black/60 mt-0.5 font-medium">
+                <p id={descriptionId} className="text-xs text-white/40 mt-0.5 font-normal">
                   {description}
                 </p>
               )}
@@ -410,28 +428,44 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
             <button
               ref={closeButtonRef}
               type="button"
-              onClick={onClose}
+              onClick={attemptClose}
               className={cn(
-                'ml-3 mt-0.5 p-1.5 -mr-1',
-                'bg-red-500 text-red-50',
-                'hover:bg-red-600 hover:text-red-60',
-                'active:translate-x-0.5 active:translate-y-0.5',
+                'ml-3 w-7 h-7 flex items-center justify-center rounded-full',
+                'bg-white/[0.08] text-red-500/70',
+                'hover:bg-white/[0.14] hover:text-red-500',
+                'active:scale-95',
                 'transition-all duration-150',
               )}
               aria-label="Close sheet"
             >
-              <X size={18} strokeWidth={2.5} />
+              <X size={14} strokeWidth={2} />
             </button>
           </div>
         )}
 
-        {/* Content */}
-        <div ref={contentRef} className={cn("px-4 py-4", contentClassName)} style={contentStyle}>
+        {/* Scrollable content — flex-1 so it fills remaining space */}
+        <div
+          ref={contentRef}
+          className={cn('flex-1 overflow-y-auto px-4 py-4', contentClassName)}
+          style={contentStyle}
+        >
           {children}
         </div>
 
-        {/* Safe area spacer for mobile bottom */}
-        <div className="h-safe-area-inset-bottom pb-4" />
+        {/* Sticky footer — pinned above safe area */}
+        {footer ? (
+          <div
+            className="shrink-0 px-4 pt-3 border-t border-white/[0.07] bg-[#1e1e1e]"
+            style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+          >
+            {footer}
+          </div>
+        ) : (
+          <div
+            className="shrink-0"
+            style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }}
+          />
+        )}
       </div>
     </>
   );

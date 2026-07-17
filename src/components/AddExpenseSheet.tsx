@@ -1,15 +1,40 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AlertCircle, CalendarDays } from 'lucide-react';
 import { BottomSheet } from './ui/BottomSheet';
-import { Button } from './ui/Button';
-import { Input, Textarea } from './ui/Input';
 import { CategoryPicker } from './ui/CategoryPicker';
+import { ConfirmModal } from './ui/ConfirmModal';
 import { useUIStore } from '../store/useAppStore';
 import { useExpenseStore } from '../store/useExpenseStore';
 import { useCurrencyInput } from '../hooks/useCurrencyInput';
 import { getExchangeRate } from '../lib/exchangeRate';
 import { todayISO } from '../lib/utils';
 import type { Currency, ExpenseType } from '../types';
+
+// —— Sleek form helpers ——
+const FieldGroup: React.FC<{
+  label: string;
+  error?: string;
+  children: React.ReactNode;
+}> = ({ label, error, children }) => (
+  <div className="flex flex-col gap-1.5">
+    <p className={`text-[11px] font-medium ${error ? 'text-red-400' : 'text-white/40'}`}>{label}</p>
+    {children}
+    {error && <p className="text-[10px] text-red-400">{error}</p>}
+  </div>
+);
+
+const SlimInput = React.forwardRef<
+  HTMLInputElement,
+  React.InputHTMLAttributes<HTMLInputElement>
+>((props, ref) => (
+  <input
+    ref={ref}
+    {...props}
+    className={`slim-input ${props.className ?? ''}`}
+  />
+));
+SlimInput.displayName = 'SlimInput';
+
 
 // ============================================================
 //  ADD / EDIT EXPENSE BOTTOM SHEET
@@ -37,6 +62,7 @@ const AddExpenseSheet: React.FC = () => {
     : null;
   const isEditMode = editingExpense !== null;
   const [displayMode, setDisplayMode] = useState<'add' | 'edit'>(activeExpenseId ? 'edit' : 'add');
+  const [showConfirmClose, setShowConfirmClose] = useState(false);
   const isDisplayEditMode = displayMode === 'edit';
   const sheetTitle = isDisplayEditMode ? 'Edit Pengeluaran' : 'Tambah Pengeluaran';
 
@@ -54,10 +80,6 @@ const AddExpenseSheet: React.FC = () => {
   const prevCurrencyRef = useRef<Currency>(defaultCurrency);
   // Pending converted value after currency switch
   const pendingConversionRef = useRef<number | null>(null);
-  // Flash animation trigger
-  const [flashAmount, setFlashAmount] = useState(false);
-  const flashTimeoutRef = useRef<number | null>(null);
-
   // ── Form state ─────────────────────────────────────────────
   const [name, setName] = useState('');
   const {
@@ -74,7 +96,6 @@ const AddExpenseSheet: React.FC = () => {
   const [note, setNote] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const dateInputRef = useRef<HTMLInputElement>(null);
-  const [isDateFieldFocused, setIsDateFieldFocused] = useState(false);
 
   // ── Handle pending conversion after currency switch ────────
   useEffect(() => {
@@ -85,14 +106,6 @@ const AddExpenseSheet: React.FC = () => {
       pendingConversionRef.current = null;
     }
   }, [entryCurrency, setFromNumber]);
-
-  useEffect(() => {
-    return () => {
-      if (flashTimeoutRef.current !== null) {
-        window.clearTimeout(flashTimeoutRef.current);
-      }
-    };
-  }, []);
 
   // ── Reset on open ──────────────────────────────────────────
   const initializedOpenRef = useRef(false);
@@ -148,10 +161,6 @@ const AddExpenseSheet: React.FC = () => {
     setType(val);
   }, []);
 
-  const handleClose = useCallback(() => {
-    setErrors({});
-    closeAddSheet();
-  }, [closeAddSheet]);
 
   // ── Currency pill switch with live conversion ──────────────
   const handleCurrencySwitch = useCallback(async () => {
@@ -167,21 +176,12 @@ const AddExpenseSheet: React.FC = () => {
       pendingConversionRef.current = converted;
     }
     setEntryCurrency(newCurrency);
-    setFlashAmount(true);
-    if (flashTimeoutRef.current !== null) {
-      window.clearTimeout(flashTimeoutRef.current);
-    }
-    flashTimeoutRef.current = window.setTimeout(() => {
-      setFlashAmount(false);
-      flashTimeoutRef.current = null;
-    }, 200);
   }, [entryCurrency, rawValue]);
 
   const openDatePicker = useCallback(() => {
     const input = dateInputRef.current;
     if (!input) return;
 
-    setIsDateFieldFocused(true);
     input.focus({ preventScroll: true });
 
     const pickerInput = input as HTMLInputElement & { showPicker?: () => void };
@@ -192,8 +192,6 @@ const AddExpenseSheet: React.FC = () => {
 
     input.click();
   }, []);
-
-
   // ── Validation ─────────────────────────────────────────────
   const validate = (): boolean => {
     const next: Record<string, string> = {};
@@ -238,7 +236,8 @@ const AddExpenseSheet: React.FC = () => {
         }
       }
       haptic();
-      handleClose();
+      setErrors({});
+      closeAddSheet();
     } catch (err) {
       setErrors({ root: err instanceof Error ? err.message : 'Gagal menyimpan' });
     }
@@ -258,29 +257,82 @@ const AddExpenseSheet: React.FC = () => {
     }).format(new Date(`${date}T00:00:00`))
     : '';
 
+  const isDirty = React.useMemo(() => {
+    const baseName = editingExpense?.name ?? prefillData?.name ?? '';
+    const baseAmount = editingExpense?.amount ?? prefillData?.amount ?? 0;
+    const baseDate = editingExpense?.date ?? todayISO();
+    const baseCategory = editingExpense?.category ?? prefillData?.category ?? categories[0]?.slug ?? '';
+    const baseType = editingExpense?.type ?? prefillData?.type ?? 'NEED';
+    const baseDestination = editingExpense?.destination ?? '';
+    const baseNote = editingExpense?.note ?? prefillData?.note ?? '';
+    const baseCurrency = editingExpense?.currency ?? defaultCurrency;
+
+    return (
+      name !== baseName ||
+      rawValue !== baseAmount ||
+      date !== baseDate ||
+      category !== baseCategory ||
+      type !== baseType ||
+      destination !== baseDestination ||
+      note !== baseNote ||
+      entryCurrency !== baseCurrency
+    );
+  }, [editingExpense, prefillData, categories, defaultCurrency, name, rawValue, date, category, type, destination, note, entryCurrency]);
+
+  const handleClose = useCallback(() => {
+    if (isDirty) {
+      setShowConfirmClose(true);
+    } else {
+      setErrors({});
+      closeAddSheet();
+    }
+  }, [isDirty, closeAddSheet]);
+
   return (
     <BottomSheet
       isOpen={isAddSheetOpen}
       onClose={handleClose}
+      hasUnsavedChanges={isDirty}
+      containPageOverscroll
       title={sheetTitle}
+      footer={
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleClose}
+            className="flex-1 h-11 rounded-xl bg-white/[0.08] hover:bg-white/[0.12] text-white text-sm font-semibold transition-all active:scale-[0.98]"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            disabled={isLoading}
+            onClick={() => void handleSave()}
+            className="flex-1 h-11 rounded-xl bg-[#B8F55A] disabled:opacity-50 text-[#1A1A1A] text-sm font-semibold transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+          >
+            {isLoading && (
+              <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            )}
+            {isDisplayEditMode ? 'Simpan' : 'Tambah'}
+          </button>
+        </div>
+      }
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3.5 pb-2">
         {/* Root error */}
         {errors.root && (
-          <div className="flex items-center gap-2 p-3 bg-red-500 border-2 border-[#555555] text-white font-bold text-sm">
-            <AlertCircle size={16} strokeWidth={2.5} />
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+            <AlertCircle size={14} strokeWidth={2} />
             {errors.root}
           </div>
         )}
 
         {/* Tipe Transaksi Chips */}
-        <div className="flex flex-col gap-1 pt-1">
-          <label className="text-sm font-bold uppercase leading-none tracking-wider text-brutal-black/80">
-            Jenis Pengeluaran
-          </label>
-          <div className="relative grid w-full grid-cols-3 rounded-full bg-[#1B1B1B] p-1">
+        <div className="flex flex-col gap-1.5 pt-1">
+          <p className="text-[11px] font-medium text-white/40">Jenis Pengeluaran</p>
+          <div className="relative grid w-full grid-cols-3 rounded-xl bg-white/[0.05] p-1">
             <span
-              className="pointer-events-none absolute inset-y-1 left-1 rounded-full transition-[transform,background-color] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform"
+              className="pointer-events-none absolute inset-y-1 left-1 rounded-lg transition-[transform,background-color] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform"
               style={{
                 width: 'calc((100% - 0.5rem) / 3)',
                 transform: `translateX(${activeTypeIndex * 100}%)`,
@@ -295,7 +347,7 @@ const AddExpenseSheet: React.FC = () => {
                   key={item.id}
                   type="button"
                   onClick={() => handleTypeChange(item.id as ExpenseType)}
-                  className={`relative z-10 flex items-center justify-center rounded-full px-2 py-1.5 text-[11px] font-black uppercase leading-none tracking-wider transition-colors duration-200 ${isActive ? 'text-[#1A1A1A]' : 'text-[#F5F0E8]/45 hover:text-[#F5F0E8]/75'}`}
+                  className={`relative z-10 flex items-center justify-center rounded-lg px-2 py-1.5 text-[11px] font-medium transition-colors duration-200 ${isActive ? 'text-[#1A1A1A] font-semibold' : 'text-white/40 hover:text-white/70'}`}
                 >
                   <span className="inline-block min-w-[54px] text-center leading-none">
                     {item.label}
@@ -307,32 +359,22 @@ const AddExpenseSheet: React.FC = () => {
         </div>
 
         {/* Item Name */}
-        <Input
-          label="Nama Item"
-          id="expense-name"
-          placeholder={isTransfer ? "Nama transfer..." : "Nama pengeluaran..."}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          error={errors.name}
-          wrapperClassName="!gap-1"
-          labelClassName="!leading-none"
-          className="rounded-md"
-          style={{ fontSize: '16px' }}
-          autoComplete="off"
-          autoCapitalize="words"
-        />
+        <FieldGroup label="Nama Item" error={errors.name}>
+          <SlimInput
+            id="expense-name"
+            placeholder={isTransfer ? "Nama transfer..." : "Nama pengeluaran..."}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoComplete="off"
+            autoCapitalize="words"
+          />
+        </FieldGroup>
 
         {/* Amount + Currency pill */}
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-bold uppercase leading-none tracking-wider">
-            Nominal
-          </label>
+        <FieldGroup label="Nominal" error={errors.amount}>
           <div className="flex gap-2">
-            <div
-              className={`flex-1 flex overflow-hidden rounded-md border-2 border-[#555555] bg-[#222222] transition-all duration-150 ${flashAmount ? 'bg-brutal-yellow' : ''
-                } ${errors.amount ? 'border-red-500' : 'focus-within:border-brutal-yellow focus-within:shadow-[3px_3px_0px_0px_#7ABF3A]'}`}
-            >
-              <span className="flex items-center pl-3 text-sm font-bold text-brutal-black/60 shrink-0">
+            <div className="flex-1 flex items-center overflow-hidden rounded-xl border border-white/[0.09] bg-white/[0.05] transition-all duration-150 focus-within:border-[#B8F55A]/50 focus-within:bg-[#B8F55A]/[0.04]">
+              <span className="pl-3 text-sm font-medium text-white/40 shrink-0 select-none">
                 {symbol}
               </span>
               <input
@@ -342,7 +384,7 @@ const AddExpenseSheet: React.FC = () => {
                 placeholder={entryCurrency === 'IDR' ? '0' : '0.00'}
                 value={displayValue}
                 onChange={(e) => handleChange(e.target.value)}
-                className="flex-1 bg-transparent px-2 py-2.5 font-bold text-brutal-black focus:outline-none focus-visible:shadow-none transition-colors duration-200"
+                className="flex-1 bg-transparent px-2 py-2 font-medium text-white placeholder-white/20 focus:outline-none"
                 style={{ fontSize: '16px' }}
                 aria-label="Nominal"
               />
@@ -351,31 +393,27 @@ const AddExpenseSheet: React.FC = () => {
             <button
               type="button"
               onClick={handleCurrencySwitch}
-              className="min-h-[44px] min-w-[56px] shrink-0 rounded-md border-2 border-[#555555] px-3 text-sm font-black uppercase text-brutal-yellow transition-all duration-150 hover:opacity-80"
+              className="h-10 px-4 rounded-xl border border-[#B8F55A]/30 bg-[#B8F55A]/10 text-[#B8F55A] hover:bg-[#B8F55A]/20 transition-all font-semibold text-xs shrink-0 select-none"
               aria-label={`Switch to ${entryCurrency === 'IDR' ? 'USD' : 'IDR'}`}
             >
               {entryCurrency}
             </button>
           </div>
-          {errors.amount && (
-            <p className="text-xs font-bold text-red-500 uppercase tracking-wider">{errors.amount}</p>
-          )}
-        </div>
+        </FieldGroup>
 
         {/* Date */}
-        <div className="flex flex-col gap-1">
-          <label htmlFor="expense-date" className="text-xs font-bold uppercase leading-none tracking-wider">
-            Tanggal
-          </label>
+        <FieldGroup label="Tanggal" error={errors.date}>
           <div className="relative">
             <button
               type="button"
               onClick={openDatePicker}
-              className={`neo-input flex min-h-[44px] w-full items-center rounded-md px-3 py-2.5 pr-10 text-left font-bold text-brutal-black transition-all duration-150 ${isDateFieldFocused ? '!border-brutal-yellow !shadow-[3px_3px_0px_0px_#7ABF3A]' : ''
-                }`}
+              className="slim-input flex items-center justify-between text-left w-full"
               aria-label={`Tanggal: ${formattedDate}`}
             >
-              {formattedDate}
+              <span className={formattedDate ? 'text-white/90' : 'text-white/30'}>
+                {formattedDate}
+              </span>
+              <CalendarDays size={15} className="text-white/30 shrink-0" aria-hidden="true" />
             </button>
             <input
               ref={dateInputRef}
@@ -383,71 +421,67 @@ const AddExpenseSheet: React.FC = () => {
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              onFocus={() => setIsDateFieldFocused(true)}
-              onBlur={() => setIsDateFieldFocused(false)}
-              className="absolute h-px w-px opacity-0 pointer-events-none"
+              className="absolute inset-0 w-full h-full opacity-0 pointer-events-none"
               style={{ fontSize: '16px' }}
               aria-label="Tanggal"
-              tabIndex={-1}
+              required
             />
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-brutal-black/60">
-              <CalendarDays size={16} strokeWidth={2.5} aria-hidden="true" />
-            </div>
           </div>
-        </div>
+        </FieldGroup>
 
         {/* TRANSFER: Tujuan field instead of Category */}
         {isTransfer ? (
-          <Input
-            label="Tujuan Transfer"
-            id="expense-destination"
-            placeholder="Tujuan dana..."
-            value={destination}
-            onChange={(e) => setDestination(e.target.value)}
-            error={errors.destination}
-            wrapperClassName="!gap-1"
-            labelClassName="!leading-none"
-            className="rounded-md"
-            style={{ fontSize: '16px' }}
-          />
+          <FieldGroup label="Tujuan Transfer" error={errors.destination}>
+            <SlimInput
+              id="expense-destination"
+              placeholder="Tujuan dana..."
+              value={destination}
+              onChange={(e) => setDestination(e.target.value)}
+            />
+          </FieldGroup>
         ) : (
           /* Category + AI suggest */
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-bold uppercase leading-none tracking-wider">Kategori</label>
-            <CategoryPicker
-              label=""
-              value={category}
-              onChange={setCategory}
-              categories={categories}
-              panelClassName="sm:max-h-[260px]"
-              buttonClassName="!min-h-[44px] rounded-md"
-            />
-          </div>
+          <CategoryPicker
+            label="Kategori"
+            value={category}
+            onChange={setCategory}
+            categories={categories}
+            panelClassName="sm:max-h-[260px]"
+            buttonClassName="!min-h-[38px] !h-10 !rounded-xl !bg-white/[0.05] !border !border-white/[0.09] !font-medium"
+          />
         )}
 
         {/* Note */}
-        <Textarea
-          label="Catatan (opsional)"
-          id="expense-note"
-          placeholder="Catatan tambahan..."
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          wrapperClassName="!gap-1"
-          labelClassName="!leading-none"
-          className="rounded-md"
-          style={{ fontSize: '16px' }}
-        />
-
-        {/* Actions */}
-        <div className="flex gap-3 pt-2">
-          <Button variant="secondary" fullWidth onClick={handleClose}>Batal</Button>
-          <Button variant="primary" fullWidth onClick={handleSave} loading={isLoading}>
-            {isDisplayEditMode ? 'Simpan' : 'Tambah'}
-          </Button>
-        </div>
+        <FieldGroup label="Catatan (opsional)">
+          <textarea
+            id="expense-note"
+            placeholder="Catatan tambahan..."
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            className="slim-input resize-none h-16 min-h-16"
+            style={{ fontSize: '16px' }}
+          />
+        </FieldGroup>
       </div>
+
+      <ConfirmModal
+        isOpen={showConfirmClose}
+        title="Discard Changes?"
+        description="You have unsaved changes. Are you sure you want to discard them and close?"
+        confirmLabel="Discard"
+        cancelLabel="Keep Editing"
+        onConfirm={() => {
+          setShowConfirmClose(false);
+          setErrors({});
+          closeAddSheet();
+        }}
+        onCancel={() => {
+          setShowConfirmClose(false);
+        }}
+      />
     </BottomSheet>
   );
 };
 
 export { AddExpenseSheet };
+

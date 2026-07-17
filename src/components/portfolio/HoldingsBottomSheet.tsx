@@ -1,8 +1,7 @@
-﻿import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Coins, LockKeyhole, Plus, Sprout } from 'lucide-react';
 import { formatCurrency, formatPortfolioAmount } from '../../lib/utils';
 import { BottomSheet } from '../ui/BottomSheet';
-import { Button } from '../ui/Button';
 import { AddAssetSheet } from './AddAssetSheet';
 import type { PortfolioAsset } from '../../types';
 
@@ -30,15 +29,15 @@ interface HoldingsBottomSheetProps {
 const TYPE_META: Record<PortfolioAsset['holding_type'], { label: string; icon: React.ReactNode }> = {
   liquid: {
     label: 'Liquid',
-    icon: <Coins size={20} strokeWidth={3} />,
+    icon: <Coins size={16} strokeWidth={2} />,
   },
   staked: {
     label: 'Staked',
-    icon: <Sprout size={20} strokeWidth={3} />,
+    icon: <Sprout size={16} strokeWidth={2} />,
   },
   locked: {
     label: 'Locked',
-    icon: <LockKeyhole size={20} strokeWidth={3} />,
+    icon: <LockKeyhole size={16} strokeWidth={2} />,
   },
 };
 
@@ -47,12 +46,37 @@ function holdingPlace(asset: PortfolioAsset): string {
   return asset.chain ? `${location} · ${asset.chain}` : location;
 }
 
-const HoldingsBottomSheet: React.FC<HoldingsBottomSheetProps> = ({ isOpen, onClose, aggregate, currentPriceUsd = 0, idrRate, colorTheme = '#B8F55A', onAddHolding, onSelectHolding }) => {
+const HoldingsBottomSheet: React.FC<HoldingsBottomSheetProps> = ({
+  isOpen,
+  onClose,
+  aggregate: rawAggregate,
+  currentPriceUsd = 0,
+  idrRate,
+  colorTheme = '#B8F55A',
+  onAddHolding,
+  onSelectHolding,
+}) => {
+  const [activeAggregate, setActiveAggregate] = useState<AggregatedPortfolioAsset | null>(null);
+
+  React.useEffect(() => {
+    if (rawAggregate) {
+      setActiveAggregate(rawAggregate);
+    }
+  }, [rawAggregate]);
+
+  const aggregate = rawAggregate || activeAggregate;
+
   const [isAddOpen, setIsAddOpen] = useState(false);
+
   const sortedHoldings = useMemo(() => {
-    return [...(aggregate?.holdings ?? [])].sort((a, b) => b.amount * currentPriceUsd - a.amount * currentPriceUsd);
+    return [...(aggregate?.holdings ?? [])].sort(
+      (a, b) => b.amount * currentPriceUsd - a.amount * currentPriceUsd
+    );
   }, [aggregate?.holdings, currentPriceUsd]);
-  const formatIdrValue = (usdValue: number) => (idrRate ? formatCurrency(usdValue * idrRate, 'IDR') : 'Rp --');
+
+  const formatIdrValue = (usdValue: number) =>
+    idrRate ? formatCurrency(usdValue * idrRate, 'IDR') : 'Rp --';
+
 
   if (!aggregate) return null;
 
@@ -65,60 +89,92 @@ const HoldingsBottomSheet: React.FC<HoldingsBottomSheetProps> = ({ isOpen, onClo
         description={`${sortedHoldings.length} position${sortedHoldings.length === 1 ? '' : 's'}`}
         panelClassName="sm:max-w-[520px]"
         containPageOverscroll
+        footer={
+          <button
+            type="button"
+            style={{ backgroundColor: colorTheme }}
+            onClick={() => setIsAddOpen(true)}
+            className="w-full h-11 rounded-xl text-[#1A1A1A] text-sm font-semibold transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
+          >
+            <Plus size={15} strokeWidth={2.5} />
+            ADD HOLDING
+          </button>
+        }
       >
-        <div className="portfolio-theme-sheet space-y-4" style={{ '--portfolio-pocket-accent': colorTheme, '--portfolio-pocket-accent-soft': `${colorTheme}24` } as React.CSSProperties}>
-          <div className="relative overflow-hidden border-[3px] border-[#F5F0E8] bg-[#1A1A1A] p-4 text-[#F5F0E8]" style={{ boxShadow: `5px 5px 0 0 ${colorTheme}` }}>
-            <div className="absolute -right-8 -top-8 h-24 w-24 rotate-12 border-[3px]" style={{ backgroundColor: `${colorTheme}1A`, borderColor: `${colorTheme}80` }} />
+        <div
+          className="portfolio-theme-sheet flex flex-col gap-3.5 pb-2"
+          style={{
+            '--portfolio-pocket-accent': colorTheme,
+            '--portfolio-pocket-accent-soft': `${colorTheme}24`,
+          } as React.CSSProperties}
+        >
+          {/* Total position card */}
+          <div className="relative overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 text-[#F5F0E8]">
             <div className="relative z-10 flex items-start justify-between gap-3">
-              <p className="text-[11px] font-black uppercase tracking-[0.2em]" style={{ color: colorTheme }}>
+              <p className="text-[10px] font-medium uppercase tracking-widest" style={{ color: colorTheme }}>
                 Total Position
               </p>
-              <p className="max-w-[42%] text-right text-[10px] font-black uppercase leading-tight text-[#F5F0E8]/55">
+              <p className="max-w-[42%] text-right text-[10px] text-white/40 leading-tight">
                 1 {aggregate.ticker} ≈ ${currentPriceUsd.toFixed(4)}
               </p>
             </div>
-            <p className="mt-1 text-3xl font-black leading-none tracking-[-0.04em]">
+            <p className="mt-1.5 text-2xl font-bold leading-none tracking-tight">
               {formatPortfolioAmount(aggregate.totalAmount)} {aggregate.ticker}
             </p>
-            <div className="mt-3 flex items-end justify-between gap-3">
-              <p className="text-sm font-black text-[#F5F0E8]/70">${aggregate.totalUsdValue.toFixed(2)}</p>
-              <p className="text-base font-black">{formatIdrValue(aggregate.totalUsdValue)}</p>
+            <div className="mt-4 flex items-end justify-between gap-3 border-t border-white/[0.04] pt-3">
+              <p className="text-sm font-semibold text-white/50">${aggregate.totalUsdValue.toFixed(2)}</p>
+              <p className="text-base font-semibold text-white/95">{formatIdrValue(aggregate.totalUsdValue)}</p>
             </div>
           </div>
 
+          {/* Holdings list */}
           <div className="space-y-2">
-            <div className="-mt-0.5 flex items-end justify-between">
-              <p className="text-xs font-black uppercase leading-none text-[#F5F0E8]/50">Holding Positions</p>
-              <p className="text-[10px] font-black uppercase text-[#F5F0E8]/50">Tap to edit</p>
+            <div className="flex items-end justify-between px-1">
+              <p className="text-[10px] font-medium uppercase tracking-widest text-white/35">Holding Positions</p>
+              <p className="text-[10px] text-white/35">Tap to edit</p>
             </div>
-            {sortedHoldings.map((holding) => {
-              const meta = TYPE_META[holding.holding_type ?? 'liquid'];
-              const holdingUsd = holding.amount * currentPriceUsd;
-              return (
-                <button key={holding.id} type="button" className="neo-card portfolio-holding-location-card flex w-full items-center justify-between gap-3 px-3 py-3 text-left" onClick={() => onSelectHolding(holding)}>
-                  <div className="min-w-0">
-                    <p className="flex min-w-0 items-center gap-1.5 text-base font-black leading-tight">
-                      <span className="shrink-0" style={{ color: colorTheme }} aria-label={meta.label} title={meta.label}>
+            <div className="flex flex-col gap-2">
+              {sortedHoldings.map((holding) => {
+                const meta = TYPE_META[holding.holding_type ?? 'liquid'];
+                const holdingUsd = holding.amount * currentPriceUsd;
+                return (
+                  <button
+                    key={holding.id}
+                    type="button"
+                    className="rounded-xl border border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.06] transition-colors flex items-center justify-between gap-3 px-3.5 py-3 text-left"
+                    onClick={() => onSelectHolding(holding)}
+                  >
+                    <div className="min-w-0 flex items-center gap-3">
+                      <span
+                        className="w-8 h-8 rounded-lg bg-white/[0.04] flex items-center justify-center shrink-0"
+                        style={{ color: colorTheme }}
+                        aria-label={meta.label}
+                        title={meta.label}
+                      >
                         {meta.icon}
                       </span>
-                      <span className="truncate">{holdingPlace(holding)}</span>
-                    </p>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-2">{holding.note && <span className="max-w-[140px] truncate text-[10px] font-bold text-brutal-black/50">{holding.note}</span>}</div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-sm font-black">{formatPortfolioAmount(holding.amount)}</p>
-                    <p className="text-[11px] font-bold leading-tight text-brutal-black/60">
-                      ${holdingUsd.toFixed(2)} · {formatIdrValue(holdingUsd)}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-white/95 leading-tight">
+                          {holdingPlace(holding)}
+                        </p>
+                        {holding.note && (
+                          <p className="max-w-[140px] truncate text-[10px] text-white/30 mt-0.5 font-normal">
+                            {holding.note}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-semibold text-white/95">{formatPortfolioAmount(holding.amount)}</p>
+                      <p className="text-[11px] text-white/40 leading-none mt-0.5">
+                        ${holdingUsd.toFixed(2)} · {formatIdrValue(holdingUsd)}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-
-          <Button fullWidth leftIcon={<Plus size={16} strokeWidth={3} />} style={{ backgroundColor: colorTheme, borderColor: '#2A2A2A', color: '#1A1A1A' }} onClick={() => setIsAddOpen(true)}>
-            ADD HOLDING
-          </Button>
         </div>
       </BottomSheet>
 

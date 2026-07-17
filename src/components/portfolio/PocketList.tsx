@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, BriefcaseBusiness, Ellipsis, Landmark, Link2, Shield, Wallet } from 'lucide-react';
+import { ArrowLeft, BriefcaseBusiness, Ellipsis, Landmark, Link2, Plus, Shield, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { usePortfolioStore } from '../../store/usePortfolioStore';
 import type { PortfolioPocket } from '../../types';
@@ -14,15 +14,6 @@ interface PocketListProps {
   onTotalSparklineRevealComplete?: () => void;
 }
 
-function withAlpha(hex: string, alphaHex: string): string {
-  const cleaned = hex.trim();
-  if (!/^#[0-9a-fA-F]{6}$/.test(cleaned)) return '#1B1B1E';
-  return `${cleaned}${alphaHex}`;
-}
-
-function buildPocketAccentGradient(colorTheme: string): string {
-  return `linear-gradient(135deg, #1B1B1E 0%, #22252C 48%, ${withAlpha(colorTheme, '52')} 100%)`;
-}
 
 function renderPocketIcon(icon?: string) {
   const normalized = (icon ?? '').toLowerCase();
@@ -66,9 +57,7 @@ const PocketList: React.FC<PocketListProps> = ({
   const deletePocket = usePortfolioStore((s) => s.deletePocket);
   const [editing, setEditing] = useState<PortfolioPocket | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [settingsPressedId, setSettingsPressedId] = useState<string | null>(null);
-  const [settingsTapId, setSettingsTapId] = useState<string | null>(null);
-  const [cardTapId, setCardTapId] = useState<string | null>(null);
+  const [hoveredPocketId, setHoveredPocketId] = useState<string | null>(null);
   const sortedPockets = useMemo(() => {
     const valueByPocket = new Map<string, number>();
 
@@ -109,17 +98,18 @@ const PocketList: React.FC<PocketListProps> = ({
 
   return (
     <div className="space-y-4">
-      <div className="sticky top-0 z-30 -mx-4 -mt-6 flex items-start justify-between bg-[#1A1A1A] px-4 pb-3 pt-6 md:-mx-6 md:px-6">
+      <div className="sticky top-0 z-30 -mx-4 -mt-6 flex items-center justify-between bg-[#1A1A1A] px-4 pb-3 pt-6 md:-mx-6 md:px-6 select-none">
         <button
           type="button"
           onClick={() => navigate('/')}
-          className="inline-flex h-9 w-9 items-center justify-center border-[3px] border-[#F5F0E8] bg-[#1E1E1E] text-[#F5F0E8] shadow-[4px_4px_0_0_#969696] transition-[transform,box-shadow] duration-150 md:hover:-translate-y-0.5 md:hover:shadow-[6px_8px_0_0_#969696] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none md:active:translate-x-[4px] md:active:translate-y-[4px] md:active:shadow-none"
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.08] hover:border-white/20 text-white/50 hover:text-white transition-all active:scale-95 shrink-0 shadow-sm"
+          aria-label="Back to home"
         >
-          <ArrowLeft size={16} strokeWidth={3.2} />
+          <ArrowLeft size={16} strokeWidth={2.5} />
         </button>
-        <div className="flex flex-col items-end gap-0 pt-0.5 text-right leading-none">
-          <p className="text-[12px] font-black uppercase tracking-[0.18em] text-[#B8F55A]">Pockets</p>
-          <p className="mt-[-6px] text-[24px] font-black uppercase tracking-[-0.01em] text-[#F5F0E8]">Tracker</p>
+        <div className="flex items-center gap-1.5 text-[15px] font-black uppercase tracking-[0.12em] text-right">
+          <span className="text-[#B8F55A]">Pockets</span>
+          <span className="text-[#F5F0E8]">Tracker</span>
         </div>
       </div>
 
@@ -128,28 +118,33 @@ const PocketList: React.FC<PocketListProps> = ({
         onMiniSparklineRevealComplete={onTotalSparklineRevealComplete}
       />
 
-      <div className="flex items-center gap-3 pt-2">
-        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#E9E5DD]">My Pockets</p>
-        <div className="h-[2px] flex-1 bg-[#2E3138]" />
+      <div className="flex items-center justify-between pt-2">
+        <div className="flex items-center gap-3 flex-1 mr-4">
+          <p className="text-[11px] font-black uppercase tracking-[0.24em] text-white/40">My Pockets</p>
+          <div className="h-[1px] flex-1 bg-white/[0.08]" />
+        </div>
         <button
           type="button"
           onClick={() => {
             setEditing(null);
             setIsSheetOpen(true);
           }}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#E9E5DD] bg-[linear-gradient(145deg,#1B1B1E_0%,#23252A_52%,#2E3138_100%)] text-[#E9E5DD] shadow-[1px_1px_0_0_rgba(233,229,221,0.82)] transition-[transform,box-shadow] duration-150 md:hover:-translate-y-px md:hover:shadow-[2px_2px_0_0_rgba(233,229,221,0.82)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none md:active:translate-x-[1px] md:active:translate-y-[1px] md:active:shadow-none"
+          className="h-7 px-2.5 rounded-lg border border-white/[0.08] bg-white/[0.03] text-[#F5F0E8]/70 text-[9px] font-bold uppercase tracking-wider transition-all duration-200 hover:bg-white/[0.06] hover:border-[#B8F55A]/50 hover:text-[#B8F55A] active:scale-[0.96] flex items-center gap-1.5 shrink-0 select-none"
           aria-label="Create new pocket"
           title="Create new pocket"
         >
-          <span className="sr-only">Add pocket</span>
-          <span className="text-[24px] font-medium leading-none">+</span>
+          <Plus size={10} strokeWidth={2.5} />
+          <span>Add Pocket</span>
         </button>
       </div>
 
       <div className="space-y-2.5">
         {sortedPockets.map((pocket) => {
-          const count = assets.filter((item) => item.pocket_id === pocket.id).length;
-          const sourceLine = `${pocket.source_type}${pocket.source ? ` ${pocket.source.toUpperCase()}` : ''} - ${count} ASSETS`;
+          const pocketAssets = assets.filter((item) => item.pocket_id === pocket.id);
+          const count = pocketAssets.length;
+
+          const sourceLabel = `${pocket.source_type}${pocket.source ? ` ${pocket.source.toUpperCase()}` : ''}`;
+          const subtitleLabel = `${sourceLabel} · ${count} ${count === 1 ? 'ASSET' : 'ASSETS'}`;
           const changePct = getPocketChangePct(chartSeriesByCacheKey[`${pocket.id}::${POCKET_LIST_CHANGE_TIMEFRAME}`] ?? []);
           const isPositiveChange = changePct !== null && changePct >= 0;
 
@@ -165,93 +160,65 @@ const PocketList: React.FC<PocketListProps> = ({
                   onOpenPocket(pocket);
                 }
               }}
-              className={`group relative block w-full rounded-lg bg-[#1D1D1D] px-2 py-2 text-left transition-[transform,box-shadow] duration-150 ${
-                cardTapId === pocket.id ? 'translate-x-[4px] translate-y-[4px] shadow-none' : 'shadow-[4px_4px_0_0_#969696] md:hover:-translate-y-0.5 md:hover:shadow-[6px_8px_0_0_#969696]'
-              }`}
+              onMouseEnter={() => setHoveredPocketId(pocket.id)}
+              onMouseLeave={() => setHoveredPocketId(null)}
+              className="group relative block w-full rounded-2xl border bg-[#1D1D1D] px-4 py-3 text-left transition-all duration-200 hover:translate-x-1 cursor-pointer"
               style={{
-                background: `linear-gradient(124deg, #222326 10%, #262931 56%, ${pocket.color_theme}2E 86%, ${pocket.color_theme}4A 100%)`,
+                borderColor: `${pocket.color_theme}1C`,
+                background: hoveredPocketId === pocket.id
+                  ? `radial-gradient(circle at 100% 100%, ${pocket.color_theme}16, transparent 65%), linear-gradient(135deg, #24272D 0%, #18191D 100%)`
+                  : `radial-gradient(circle at 100% 100%, ${pocket.color_theme}0E, transparent 65%), linear-gradient(135deg, #1E2025 0%, #151619 100%)`,
+                boxShadow: '0 12px 35px -5px rgba(0, 0, 0, 0.45)',
               }}
-              onPointerDown={() => setCardTapId(pocket.id)}
-              onPointerUp={() => setCardTapId((current) => (current === pocket.id ? null : current))}
-              onPointerLeave={() => setCardTapId((current) => (current === pocket.id ? null : current))}
-              onPointerCancel={() => setCardTapId((current) => (current === pocket.id ? null : current))}
             >
-              <div className="flex min-h-[56px] items-center gap-2.5">
-                <div
-                  className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-md border-2"
-                  style={{
-                    borderColor: `${pocket.color_theme}`,
-                    background: buildPocketAccentGradient(pocket.color_theme),
-                  }}
-                >
-                  <div style={{ color: pocket.color_theme }}>
-                    <div className="scale-[0.86]">{renderPocketIcon(pocket.icon)}</div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  {/* Icon container */}
+                  <div
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                    style={{
+                      color: pocket.color_theme,
+                      backgroundColor: `${pocket.color_theme}12`,
+                    }}
+                  >
+                    <div className="scale-[0.8]">{renderPocketIcon(pocket.icon)}</div>
+                  </div>
+
+                  {/* Info Stack */}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-[#F5F0E8] leading-tight">{pocket.name}</p>
+                    <p className="text-[9px] font-black uppercase tracking-wider text-white/30 mt-0.5">{subtitleLabel}</p>
                   </div>
                 </div>
 
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[17px] font-black leading-[0.95] tracking-[-0.01em] text-[#F5F0E8]">{pocket.name}</p>
-                  <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-                    <p className="truncate text-[8px] font-black uppercase tracking-[0.08em] text-[#F5F0E8]/90">{sourceLine}</p>
-                    {changePct !== null && (
-                      <span className="shrink-0 text-[8px] font-black leading-none tracking-[0.08em]" style={{ color: isPositiveChange ? '#22C55E' : '#EF4444' }}>
-                        {formatPocketChangePct(changePct)}
-                      </span>
-                    )}
-                  </div>
-                </div>
+                {/* Right side: Change & Edit Button */}
+                <div className="flex items-center gap-3 shrink-0">
+                  {changePct !== null && (
+                    <span className={`text-sm font-bold ${isPositiveChange ? 'text-[#1B9066]' : 'text-[#B93E50]'}`}>
+                      {formatPocketChangePct(changePct)}
+                    </span>
+                  )}
 
-                <button
-                  type="button"
-                  aria-label={`Edit pocket ${pocket.name}`}
-                  title="Pocket settings"
-                  className={`ml-1 inline-flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-md border-2 bg-[#1B1B1E] transition-[transform,box-shadow] duration-150 ${
-                    settingsPressedId === pocket.id ? 'scale-90 rotate-6' : 'scale-100 rotate-0'
-                  } ${settingsTapId === pocket.id ? 'translate-x-[4px] translate-y-[4px] shadow-[0_0_0_0_#969696]' : 'shadow-[3px_3px_0_0_#969696]'}`}
-                  style={{
-                    borderColor: `${pocket.color_theme}`,
-                    color: pocket.color_theme,
-                    background: buildPocketAccentGradient(pocket.color_theme),
-                  }}
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    setSettingsTapId(pocket.id);
-                    setCardTapId((current) => (current === pocket.id ? null : current));
-                  }}
-                  onPointerUp={(e) => {
-                    e.stopPropagation();
-                    setSettingsTapId((current) => (current === pocket.id ? null : current));
-                  }}
-                  onPointerLeave={() => setSettingsTapId((current) => (current === pocket.id ? null : current))}
-                  onPointerCancel={() => setSettingsTapId((current) => (current === pocket.id ? null : current))}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSettingsPressedId(pocket.id);
-                    window.setTimeout(() => setSettingsPressedId((current) => (current === pocket.id ? null : current)), 180);
-                    setEditing(pocket);
-                    setIsSheetOpen(true);
-                  }}
-                >
-                  <Ellipsis size={17} strokeWidth={2.8} />
-                </button>
+                  {/* Settings Ellipsis Button */}
+                  <button
+                    type="button"
+                    aria-label={`Edit pocket ${pocket.name}`}
+                    title="Pocket settings"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white/30 hover:text-white/70 hover:bg-white/[0.04] transition-all active:scale-95"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditing(pocket);
+                      setIsSheetOpen(true);
+                    }}
+                  >
+                    <Ellipsis size={14} strokeWidth={2.5} />
+                  </button>
+                </div>
               </div>
             </div>
           );
         })}
       </div>
-
-      <p className="pt-2 text-center text-[10px] font-black uppercase tracking-[0.18em] text-[#44474D]">
-        Powered by{' '}
-        <a
-          href="https://www.coingecko.com/?utm_source=keuanganku&utm_medium=referral"
-          target="_blank"
-          rel="noreferrer"
-          className="underline decoration-[#44474D]/50 underline-offset-2"
-          onClick={(event) => event.stopPropagation()}
-        >
-          CoinGecko API
-        </a>
-      </p>
 
       <PocketSettingsSheet
         isOpen={isSheetOpen}

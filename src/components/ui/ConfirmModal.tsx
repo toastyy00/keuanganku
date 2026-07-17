@@ -1,7 +1,6 @@
 import React, { useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle } from 'lucide-react';
-import { Button } from './Button';
 
 // ============================================================
 //  CONFIRM MODAL — Centered dialog for destructive actions
@@ -80,29 +79,17 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
         className="fixed inset-0 z-[81] flex items-center justify-center px-4 pointer-events-none"
       >
         <div
-          className="w-full max-w-sm pointer-events-auto"
-          style={{
-            backgroundColor: '#242424',
-            border: '4px solid #555555',
-            boxShadow: '4px 4px 0px 0px #F5F0E8',
-          }}
+          className="w-full max-w-sm pointer-events-auto rounded-3xl border border-white/[0.08] bg-gradient-to-b from-[#1C1C1C] to-[#141414] shadow-[0_24px_50px_rgba(0,0,0,0.6)] overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div
-            className="flex items-center gap-3 px-5 py-4"
-            style={{ borderBottom: '2px solid #3A3A3A' }}
-          >
-            <div
-              className="flex items-center justify-center w-9 h-9 shrink-0"
-              style={{ backgroundColor: '#3A1A1A', border: '2px solid #F87171' }}
-            >
-              <AlertTriangle size={18} strokeWidth={2.5} className="text-red-400" />
+          <div className="flex items-center gap-3 px-6 pt-6 pb-2">
+            <div className="flex items-center justify-center w-9 h-9 rounded-full bg-red-500/10 shrink-0">
+              <AlertTriangle size={16} className="text-red-400" />
             </div>
             <h3
               id="confirm-modal-title"
-              className="text-base font-black uppercase tracking-tight"
-              style={{ color: '#F5F0E8' }}
+              className="text-base font-bold text-white tracking-tight"
             >
               {title}
             </h3>
@@ -112,34 +99,36 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
           {description && (
             <p
               id="confirm-modal-desc"
-              className="px-5 py-4 text-sm font-medium"
-              style={{ color: '#A09890', lineHeight: 1.6 }}
+              className="px-6 py-3 text-sm text-white/50 leading-relaxed font-medium"
             >
               {description}
             </p>
           )}
 
           {/* Actions */}
-          <div
-            className="flex gap-3 px-5 pb-5"
-            style={{ paddingTop: description ? 0 : '1.25rem' }}
-          >
-            <Button
-              variant="secondary"
-              fullWidth
+          <div className="flex gap-3 px-6 pb-6 pt-2">
+            <button
+              type="button"
               onClick={onCancel}
               disabled={loading}
+              className="flex-1 text-center text-xs font-semibold px-4 py-2.5 rounded-2xl border border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.08] text-white/70 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {cancelLabel}
-            </Button>
-            <Button
-              variant="destructive"
-              fullWidth
+            </button>
+            <button
+              type="button"
               onClick={onConfirm}
-              loading={loading}
+              disabled={loading}
+              className="flex-1 flex items-center justify-center gap-2 text-xs font-semibold px-4 py-2.5 rounded-2xl bg-red-500/90 hover:bg-red-500 text-white shadow-lg active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
+              {loading && (
+                <span
+                  className="inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"
+                  aria-hidden="true"
+                />
+              )}
               {confirmLabel}
-            </Button>
+            </button>
           </div>
         </div>
       </div>

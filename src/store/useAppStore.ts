@@ -27,6 +27,18 @@ interface UIState {
   setActiveExpense: (id: string | null) => void;
   clearPrefill: () => void;
 
+  // ── Add Income Sheet ──
+  isAddIncomeSheetOpen: boolean;
+  activeIncomeId: string | null;
+  openAddIncomeSheet: () => void;
+  closeAddIncomeSheet: () => void;
+  setActiveIncome: (id: string | null) => void;
+
+  // ── Income Detail Sheet ──
+  isIncomeDetailSheetOpen: boolean;
+  openIncomeDetailSheet: (id: string) => void;
+  closeIncomeDetailSheet: () => void;
+
   // ── Global FAB signals for page-specific actions ─────────
   isHistoryInsightOpen: boolean;
   openHistoryInsight: () => void;
@@ -66,6 +78,23 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ activeExpenseId: id, isAddSheetOpen: true, prefillData: null }),
 
   clearPrefill: () => set({ prefillData: null }),
+
+  // ── Add Income Sheet ──
+  isAddIncomeSheetOpen: false,
+  activeIncomeId: null,
+  openAddIncomeSheet: () =>
+    set({ isAddIncomeSheetOpen: true, activeIncomeId: null }),
+  closeAddIncomeSheet: () =>
+    set({ isAddIncomeSheetOpen: false, activeIncomeId: null }),
+  setActiveIncome: (id) =>
+    set({ activeIncomeId: id, isAddIncomeSheetOpen: true }),
+
+  // ── Income Detail Sheet ──
+  isIncomeDetailSheetOpen: false,
+  openIncomeDetailSheet: (id) =>
+    set({ activeIncomeId: id, isIncomeDetailSheetOpen: true }),
+  closeIncomeDetailSheet: () =>
+    set({ isIncomeDetailSheetOpen: false, activeIncomeId: null }),
 
   // ── Global FAB signals ────────────────────────────────
   isHistoryInsightOpen: false,

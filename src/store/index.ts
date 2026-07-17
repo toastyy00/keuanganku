@@ -13,3 +13,4 @@ export type { AiProvider } from './useSettingsStore';
 
 export { useAuthStore } from './useAuthStore';
 export { usePortfolioStore } from './usePortfolioStore';
+export { useIncomeStore } from './useIncomeStore';
