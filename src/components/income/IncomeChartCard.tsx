@@ -90,7 +90,7 @@ export const IncomeChartCard = React.memo(({ monthIncomes, year, month }: Income
   };
 
   return (
-    <div className="relative w-full h-full rounded-3xl border border-white/[0.10] bg-gradient-to-br from-[#1A1A1A] via-[#131313] to-[#0E0E0E] pt-5 pb-3 flex flex-col justify-start text-[#F5F0E8] shadow-[0_12px_30px_rgba(0,0,0,0.25)] overflow-hidden">
+    <div className="relative w-full h-full rounded-3xl border border-transparent bg-gradient-to-br from-[#1A1A1A] via-[#131313] to-[#0E0E0E] pt-5 pb-3 flex flex-col justify-start text-[#F5F0E8] shadow-[0_12px_30px_rgba(0,0,0,0.25)] overflow-hidden">
       {/* Noise texture overlay to eliminate color banding (dithering) */}
       <div 
         className="absolute inset-0 pointer-events-none opacity-[0.03] mix-blend-overlay z-10"

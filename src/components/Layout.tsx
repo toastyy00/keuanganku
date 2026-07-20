@@ -401,7 +401,7 @@ const Layout: React.FC = () => {
 
 
   return (
-    <div className="flex h-dvh min-h-0 overflow-hidden" style={{ backgroundColor: '#1A1A1A' }}>
+    <div className="flex h-dvh min-h-0 overflow-hidden" style={{ backgroundColor: (isPortfolioRoute || isIncomeRoute) ? '#191B1D' : '#1A1A1A' }}>
 
       {/*
         ── Desktop sidebar ──────────────────────────────────────

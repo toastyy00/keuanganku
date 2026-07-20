@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { BriefcaseBusiness, Landmark, Link2, Shield, Wallet } from 'lucide-react';
 import { BottomSheet } from '../ui/BottomSheet';
 import { ConfirmModal } from '../ui/ConfirmModal';
+import { dimColor } from '../../lib/utils';
 import type { PortfolioPocket } from '../../types';
 
 interface PocketSettingsSheetProps {
@@ -111,7 +112,7 @@ const PocketSettingsSheet: React.FC<PocketSettingsSheetProps> = ({ isOpen, onClo
               type="button"
               disabled={saving}
               className="w-full h-11 rounded-xl text-[#1A1A1A] text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-60 flex items-center justify-center gap-2"
-              style={{ backgroundColor: colorTheme }}
+              style={{ backgroundColor: dimColor(colorTheme) }}
               onClick={async () => {
                 const nextErrors = {
                   name: !name.trim() ? 'Name wajib diisi' : undefined,
@@ -154,7 +155,7 @@ const PocketSettingsSheet: React.FC<PocketSettingsSheetProps> = ({ isOpen, onClo
       >
         <div
           className="portfolio-theme-sheet flex flex-col gap-3.5 pb-2"
-          style={{ '--portfolio-pocket-accent': colorTheme } as React.CSSProperties}
+          style={{ '--portfolio-pocket-accent': dimColor(colorTheme) } as React.CSSProperties}
         >
           <FieldGroup label="Name" error={errors.name}>
             <SlimInput
@@ -174,7 +175,7 @@ const PocketSettingsSheet: React.FC<PocketSettingsSheetProps> = ({ isOpen, onClo
                 style={{
                   width: 'calc((100% - 0.5rem) / 4)',
                   transform: `translateX(${sourceTypeIndex * 100}%)`,
-                  backgroundColor: colorTheme,
+                  backgroundColor: dimColor(colorTheme),
                 }}
                 aria-hidden="true"
               />
@@ -232,7 +233,7 @@ const PocketSettingsSheet: React.FC<PocketSettingsSheetProps> = ({ isOpen, onClo
                       ? 'bg-white/[0.06] text-[var(--portfolio-pocket-accent)]'
                       : 'border-white/[0.08] bg-white/[0.02] text-white/40 hover:border-white/20 hover:text-white/70'
                   }`}
-                  style={icon === item ? { borderColor: colorTheme, color: colorTheme } : undefined}
+                  style={icon === item ? { borderColor: dimColor(colorTheme), color: dimColor(colorTheme) } : undefined}
                 >
                   {renderIcon(item)}
                 </button>

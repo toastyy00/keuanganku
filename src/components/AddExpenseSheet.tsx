@@ -308,7 +308,7 @@ const AddExpenseSheet: React.FC = () => {
             type="button"
             disabled={isLoading}
             onClick={() => void handleSave()}
-            className="flex-1 h-11 rounded-xl bg-[#B8F55A] disabled:opacity-50 text-[#1A1A1A] text-sm font-semibold transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+            className="flex-1 h-11 rounded-xl bg-[#a8a8ad] disabled:opacity-50 text-black hover:bg-[#a8a8ad]/90 text-sm font-semibold transition-all active:scale-[0.98] flex items-center justify-center gap-2"
           >
             {isLoading && (
               <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -373,7 +373,7 @@ const AddExpenseSheet: React.FC = () => {
         {/* Amount + Currency pill */}
         <FieldGroup label="Nominal" error={errors.amount}>
           <div className="flex gap-2">
-            <div className="flex-1 flex items-center overflow-hidden rounded-xl border border-white/[0.09] bg-white/[0.05] transition-all duration-150 focus-within:border-[#B8F55A]/50 focus-within:bg-[#B8F55A]/[0.04]">
+            <div className="flex-1 flex items-center overflow-hidden rounded-xl border border-transparent bg-white/[0.05] transition-all duration-150 focus-within:border-white/20 focus-within:bg-white/[0.08]">
               <span className="pl-3 text-sm font-medium text-white/40 shrink-0 select-none">
                 {symbol}
               </span>
@@ -393,7 +393,7 @@ const AddExpenseSheet: React.FC = () => {
             <button
               type="button"
               onClick={handleCurrencySwitch}
-              className="h-10 px-4 rounded-xl border border-[#B8F55A]/30 bg-[#B8F55A]/10 text-[#B8F55A] hover:bg-[#B8F55A]/20 transition-all font-semibold text-xs shrink-0 select-none"
+              className="h-10 px-4 rounded-xl border border-white/[0.08] bg-white/[0.04] text-white/80 hover:bg-white/[0.09] transition-all font-semibold text-xs shrink-0 select-none"
               aria-label={`Switch to ${entryCurrency === 'IDR' ? 'USD' : 'IDR'}`}
             >
               {entryCurrency}

@@ -34,15 +34,31 @@ export const IncomeEntryCard: React.FC<IncomeEntryCardProps> = ({ income }) => {
     ? income.amount - (income.cost_amount ?? 0)
     : null;
 
+  const [isHovered, setIsHovered] = React.useState(false);
+
   return (
     <div
       onClick={handleCardClick}
-      className="cursor-pointer select-none flex flex-col gap-1 p-3.5 px-4 bg-white/[0.01] border border-white/[0.04] rounded-2xl transition-all duration-200 hover:border-white/[0.08] hover:bg-white/[0.03] active:scale-[0.99]"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className="cursor-pointer select-none flex flex-col gap-1 p-3.5 px-4 rounded-2xl transition-all duration-200 active:scale-[0.99]"
+      style={{
+        background: isHovered ? '#1F1F1F' : '#1A1A1A',
+        boxShadow: isHovered
+          ? 'inset 1px 1px 0px 0px rgba(255, 255, 255, 0.05), -4px -4px 12px rgba(255, 255, 255, 0.03), 4px 4px 12px rgba(0, 0, 0, 0.45)'
+          : 'inset 1px 1px 0px 0px rgba(255, 255, 255, 0.03), -4px -4px 12px rgba(255, 255, 255, 0.03), 4px 4px 12px rgba(0, 0, 0, 0.45)',
+      }}
     >
       <div className="flex justify-between items-center gap-4">
         {/* Left Info: Icon & (Title & Date) */}
         <div className="min-w-0 flex-1 flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-white/[0.03] border border-white/[0.05] text-white/70 shrink-0">
+          <div
+            className="flex items-center justify-center w-8 h-8 rounded-xl text-white/70 shrink-0"
+            style={{
+              background: isHovered ? '#1F1F1F' : '#1A1A1A',
+              boxShadow: 'inset -2px -2px 6px rgba(255, 255, 255, 0.015), inset 2px 2px 6px rgba(0, 0, 0, 0.5)'
+            }}
+          >
             {React.createElement(getTablerIconByEmoji(emoji), { size: 14, className: "shrink-0" })}
           </div>
           <div className="min-w-0 flex flex-col gap-0.5">

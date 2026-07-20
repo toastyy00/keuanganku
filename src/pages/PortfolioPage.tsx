@@ -64,43 +64,44 @@ const PortfolioPage: React.FC = () => {
 
   if (!isPortfolioScopeReady) {
     return (
-      <div className="portfolio-touch mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 pb-10 pt-6 md:px-6" />
+      <div className="portfolio-touch mx-auto w-full max-w-3xl px-4 pb-10 pt-6 md:px-6" />
     );
   }
 
   return (
-    <div className="portfolio-touch mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 pb-10 pt-6 md:px-6">
-      <div className="flex-1">
+    <div className="portfolio-touch mx-auto w-full max-w-3xl px-4 pb-10 pt-6 md:px-6">
+      <div>
         {activePocketId ? (
           <PocketDetail
             pocketId={activePocketId}
             onBack={() => navigate('/pockets')}
           />
         ) : (
-          <PocketList
-            shouldAnimateTotalSparkline={!hasPlayedMiniSparklineReveal}
-            onTotalSparklineRevealComplete={markMiniSparklineRevealComplete}
-            onOpenPocket={(pocket) => {
-              markMiniSparklineRevealComplete();
-              const slug = slugifyPocketName(pocket.name);
-              navigate(slug ? `/pockets/${pocket.id}/${slug}` : `/pockets/${pocket.id}`);
-            }}
-          />
+          <>
+            <PocketList
+              shouldAnimateTotalSparkline={!hasPlayedMiniSparklineReveal}
+              onTotalSparklineRevealComplete={markMiniSparklineRevealComplete}
+              onOpenPocket={(pocket) => {
+                markMiniSparklineRevealComplete();
+                const slug = slugifyPocketName(pocket.name);
+                navigate(slug ? `/pockets/${pocket.id}/${slug}` : `/pockets/${pocket.id}`);
+              }}
+            />
+            <footer className="mt-[350px] pb-4 text-center text-[10px] font-black uppercase tracking-[0.18em] text-[#44474D]">
+              Powered by{' '}
+              <a
+                href="https://www.coingecko.com/?utm_source=keuanganku&utm_medium=referral"
+                target="_blank"
+                rel="noreferrer"
+                className="underline decoration-[#44474D]/50 underline-offset-2 hover:text-[#F5F0E8] hover:decoration-[#F5F0E8] transition-colors"
+                onClick={(event) => event.stopPropagation()}
+              >
+                CoinGecko API
+              </a>
+            </footer>
+          </>
         )}
       </div>
-
-      <footer className="mt-auto pt-10 pb-4 text-center text-[10px] font-black uppercase tracking-[0.18em] text-[#44474D]">
-        Powered by{' '}
-        <a
-          href="https://www.coingecko.com/?utm_source=keuanganku&utm_medium=referral"
-          target="_blank"
-          rel="noreferrer"
-          className="underline decoration-[#44474D]/50 underline-offset-2 hover:text-[#F5F0E8] hover:decoration-[#F5F0E8] transition-colors"
-          onClick={(event) => event.stopPropagation()}
-        >
-          CoinGecko API
-        </a>
-      </footer>
 
       {!activePocketId && (
         <button

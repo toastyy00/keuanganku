@@ -18,7 +18,6 @@ import {
   PencilLine,
 } from 'lucide-react';
 import { BottomSheet } from '../components/ui/BottomSheet';
-import { Button } from '../components/ui/Button';
 import { useExpenseStore } from '../store/useExpenseStore';
 import { useUIStore } from '../store/useAppStore';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -161,12 +160,6 @@ function getExpenseTypeLabel(type: ExpenseType): string {
   if (type === 'NEED') return 'Need';
   if (type === 'WANT') return 'Want';
   return 'Transfer';
-}
-
-function getExpenseTypeColor(type: ExpenseType): string {
-  if (type === 'NEED') return '#3B82F6';
-  if (type === 'WANT') return '#EC4899';
-  return '#FB923C';
 }
 
 const QUICK_PROMPTS: Array<{ intent: InsightIntent; label: string; icon: React.ReactNode }> = [
@@ -1805,97 +1798,115 @@ const HistoryPage: React.FC = () => {
             ? categoryBySlug.get(displaySummaryExpense.category) ?? null
             : null;
           return (
-          <div className="space-y-4">
+          <div className="space-y-6 pb-2">
+            {/* Unified Main Card Container */}
             <div
-              className="overflow-hidden rounded-md border-2 border-[#3A3A3A] bg-[#151515]"
-              style={{ boxShadow: `3px 3px 0 0 ${getExpenseTypeColor(selectedSummaryExpense.type)}` }}
+              className="rounded-2xl p-5 flex flex-col relative overflow-hidden space-y-4"
+              style={{
+                background: 'rgba(26, 26, 26, 0.85)',
+                boxShadow: 'inset 1px 1px 0px 0px rgba(255, 255, 255, 0.03), -4px -4px 12px rgba(255, 255, 255, 0.03), 4px 4px 12px rgba(0, 0, 0, 0.55)',
+              }}
             >
-              <div className="flex items-start gap-3 border-b-2 border-[#3A3A3A] p-3">
-                <span
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[6px] text-3xl"
-                  style={{
-                    backgroundColor: getExpenseTypeColor(selectedSummaryExpense.type),
-                    textShadow: '0 2px 2px rgba(0,0,0,0.35)',
-                  }}
-                  aria-hidden="true"
-                >
-                  {selectedSummaryExpense.type === 'TRANSFER'
-                    ? '\u{1F4B8}'
-                    : (selectedSummaryCategory?.emoji ?? '\u{1F6CD}\uFE0F')}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-brutal-black/45">
-                    {getExpenseTypeLabel(selectedSummaryExpense.type)}
-                  </p>
-                  <h4 className="mt-1 text-lg font-black leading-tight text-brutal-white normal-case tracking-normal">
-                    {selectedSummaryExpense.name}
-                  </h4>
+              {/* Header Row */}
+              <div className="flex items-center justify-between w-full pb-3 border-b border-white/[0.08]">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center justify-center w-8 h-8 shrink-0 text-2xl text-white/80">
+                    {selectedSummaryExpense.type === 'TRANSFER'
+                      ? '\u{1F4B8}'
+                      : (selectedSummaryCategory?.emoji ?? '\u{1F6CD}\uFE0F')}
+                  </div>
+                  <div className="text-left min-w-0">
+                    <span className="text-[9px] font-bold text-white/50 uppercase tracking-wider block">
+                      {getExpenseTypeLabel(selectedSummaryExpense.type)}
+                    </span>
+                    <h3 className="text-xs font-bold text-white leading-tight mt-0.5 truncate max-w-[160px] sm:max-w-[280px]">
+                      {selectedSummaryExpense.name}
+                    </h3>
+                  </div>
                 </div>
               </div>
 
-              <div className="p-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-brutal-black/45">
+              {/* Nominal display */}
+              <div className="flex flex-col items-center py-1 w-full text-center">
+                <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest block mb-0.5">
                   Nominal
-                </p>
-                <p className="mt-1 break-words text-3xl font-black leading-none text-brutal-yellow">
+                </span>
+                <span className="text-2xl font-bold tracking-tight text-white">
                   {formatCurrency(selectedSummaryExpense.amount, selectedSummaryExpense.currency)}
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-md border-2 border-[#3A3A3A] bg-[#181818] p-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-brutal-black/45">
-                  {selectedSummaryExpense.type === 'TRANSFER' ? 'Tujuan' : 'Kategori'}
-                </p>
-                <p className="mt-1 text-sm font-bold leading-snug text-brutal-white">
-                  {selectedSummaryExpense.type === 'TRANSFER'
-                    ? (selectedSummaryExpense.destination || 'Tanpa tujuan')
-                    : (selectedSummaryCategory?.label ?? (selectedSummaryExpense.category || 'Tanpa kategori'))}
-                </p>
+                </span>
               </div>
 
-              <div className="rounded-md border-2 border-[#3A3A3A] bg-[#181818] p-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-brutal-black/45">
-                  Waktu
-                </p>
-                <p className="mt-1 text-sm font-bold leading-snug text-brutal-white">
-                  {(() => {
-                    try {
-                      const d = new Date(selectedSummaryExpense.created_at);
-                      if (isNaN(d.getTime())) return '--:--';
-                      const hours = String(d.getHours()).padStart(2, '0');
-                      const minutes = String(d.getMinutes()).padStart(2, '0');
-                      return `${hours}:${minutes}`;
-                    } catch {
-                      return '--:--';
-                    }
-                  })()}
-                </p>
+              {/* Divider line before metadata */}
+              <div className="border-t border-white/[0.08] w-full" />
+
+              {/* Grid for Category and Time */}
+              <div className="grid grid-cols-2 gap-4 w-full">
+                <div className="text-center min-w-0 py-1">
+                  <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest block mb-1">
+                    {selectedSummaryExpense.type === 'TRANSFER' ? 'Tujuan' : 'Kategori'}
+                  </span>
+                  <p className="text-xs font-bold text-white/80 truncate">
+                    {selectedSummaryExpense.type === 'TRANSFER'
+                      ? (selectedSummaryExpense.destination || 'Tanpa tujuan')
+                      : (selectedSummaryCategory?.label ?? (selectedSummaryExpense.category || 'Tanpa kategori'))}
+                  </p>
+                </div>
+
+                <div className="text-center min-w-0 py-1">
+                  <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest block mb-1">
+                    Waktu
+                  </span>
+                  <p className="text-xs font-bold text-white/80 truncate">
+                    {(() => {
+                      try {
+                        const d = new Date(selectedSummaryExpense.created_at);
+                        if (isNaN(d.getTime())) return '--:--';
+                        const hours = String(d.getHours()).padStart(2, '0');
+                        const minutes = String(d.getMinutes()).padStart(2, '0');
+                        return `${hours}:${minutes}`;
+                      } catch {
+                        return '--:--';
+                      }
+                    })()}
+                  </p>
+                </div>
               </div>
+
+              {/* Notes (Rendered directly inline if note exists) */}
+              {selectedSummaryExpense.note && (
+                <>
+                  {/* Divider line */}
+                  <div className="border-t border-white/[0.08] w-full" />
+                  
+                  <div className="flex flex-col gap-1 w-full text-left">
+                    <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest block pl-0.5">
+                      Catatan
+                    </span>
+                    <p className="text-xs font-medium text-white/70 leading-relaxed break-words px-0.5">
+                      {selectedSummaryExpense.note}
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
 
-            <div className="rounded-md border-2 border-[#3A3A3A] bg-[#181818] p-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-brutal-black/45">
-                Catatan
-              </p>
-              <p className={`mt-1 text-sm font-medium leading-6 ${selectedSummaryExpense.note ? 'text-brutal-white' : 'text-brutal-black/45 italic'}`}>
-                {selectedSummaryExpense.note || 'Tidak ada catatan'}
-              </p>
-            </div>
-
+            {/* Action Buttons */}
             <div className="flex gap-3 pt-1">
-              <Button variant="secondary" fullWidth onClick={closeExpenseSummary}>
-                Tutup
-              </Button>
-              <Button
-                variant="primary"
-                fullWidth
-                onClick={editSelectedSummaryExpense}
-                leftIcon={<PencilLine size={16} strokeWidth={2.5} aria-hidden="true" />}
+              <button
+                type="button"
+                onClick={closeExpenseSummary}
+                className="flex-1 flex items-center justify-center gap-2 text-xs font-semibold px-4 py-3 rounded-2xl text-white/80 bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 border border-white/[0.08] transition-all duration-200"
               >
-                Edit
-              </Button>
+                Tutup
+              </button>
+              <button
+                type="button"
+                onClick={editSelectedSummaryExpense}
+                className="flex-1 flex items-center justify-center gap-2 text-xs font-semibold px-4 py-3 rounded-2xl text-[#1A1A1A] bg-[#a8a8ad] hover:bg-[#b8b8bd] active:scale-95 transition-all duration-200"
+              >
+                <PencilLine size={13} />
+                <span>Edit</span>
+              </button>
             </div>
           </div>
         ); })()}

@@ -45,9 +45,8 @@ const formatMcap = (val?: number): string => {
 const DetailRow: React.FC<{
   label: string;
   value: React.ReactNode;
-  border?: boolean;
-}> = ({ label, value, border = true }) => (
-  <div className={`flex justify-between items-center py-2.5 ${border ? 'border-b border-white/[0.04]' : ''}`}>
+}> = ({ label, value }) => (
+  <div className="flex justify-between items-center py-2.5">
     <span className="text-[10px] font-semibold text-white/30 uppercase tracking-widest">{label}</span>
     <div className="text-right text-xs font-semibold text-white/90">{value}</div>
   </div>
@@ -67,6 +66,9 @@ export const IncomeDetailSheet: React.FC = () => {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isDeleteHovered, setIsDeleteHovered] = useState(false);
+  const [isEditHovered, setIsEditHovered] = useState(false);
+  const [isAddressHovered, setIsAddressHovered] = useState(false);
 
   const handleConfirmDelete = async (id: string) => {
     setIsDeleting(true);
@@ -144,11 +146,21 @@ export const IncomeDetailSheet: React.FC = () => {
       containPageOverscroll
       title="Income Details"
       footer={
-        <div className="flex gap-3 w-full">
+        <div className="flex gap-4 w-full">
           <button
             type="button"
             onClick={() => setIsConfirmOpen(true)}
-            className="flex-1 flex items-center justify-center gap-2 text-xs font-semibold px-4 py-3 rounded-2xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400 active:scale-95 transition-all duration-200"
+            onMouseEnter={() => setIsDeleteHovered(true)}
+            onMouseLeave={() => setIsDeleteHovered(false)}
+            onTouchStart={() => setIsDeleteHovered(true)}
+            onTouchEnd={() => setIsDeleteHovered(false)}
+            className="flex-1 flex items-center justify-center gap-2 text-xs font-semibold px-4 py-3 rounded-2xl text-red-400 active:scale-95 transition-all duration-200"
+            style={{
+              background: 'rgba(26, 26, 26, 0.85)',
+              boxShadow: isDeleteHovered
+                ? 'inset -3px -3px 8px rgba(255, 255, 255, 0.03), inset 3px 3px 8px rgba(0, 0, 0, 0.5)'
+                : 'inset 1px 1px 0px 0px rgba(255, 255, 255, 0.02), -3px -3px 8px rgba(255, 255, 255, 0.03), 3px 3px 8px rgba(0, 0, 0, 0.5)',
+            }}
           >
             <IconTrash size={13} />
             <span>Delete</span>
@@ -156,7 +168,17 @@ export const IncomeDetailSheet: React.FC = () => {
           <button
             type="button"
             onClick={handleEdit}
-            className="flex-1 flex items-center justify-center gap-2 text-xs font-semibold px-4 py-3 rounded-2xl bg-[#B8F55A] hover:bg-[#a6de4b] text-black active:scale-95 transition-all duration-200"
+            onMouseEnter={() => setIsEditHovered(true)}
+            onMouseLeave={() => setIsEditHovered(false)}
+            onTouchStart={() => setIsEditHovered(true)}
+            onTouchEnd={() => setIsEditHovered(false)}
+            className="flex-1 flex items-center justify-center gap-2 text-xs font-semibold px-4 py-3 rounded-2xl text-black active:scale-95 transition-all duration-200"
+            style={{
+              backgroundColor: '#a8a8ad',
+              boxShadow: isEditHovered
+                ? 'inset -3px -3px 8px rgba(255, 255, 255, 0.3), inset 3px 3px 8px rgba(0, 0, 0, 0.15)'
+                : 'inset 1px 1px 0px 0px rgba(255, 255, 255, 0.5), -3px -3px 8px rgba(255, 255, 255, 0.05), 3px 3px 8px rgba(0, 0, 0, 0.15)',
+            }}
           >
             <IconPencil size={13} />
             <span>Edit</span>
@@ -166,17 +188,21 @@ export const IncomeDetailSheet: React.FC = () => {
     >
       <div className="flex flex-col gap-6 pb-2">
         {/* Main Header Card */}
-        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 flex flex-col items-center relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-[#B8F55A]/5 rounded-full blur-[40px] pointer-events-none" />
-
+        <div
+          className="rounded-2xl p-5 flex flex-col items-center relative overflow-hidden"
+          style={{
+            background: 'rgba(26, 26, 26, 0.85)',
+            boxShadow: 'inset 1px 1px 0px 0px rgba(255, 255, 255, 0.03), -4px -4px 12px rgba(255, 255, 255, 0.03), 4px 4px 12px rgba(0, 0, 0, 0.55)',
+          }}
+        >
           {/* Header Row */}
-          <div className="flex items-center justify-between w-full border-b border-white/[0.06] pb-4 mb-4">
+          <div className="flex items-center justify-between w-full pb-4 mb-4">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/[0.03] border border-white/[0.08] shrink-0">
-                {React.createElement(getTablerIconByEmoji(emoji), { size: 16, className: "text-white/80" })}
+              <div className="flex items-center justify-center w-8 h-8 shrink-0 text-white/80">
+                {React.createElement(getTablerIconByEmoji(emoji), { size: 18 })}
               </div>
               <div className="text-left min-w-0">
-                <span className="text-[9px] font-bold text-[#B8F55A] uppercase tracking-wider block">
+                <span className="text-[9px] font-bold text-white/50 uppercase tracking-wider block">
                   {income.source_type}
                 </span>
                 <h3 className="text-xs font-bold text-white leading-tight mt-0.5 truncate max-w-[160px] sm:max-w-[280px]">
@@ -185,7 +211,7 @@ export const IncomeDetailSheet: React.FC = () => {
               </div>
             </div>
             {hasCost && (
-              <span className={`text-lg font-black uppercase tracking-wider ${pnlUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              <span className={`text-lg font-black uppercase tracking-wider ${pnlUsd >= 0 ? 'text-[#1B9066]' : 'text-[#B93E50]'}`}>
                 {pnlUsd >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
               </span>
             )}
@@ -227,22 +253,22 @@ export const IncomeDetailSheet: React.FC = () => {
                 <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest block mb-1">
                   Net Profit
                 </span>
-                <p className={`text-2xl font-black tracking-tight ${pnlUsd >= 0 ? 'text-white' : 'text-red-400'}`}>
+                <p className={`text-2xl font-black tracking-tight ${pnlUsd >= 0 ? 'text-white' : 'text-[#B93E50]'}`}>
                   {pnlTokens !== null 
                     ? `${pnlTokens >= 0 ? '+' : ''}${pnlTokens.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${income.ticker}`
                     : `${pnlIdr >= 0 ? '+' : ''}Rp ${pnlIdr.toLocaleString('id-ID')}`
                   }
                 </p>
-                <p className={`text-[10px] font-semibold mt-1 ${pnlUsd >= 0 ? 'text-[#B8F55A]' : 'text-red-400/80'}`}>
+                <p className={`text-[10px] font-semibold mt-1 ${pnlUsd >= 0 ? 'text-emerald-400' : 'text-[#B93E50]/80'}`}>
                   {pnlUsd >= 0 ? '+' : ''}${pnlUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   <span className="text-white/40 font-medium ml-1.5">(≈ Rp {pnlIdr.toLocaleString('id-ID')})</span>
                 </p>
               </div>
 
               {/* Grid for Entry and Exit */}
-              <div className="grid grid-cols-2 gap-0 w-full mt-4 pt-4 border-t border-white/[0.06]">
+              <div className="grid grid-cols-2 gap-4 w-full mt-5">
                 {/* Entry (Capital) */}
-                <div className="text-center min-w-0 px-2 border-r border-white/[0.08]">
+                <div className="text-center min-w-0 py-1">
                   <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest block mb-1">
                     Entry (Capital)
                   </span>
@@ -257,7 +283,7 @@ export const IncomeDetailSheet: React.FC = () => {
                 </div>
 
                 {/* Exit (Received) */}
-                <div className="text-center min-w-0 px-2">
+                <div className="text-center min-w-0 py-1">
                   <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest block mb-1">
                     Exit (Received)
                   </span>
@@ -276,7 +302,13 @@ export const IncomeDetailSheet: React.FC = () => {
         </div>
 
         {/* Core Metadata List */}
-        <div className="flex flex-col bg-white/[0.01] rounded-2xl border border-white/[0.04] px-4 py-2">
+        <div
+          className="flex flex-col rounded-2xl px-4 py-2"
+          style={{
+            background: 'rgba(26, 26, 26, 0.85)',
+            boxShadow: 'inset 1px 1px 0px 0px rgba(255, 255, 255, 0.03), -4px -4px 12px rgba(255, 255, 255, 0.03), 4px 4px 12px rgba(0, 0, 0, 0.55)',
+          }}
+        >
           <DetailRow label="Date" value={formattedDate} />
           {matchedPocket && (
             <DetailRow
@@ -307,8 +339,18 @@ export const IncomeDetailSheet: React.FC = () => {
               <button
                 type="button"
                 onClick={handleCopy}
+                onMouseEnter={() => setIsAddressHovered(true)}
+                onMouseLeave={() => setIsAddressHovered(false)}
+                onTouchStart={() => setIsAddressHovered(true)}
+                onTouchEnd={() => setIsAddressHovered(false)}
                 aria-label="Copy contract address"
-                className="flex items-center gap-1.5 font-mono bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] px-2 py-1 rounded-lg text-[10px] text-white/80 transition-colors"
+                className="flex items-center gap-1.5 font-mono px-2 py-1 rounded-lg text-[10px] text-white/80 transition-all duration-200"
+                style={{
+                  background: 'rgba(26, 26, 26, 0.85)',
+                  boxShadow: isAddressHovered
+                    ? 'inset -2px -2px 6px rgba(255, 255, 255, 0.015), inset 2px 2px 6px rgba(0, 0, 0, 0.5)'
+                    : '-2px -2px 6px rgba(255, 255, 255, 0.015), 2px 2px 6px rgba(0, 0, 0, 0.5)',
+                }}
               >
                 <span>{income.contract_address.slice(0, 6)}...{income.contract_address.slice(-4)}</span>
                 <IconCopy size={10} className="text-white/40" />
@@ -323,7 +365,13 @@ export const IncomeDetailSheet: React.FC = () => {
             <p className="text-[9px] font-semibold text-white/30 uppercase tracking-widest pl-1">
               Note
             </p>
-            <div className="rounded-2xl border border-white/[0.04] bg-white/[0.01] px-4 py-3 text-xs text-white/60 leading-relaxed font-medium">
+            <div
+              className="rounded-2xl px-4 py-3 text-xs text-white/60 leading-relaxed font-medium"
+              style={{
+                background: 'rgba(26, 26, 26, 0.85)',
+                boxShadow: 'inset -3px -3px 8px rgba(255, 255, 255, 0.015), inset 3px 3px 8px rgba(0, 0, 0, 0.5)',
+              }}
+            >
               {income.note}
             </div>
           </div>
@@ -332,7 +380,7 @@ export const IncomeDetailSheet: React.FC = () => {
 
       {showCopied && createPortal(
         <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] pointer-events-none transition-all duration-300 ease-out">
-          <div className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-white/[0.08] bg-[#121212]/95 backdrop-blur-xl shadow-[0_8px_30px_rgb(0,0,0,0.6)] text-[9px] font-semibold uppercase tracking-widest text-[#B8F55A] animate-pulse">
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-white/[0.08] bg-[#121212]/95 backdrop-blur-xl shadow-[0_8px_30px_rgb(0,0,0,0.6)] text-[9px] font-semibold uppercase tracking-widest text-white animate-pulse">
             <span>✓</span>
             <span>Address Copied</span>
           </div>

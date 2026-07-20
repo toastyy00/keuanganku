@@ -455,7 +455,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
         {/* Sticky footer — pinned above safe area */}
         {footer ? (
           <div
-            className="shrink-0 px-4 pt-3 border-t border-white/[0.07] bg-[#1e1e1e]"
+            className="shrink-0 px-4 pt-3 border-t border-white/[0.07] bg-transparent"
             style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
           >
             {footer}

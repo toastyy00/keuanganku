@@ -106,7 +106,7 @@ const IncomePage: React.FC = () => {
           <div className="flex flex-col gap-0.5 min-w-0">
             {/* Title and Month Selector Row */}
             <div className="flex items-center gap-1.5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-white/40 truncate">
+              <p className="text-xs font-semibold uppercase tracking-wider text-white/70 truncate">
                 Income History
               </p>
               
@@ -115,14 +115,14 @@ const IncomePage: React.FC = () => {
                 <button 
                   type="button"
                   onClick={prevMonth} 
-                  className="p-0.5 text-white/30 hover:text-white transition-colors"
+                  className="p-0.5 text-white/50 hover:text-white transition-colors"
                   aria-label="Previous month"
                 >
                   <ChevronLeft size={13} strokeWidth={2.5} />
                 </button>
                 
                 <span 
-                  className={`text-[9px] font-bold text-white/50 uppercase tracking-wider text-center transition-colors ${
+                  className={`text-[9px] font-bold text-white/80 uppercase tracking-wider text-center transition-colors ${
                     !isCurrentMonth ? "cursor-pointer hover:text-white underline underline-offset-2" : ""
                   }`}
                   onClick={() => {
@@ -136,7 +136,7 @@ const IncomePage: React.FC = () => {
                 <button 
                   type="button"
                   onClick={nextMonth} 
-                  className="p-0.5 text-white/30 hover:text-white transition-colors"
+                  className="p-0.5 text-white/50 hover:text-white transition-colors"
                   aria-label="Next month"
                 >
                   <ChevronRight size={13} strokeWidth={2.5} />
@@ -145,7 +145,7 @@ const IncomePage: React.FC = () => {
             </div>
 
             {/* Records count stacked cleanly below */}
-            <span className="text-[9px] text-white/20 font-bold uppercase tracking-wider">
+            <span className="text-[9px] text-white/40 font-bold uppercase tracking-wider">
               {activeFilter ? `${filteredIncomes.length} of ` : ''}{monthIncomes.length} Inflow{monthIncomes.length !== 1 ? 's' : ''}
             </span>
           </div>
@@ -155,7 +155,7 @@ const IncomePage: React.FC = () => {
             <button
               type="button"
               onClick={openAddIncomeSheet}
-              className="h-7 px-2.5 rounded-lg bg-[#B8F55A] hover:bg-[#a5e04c] text-[#1A1A1A] text-[9px] font-bold uppercase tracking-wider transition-all active:scale-[0.95] flex items-center gap-1 shadow-sm shrink-0"
+              className="h-7 px-2.5 rounded-lg bg-[#82c91e] hover:bg-[#74b816] text-[#1A1A1A] text-[9px] font-bold uppercase tracking-wider transition-all active:scale-[0.95] flex items-center gap-1 shadow-sm shrink-0"
             >
               <span>Add Income</span>
             </button>
@@ -164,7 +164,7 @@ const IncomePage: React.FC = () => {
       </div>
 
       {/* Scrollable History List Section */}
-      <div className="flex-1 overflow-y-auto pr-1 -mr-1 flex flex-col gap-3 pt-3 pb-6 scrollbar-none">
+      <div className="flex-1 overflow-y-auto px-3 -mx-3 flex flex-col gap-3 pt-3 pb-6 scrollbar-none">
         {isLoading && monthIncomes.length === 0 ? (
           <div className="text-center py-10">
             <span className="inline-block w-6 h-6 border-4 border-t-transparent border-[#B8F55A] rounded-full animate-spin" />

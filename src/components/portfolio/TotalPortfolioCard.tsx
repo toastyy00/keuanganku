@@ -371,9 +371,9 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
           toggleExpanded();
         }
       }}
-      className="relative cursor-pointer overflow-hidden rounded-2xl border transition-[border-color,box-shadow] duration-200 hover:!border-white/[0.18]"
+      className="relative cursor-pointer overflow-hidden rounded-2xl border border-transparent transition-[box-shadow] duration-200"
       style={{
-        borderColor: `${cardAccentColor}1C`,
+        borderColor: 'transparent',
         background: `radial-gradient(circle at 100% 100%, ${cardAccentColor}12, transparent 65%), linear-gradient(135deg, #1E2025 0%, #151619 50%, #111214 100%)`,
         boxShadow: '0 12px 35px -5px rgba(0, 0, 0, 0.45)',
       }}
@@ -520,7 +520,7 @@ const TotalPortfolioCard: React.FC<TotalPortfolioCardProps> = ({
 
       <div className={`grid transition-[grid-template-rows,opacity] duration-[360ms] ease-out ${isExpanded && hasAssets ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
         <div className={`overflow-hidden transition-[transform,filter] duration-300 ease-out ${isExpanded && hasAssets ? 'translate-y-0 scale-100 blur-0' : '-translate-y-2 scale-[0.985] blur-[1px]'}`}>
-          <div className={`relative w-full transition-[opacity,transform] duration-300 ease-out ${isExpanded && hasAssets ? 'translate-y-0 opacity-100 delay-75' : '-translate-y-1 opacity-0 delay-0'}`} onClick={(event) => event.stopPropagation()}>
+          <div className={`relative w-full h-[140px] transition-[opacity,transform] duration-300 ease-out ${isExpanded && hasAssets ? 'translate-y-0 opacity-100 delay-75' : '-translate-y-1 opacity-0 delay-0'}`} onClick={(event) => event.stopPropagation()}>
             <div
               className={`absolute right-4 top-1.5 z-10 flex items-center gap-1.5 text-[9px] font-black uppercase leading-none tracking-[0.04em] transition-opacity duration-150 ${isScrubbing ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
               aria-label="Chart timeframe"

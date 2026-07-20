@@ -112,7 +112,7 @@ const CategoryPicker: React.FC<CategoryPickerProps> = ({
           className={cn(
             'slim-input w-full px-3 py-2 flex items-center justify-between gap-3 text-left font-normal text-white/90',
             'transition-all duration-150',
-            isOpen && 'border-[#B8F55A]/50 bg-[#B8F55A]/[0.04]',
+            isOpen && 'border-white/20 bg-white/[0.08]',
             error && '!border-red-500/50',
             buttonClassName
           )}
@@ -173,7 +173,7 @@ const CategoryPicker: React.FC<CategoryPickerProps> = ({
                     className={cn(
                       'w-full flex items-center justify-between gap-2.5 px-3 py-2.5 text-left text-sm transition-colors border-b border-white/[0.04] last:border-b-0',
                       isSelected
-                        ? 'bg-[#B8F55A]/8 text-[#B8F55A]'
+                        ? 'bg-white/10 text-white font-semibold'
                         : 'text-white/75 hover:bg-white/[0.05] hover:text-white/95'
                     )}
                   >

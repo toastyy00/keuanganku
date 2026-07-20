@@ -241,7 +241,7 @@ export const TokenPriceInput: React.FC<TokenPriceInputProps> = ({
                     type="button"
                     className={`flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors text-xs ${
                       isSelected
-                        ? 'bg-[#B8F55A]/10 text-[#B8F55A]'
+                        ? 'bg-white/10 text-white font-semibold'
                         : 'text-white/80 hover:bg-white/[0.05]'
                     }`}
                     onClick={() => void handleSelectOption(option)}

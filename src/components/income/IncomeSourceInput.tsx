@@ -72,7 +72,7 @@ export const IncomeSourceInput: React.FC<IncomeSourceInputProps> = ({ value, onC
               setIsOpen(false);
             }}
             className={cn(
-              "absolute right-2 px-1.5 py-0.5 h-6 rounded-md bg-white/[0.04] border border-white/[0.1] hover:bg-white/[0.08] hover:border-white/[0.18] hover:text-[#B8F55A] active:scale-95 text-white/50 transition-all flex items-center gap-1 cursor-pointer disabled:opacity-30 disabled:pointer-events-none"
+              "absolute right-2 px-1.5 py-0.5 h-6 rounded-md bg-white/[0.04] border border-white/[0.1] hover:bg-white/[0.08] hover:border-white/20 hover:text-white active:scale-95 text-white/50 transition-all flex items-center gap-1 cursor-pointer disabled:opacity-30 disabled:pointer-events-none"
             )}
             title={value.trim() ? "Choose custom icon for this source" : "Type a source to select an icon"}
           >
@@ -127,8 +127,8 @@ export const IncomeSourceInput: React.FC<IncomeSourceInputProps> = ({ value, onC
                     setShowPicker(false);
                   }}
                   className={cn(
-                    "h-7 w-7 rounded-lg flex items-center justify-center text-white/50 hover:text-[#B8F55A] hover:bg-[#ffffff]/[0.04] active:scale-90 transition-all cursor-pointer",
-                    emoji === item && "text-[#B8F55A] bg-[#B8F55A]/10 border border-[#B8F55A]/20"
+                    "h-7 w-7 rounded-lg flex items-center justify-center text-white/50 hover:text-white/90 hover:bg-[#ffffff]/[0.04] active:scale-90 transition-all cursor-pointer",
+                    emoji === item && "text-white bg-white/10 border border-white/20"
                   )}
                 >
                   {React.createElement(IconComponent, { size: 14, className: "shrink-0" })}

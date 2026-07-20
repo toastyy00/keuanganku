@@ -102,7 +102,7 @@ const PocketPickerInput: React.FC<{
                 key={p.id}
                 type="button"
                 className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-sm transition-colors border-b border-white/[0.04] last:border-b-0 ${
-                  isActive ? 'bg-[#B8F55A]/8 text-[#B8F55A]' : 'text-white/75 hover:bg-white/[0.05] hover:text-white/95'
+                  isActive ? 'bg-white/10 text-white font-semibold' : 'text-white/75 hover:bg-white/[0.05] hover:text-white/95'
                 }`}
                 onClick={() => {
                   onChange(p.id);
@@ -111,7 +111,7 @@ const PocketPickerInput: React.FC<{
               >
                 <span className="w-5 text-center text-base shrink-0">{pIcon}</span>
                 <span className="font-medium flex-1 truncate">{p.name}</span>
-                <span className={`text-[10px] shrink-0 ${isActive ? 'text-[#B8F55A]/60' : 'text-white/25'}`}>{p.source_type}</span>
+                <span className={`text-[10px] shrink-0 ${isActive ? 'text-white/50' : 'text-white/25'}`}>{p.source_type}</span>
               </button>
             );
           })}
@@ -630,7 +630,7 @@ export const AddIncomeSheet: React.FC = () => {
           >
             Cancel
           </button>
-          <button type="button" disabled={saving} onClick={() => void handleSave()} className="flex-1 h-11 rounded-xl bg-[#B8F55A] text-[#1A1A1A] text-sm font-semibold transition-all disabled:opacity-50 active:scale-[0.98]">
+          <button type="button" disabled={saving} onClick={() => void handleSave()} className="flex-1 h-11 rounded-xl bg-[#a8a8ad] text-black hover:bg-[#a8a8ad]/90 text-sm font-semibold transition-all disabled:opacity-50 active:scale-[0.98]">
             {saving ? 'Saving...' : isEditMode ? 'Save Changes' : 'Save Income'}
           </button>
         </div>
@@ -670,14 +670,14 @@ export const AddIncomeSheet: React.FC = () => {
         <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-white/[0.05]">
           <button
             type="button"
-            className={`py-2 text-xs font-medium rounded-lg transition-all ${assetType === 'FIAT' ? 'bg-[#B8F55A] text-[#1A1A1A] shadow-sm' : 'text-white/40 hover:text-white/70'}`}
+            className={`py-2 text-xs font-medium rounded-lg transition-all ${assetType === 'FIAT' ? 'bg-[#a8a8ad] text-black shadow-sm' : 'text-white/40 hover:text-white/70'}`}
             onClick={() => handleAssetTypeChange('FIAT')}
           >
             Fiat Cash
           </button>
           <button
             type="button"
-            className={`py-2 text-xs font-medium rounded-lg transition-all ${assetType === 'CRYPTO' ? 'bg-[#B8F55A] text-[#1A1A1A] shadow-sm' : 'text-white/40 hover:text-white/70'}`}
+            className={`py-2 text-xs font-medium rounded-lg transition-all ${assetType === 'CRYPTO' ? 'bg-[#a8a8ad] text-black shadow-sm' : 'text-white/40 hover:text-white/70'}`}
             onClick={() => handleAssetTypeChange('CRYPTO')}
           >
             Crypto Asset
@@ -739,7 +739,7 @@ export const AddIncomeSheet: React.FC = () => {
                   type="button"
                   disabled={resolvingCA || !contractAddress.trim()}
                   onClick={handleResolveCA}
-                  className="h-9 px-3 rounded-lg bg-[#B8F55A]/90 text-[#1A1A1A] text-xs font-medium flex items-center gap-1.5 transition-opacity disabled:opacity-40 disabled:pointer-events-none shrink-0 hover:bg-[#B8F55A]"
+                  className="h-9 px-3 rounded-lg bg-[#a8a8ad]/90 text-black text-xs font-medium flex items-center gap-1.5 transition-opacity disabled:opacity-40 disabled:pointer-events-none shrink-0 hover:bg-[#a8a8ad]"
                 >
                   {resolvingCA ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
                   Resolve
@@ -748,7 +748,7 @@ export const AddIncomeSheet: React.FC = () => {
 
               {/* Manual metadata toggle */}
               {!contractAddress.trim() && !showManualMetadata && (
-                <button type="button" onClick={() => setShowManualMetadata(true)} className="text-[11px] text-[#B8F55A]/70 hover:text-[#B8F55A] transition-colors">
+                <button type="button" onClick={() => setShowManualMetadata(true)} className="text-[11px] text-white/60 hover:text-white/90 transition-colors">
                   + Input manually
                 </button>
               )}

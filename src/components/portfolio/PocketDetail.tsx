@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ChevronDown, Plus, RefreshCw } from 'lucide-react';
-import { formatCurrency, formatPortfolioAmount } from '../../lib/utils';
+import { formatCurrency, formatPortfolioAmount, dimColor } from '../../lib/utils';
 import { getCachedPortfolioIdrRate, getPortfolioIdrRate, type PortfolioRateResult } from '../../lib/exchangeRate';
 import { aggregateHoldingsByTicker, buildPortfolioAssetFingerprint } from '../../lib/portfolio-aggregation';
 import { usePortfolioStore } from '../../store/usePortfolioStore';
@@ -184,7 +184,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
 
   return (
     <div className="space-y-4">
-      <div className="sticky top-0 z-30 -mx-4 -mt-6 flex items-center justify-between bg-[#1A1A1A] px-4 pb-3 pt-6 md:-mx-6 md:px-6 select-none">
+      <div className="sticky top-0 z-30 -mx-4 -mt-6 flex items-center justify-between bg-[#191B1D] px-4 pb-3 pt-6 md:-mx-6 md:px-6 select-none">
         <button
           type="button"
           onClick={onBack}
@@ -201,9 +201,9 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
       </div>
 
       <section
-        className="rounded-2xl border overflow-hidden transition-[border-color,box-shadow] duration-200 hover:!border-white/[0.18]"
+        className="rounded-2xl border border-transparent overflow-hidden transition-[box-shadow] duration-200"
         style={{
-          borderColor: `${pocket.color_theme}1C`,
+          borderColor: 'transparent',
           background: `radial-gradient(circle at 100% 100%, ${pocket.color_theme}12, transparent 65%), linear-gradient(135deg, #1E2025 0%, #151619 50%, #111214 100%)`,
           boxShadow: '0 12px 35px -5px rgba(0, 0, 0, 0.45)',
         }}
@@ -328,9 +328,9 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
             <button
               key={asset.key}
               type="button"
-              className="w-full rounded-2xl border bg-white/[0.01] hover:bg-white/[0.03] transition-all duration-200 px-4 py-3 flex items-center justify-between text-left cursor-pointer active:scale-[0.99] outline-none hover:translate-x-1"
+              className="w-full rounded-2xl border border-transparent bg-white/[0.01] hover:bg-white/[0.03] transition-all duration-200 px-4 py-3 flex items-center justify-between text-left cursor-pointer active:scale-[0.99] outline-none hover:translate-x-1"
               style={{
-                borderColor: `${pocket.color_theme}1C`,
+                borderColor: 'transparent',
               }}
               onClick={() => setSelectedAggregateKey(asset.key)}
             >
@@ -385,7 +385,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
       <AddAssetSheet
         isOpen={isAddOpen}
         onClose={() => setIsAddOpen(false)}
-        colorTheme={pocket.color_theme}
+        colorTheme={dimColor(pocket.color_theme)}
         onAdd={async (input) => {
           await addAsset({
             pocket_id: pocketId,
@@ -408,7 +408,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
         aggregate={selectedAggregate}
         currentPriceUsd={selectedAggregate ? prices[selectedAggregate.coingecko_id ?? '']?.usd : undefined}
         idrRate={portfolioRateInfo?.rate}
-        colorTheme={pocket.color_theme}
+        colorTheme={dimColor(pocket.color_theme)}
         onAddHolding={async (input) => {
           if (!selectedAggregate) return;
           await addHolding(
@@ -450,7 +450,7 @@ const PocketDetail: React.FC<PocketDetailProps> = ({ pocketId, onBack }) => {
         asset={assetAction}
         activityLogs={selectedHoldingLogs}
         currentPriceUsd={assetAction ? prices[assetAction.coingecko_id ?? '']?.usd : undefined}
-        colorTheme={pocket.color_theme}
+        colorTheme={dimColor(pocket.color_theme)}
         onApply={async (assetId, newAmount, action, note) => {
           await updateAssetAmount(assetId, newAmount, action, note);
           await refreshPrices(pocketId);

@@ -98,7 +98,7 @@ const PocketList: React.FC<PocketListProps> = ({
 
   return (
     <div className="space-y-4">
-      <div className="sticky top-0 z-30 -mx-4 -mt-6 flex items-center justify-between bg-[#1A1A1A] px-4 pb-3 pt-6 md:-mx-6 md:px-6 select-none">
+      <div className="sticky top-0 z-30 -mx-4 -mt-6 flex items-center justify-between bg-[#191B1D] px-4 pb-3 pt-6 md:-mx-6 md:px-6 select-none">
         <button
           type="button"
           onClick={() => navigate('/')}
@@ -162,9 +162,9 @@ const PocketList: React.FC<PocketListProps> = ({
               }}
               onMouseEnter={() => setHoveredPocketId(pocket.id)}
               onMouseLeave={() => setHoveredPocketId(null)}
-              className="group relative block w-full rounded-2xl border bg-[#1D1D1D] px-4 py-3 text-left transition-all duration-200 hover:translate-x-1 cursor-pointer"
+              className="group relative block w-full rounded-2xl border border-transparent bg-[#1D1D1D] px-4 py-3 text-left transition-all duration-200 hover:translate-x-1 cursor-pointer"
               style={{
-                borderColor: `${pocket.color_theme}1C`,
+                borderColor: 'transparent',
                 background: hoveredPocketId === pocket.id
                   ? `radial-gradient(circle at 100% 100%, ${pocket.color_theme}16, transparent 65%), linear-gradient(135deg, #24272D 0%, #18191D 100%)`
                   : `radial-gradient(circle at 100% 100%, ${pocket.color_theme}0E, transparent 65%), linear-gradient(135deg, #1E2025 0%, #151619 100%)`,

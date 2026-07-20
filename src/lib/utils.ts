@@ -201,3 +201,62 @@ export function isExpenseType(value: unknown): value is ExpenseType {
 export function isCurrency(value: unknown): value is Currency {
   return value === 'IDR' || value === 'USD';
 }
+
+// ============================================================
+//  COLOR DIMMING UTILITIES
+// ============================================================
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const cleaned = hex.replace('#', '').trim();
+  if (!/^[0-9a-fA-F]{6}$/.test(cleaned)) return null;
+  return {
+    r: Number.parseInt(cleaned.slice(0, 2), 16),
+    g: Number.parseInt(cleaned.slice(2, 4), 16),
+    b: Number.parseInt(cleaned.slice(4, 6), 16),
+  };
+}
+
+function rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: number } {
+  const nr = r / 255;
+  const ng = g / 255;
+  const nb = b / 255;
+  const max = Math.max(nr, ng, nb);
+  const min = Math.min(nr, ng, nb);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h = 0;
+  if (max === nr) h = (ng - nb) / d + (ng < nb ? 6 : 0);
+  else if (max === ng) h = (nb - nr) / d + 2;
+  else h = (nr - ng) / d + 4;
+  return { h: h * 60, s, l };
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+  const m = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (0 <= h && h < 60) { r = c; g = x; b = 0; }
+  else if (60 <= h && h < 120) { r = x; g = c; b = 0; }
+  else if (120 <= h && h < 180) { r = 0; g = c; b = x; }
+  else if (180 <= h && h < 240) { r = 0; g = x; b = c; }
+  else if (240 <= h && h < 300) { r = x; g = 0; b = c; }
+  else if (300 <= h && h < 360) { r = c; g = 0; b = x; }
+  
+  const toHex = (val: number) => {
+    const hex = Math.round((val + m) * 255).toString(16);
+    return hex.padStart(2, '0');
+  };
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+export function dimColor(hexColor: string, factor: number = 0.72): string {
+  const rgb = hexToRgb(hexColor);
+  if (!rgb) return hexColor;
+  const { h, s, l } = rgbToHsl(rgb.r, rgb.g, rgb.b);
+  // Dim the lightness (keep it within bounds)
+  const newL = Math.max(0.18, l * factor);
+  return hslToHex(h, s, newL);
+}
