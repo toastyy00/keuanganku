@@ -16,6 +16,7 @@ interface ScopedSettingsSnapshot {
   personalMonthlyBudget: number;
   familySupportMonthlyBudget: number;
   lastSynced: string | null;
+  expandedSections: Record<string, boolean>;
 }
 
 const DEFAULT_SCOPED_SETTINGS: ScopedSettingsSnapshot = {
@@ -26,6 +27,7 @@ const DEFAULT_SCOPED_SETTINGS: ScopedSettingsSnapshot = {
   personalMonthlyBudget: 0,
   familySupportMonthlyBudget: 0,
   lastSynced: null,
+  expandedSections: {},
 };
 
 interface SettingsState extends ScopedSettingsSnapshot {
@@ -39,6 +41,7 @@ interface SettingsState extends ScopedSettingsSnapshot {
   setPersonalMonthlyBudget: (v: number) => void;
   setFamilySupportMonthlyBudget: (v: number) => void;
   setLastSynced: (v: string | null) => void;
+  toggleSectionExpanded: (key: string) => void;
   ensureScope: (scope: string) => void;
 }
 
@@ -51,6 +54,7 @@ function snapshotFromState(state: SettingsState): ScopedSettingsSnapshot {
     personalMonthlyBudget: state.personalMonthlyBudget,
     familySupportMonthlyBudget: state.familySupportMonthlyBudget,
     lastSynced: state.lastSynced,
+    expandedSections: state.expandedSections ?? {},
   };
 }
 
@@ -89,6 +93,9 @@ function toScopedSnapshot(raw: Partial<ScopedSettingsSnapshot> | undefined): Sco
     lastSynced: typeof raw?.lastSynced === 'string' || raw?.lastSynced === null
       ? raw.lastSynced
       : null,
+    expandedSections: typeof raw?.expandedSections === 'object' && raw?.expandedSections !== null
+      ? raw.expandedSections
+      : {},
   };
 }
 
@@ -113,6 +120,11 @@ export const useSettingsStore = create<SettingsState>()(
       setFamilySupportMonthlyBudget: (familySupportMonthlyBudget) =>
         set((state) => withScopedPatch(state, { familySupportMonthlyBudget })),
       setLastSynced: (lastSynced) => set((state) => withScopedPatch(state, { lastSynced })),
+      toggleSectionExpanded: (key) => set((state) => {
+        const current = state.expandedSections ?? {};
+        const next = { ...current, [key]: !current[key] };
+        return withScopedPatch(state, { expandedSections: next });
+      }),
 
       ensureScope: (scope) => set((state) => {
         if (state.currentScope === scope) return state;
@@ -180,6 +192,7 @@ export const useSettingsStore = create<SettingsState>()(
         personalMonthlyBudget: state.personalMonthlyBudget,
         familySupportMonthlyBudget: state.familySupportMonthlyBudget,
         lastSynced: state.lastSynced,
+        expandedSections: state.expandedSections,
         currentScope: state.currentScope,
         settingsByScope: state.settingsByScope,
       }),

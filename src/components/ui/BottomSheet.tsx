@@ -139,6 +139,32 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
     };
   }, [isOpen]);
 
+  // Lock panel height after opening transition settles.
+  // This prevents the sheet from growing OR shrinking when internal content
+  // changes (e.g. switching pills/tabs). Extra content scrolls instead.
+  // Uses min() with 90dvh so the lock respects viewport changes (e.g. keyboard).
+  useEffect(() => {
+    if (!isVisible) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+
+    // Wait for the 220ms open transition + one extra frame to settle
+    const timer = setTimeout(() => {
+      const h = panel.getBoundingClientRect().height;
+      if (h > 0) {
+        const locked = `min(${h}px, 90dvh)`;
+        panel.style.minHeight = locked;
+        panel.style.maxHeight = locked;
+      }
+    }, 280);
+
+    return () => {
+      clearTimeout(timer);
+      panel.style.minHeight = '';
+      panel.style.maxHeight = '';
+    };
+  }, [isVisible]);
+
   useEffect(() => {
     if (!isOpen) return;
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { cn } from '../../lib/utils';
 
 // ============================================================
-//  INPUT COMPONENT — Neo-brutalism text input
+//  INPUT COMPONENT — Dark Glass UI Input
 // ============================================================
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -46,8 +46,8 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           <label
             htmlFor={inputId}
             className={cn(
-              'text-xs font-bold uppercase tracking-wider',
-              error ? 'text-brutal-red' : 'text-brutal-black',
+              'text-[11px] font-medium transition-colors',
+              error ? 'text-red-400' : 'text-white/40',
               labelClassName
             )}
           >
@@ -57,7 +57,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
 
         <div className="relative flex items-center">
           {leftSection && (
-            <div className="absolute left-3 flex items-center pointer-events-none text-brutal-black/60">
+            <div className="absolute left-3 flex items-center pointer-events-none text-white/40">
               {leftSection}
             </div>
           )}
@@ -66,10 +66,10 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             id={inputId}
             className={cn(
-              'neo-input',
+              'w-full h-10 px-3 rounded-xl bg-white/[0.05] border border-white/10 hover:border-white/20 focus:border-white/40 focus:ring-1 focus:ring-white/20 text-white placeholder:text-white/30 text-sm font-medium outline-none transition-all',
               !!leftSection && 'pl-9',
               !!rightSection && 'pr-9',
-              error && '!border-brutal-red focus:!shadow-[4px_4px_0px_0px_#EF4444]',
+              error && 'border-red-500/50 focus:border-red-500 focus:ring-red-500/20 text-red-300',
               className
             )}
             aria-invalid={!!error}
@@ -78,7 +78,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           />
 
           {rightSection && (
-            <div className="absolute right-3 flex items-center pointer-events-none text-brutal-black/60">
+            <div className="absolute right-3 flex items-center pointer-events-none text-white/40">
               {rightSection}
             </div>
           )}
@@ -87,7 +87,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         {error && (
           <p
             id={`${inputId}-error`}
-            className="text-xs font-bold text-brutal-red uppercase tracking-wider"
+            className="text-[11px] font-medium text-red-400"
             role="alert"
           >
             {error}
@@ -97,7 +97,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         {!error && hint && (
           <p
             id={`${inputId}-hint`}
-            className="text-xs text-brutal-black/60 font-medium"
+            className="text-[11px] text-white/40 font-medium"
           >
             {hint}
           </p>
@@ -131,8 +131,8 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
           <label
             htmlFor={inputId}
             className={cn(
-              'text-xs font-bold uppercase tracking-wider',
-              error ? 'text-brutal-red' : 'text-brutal-black',
+              'text-[11px] font-medium transition-colors',
+              error ? 'text-red-400' : 'text-white/40',
               labelClassName
             )}
           >
@@ -144,8 +144,8 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
           ref={ref}
           id={inputId}
           className={cn(
-            'neo-input resize-none min-h-[80px]',
-            error && '!border-brutal-red',
+            'w-full p-3 rounded-xl bg-white/[0.05] border border-white/10 hover:border-white/20 focus:border-white/40 focus:ring-1 focus:ring-white/20 text-white placeholder:text-white/30 text-sm font-medium outline-none transition-all resize-none min-h-[80px]',
+            error && 'border-red-500/50 focus:border-red-500 focus:ring-red-500/20 text-red-300',
             className
           )}
           aria-invalid={!!error}
@@ -153,12 +153,12 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
         />
 
         {error && (
-          <p className="text-xs font-bold text-brutal-red uppercase tracking-wider" role="alert">
+          <p className="text-[11px] font-medium text-red-400" role="alert">
             {error}
           </p>
         )}
         {!error && hint && (
-          <p className="text-xs text-brutal-black/60 font-medium">{hint}</p>
+          <p className="text-[11px] text-white/40 font-medium">{hint}</p>
         )}
       </div>
     );

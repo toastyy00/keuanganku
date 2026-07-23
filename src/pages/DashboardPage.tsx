@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { TrendingUp, TrendingDown, Minus, CalendarClock } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, CalendarClock, Bell } from 'lucide-react';
 import { Card, CardBody } from '../components/ui/Card';
 import NumberFlow, { continuous } from '@number-flow/react';
 import { SkeletonDashboard } from '../components/SkeletonCard';
+import { NotificationBox } from '../components/NotificationBox';
 import { useExpenseStore } from '../store/useExpenseStore';
 import { useIncomeStore } from '../store/useIncomeStore';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -313,11 +314,42 @@ const DashboardPage: React.FC = () => {
   useEffect(() => { document.title = 'Dashboard - KeuanganKu'; return () => { document.title = 'Keuanganku'; }; }, []);
   const navigate = useNavigate();
 
-  const { expenses, categories, isLoading } =
+  const { expenses, categories, recurringTemplates, isLoading } =
     useExpenseStore();
   const { incomes, loadIncomes } = useIncomeStore();
-  const { activeYear: year, activeMonth: month, resetToCurrentMonth, prevMonth, nextMonth } = useUIStore();
+  const { activeYear: year, activeMonth: month, resetToCurrentMonth, prevMonth, nextMonth, openAddSheet } = useUIStore();
   const { personalMonthlyBudget, familySupportMonthlyBudget } = useSettingsStore();
+
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const bellButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Filter recurring expenses that haven't been logged for the current month
+  const currentMonthString = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }, []);
+
+  const unrecordedRecurringList = useMemo(() => {
+    return recurringTemplates.filter((t) => {
+      if (t.active === false) return false;
+      if (!t.last_logged) return true;
+      return !t.last_logged.startsWith(currentMonthString);
+    });
+  }, [recurringTemplates, currentMonthString]);
+
+  const handleLogRecurringItem = useCallback((template: typeof recurringTemplates[0]) => {
+    setIsNotificationOpen(false);
+    const safeType = template.type === 'TRANSFER' ? 'NEED' : template.type;
+    openAddSheet({
+      name: template.name,
+      amount: template.amount,
+      category: template.category,
+      type: safeType,
+      note: template.note,
+      is_recurring: true,
+      recurring_id: template.id,
+    });
+  }, [openAddSheet]);
 
   // Swipe Handlers for Month Header
   const headerStartX = useRef<number | null>(null);
@@ -745,6 +777,42 @@ const DashboardPage: React.FC = () => {
           >
             {monthLabel(year, month)}
           </h2>
+        </div>
+
+        {/* Notification Bell Icon & Popover */}
+        <div className={`relative ${isNotificationOpen ? 'z-[9999]' : 'z-30'}`}>
+          <button
+            ref={bellButtonRef}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              haptic();
+              setIsNotificationOpen((v) => !v);
+            }}
+            className={`relative p-2 rounded-xl border active:scale-95 transition-all ${
+              isNotificationOpen
+                ? 'bg-[#222222] border-white/20 text-white shadow-lg'
+                : 'bg-white/[0.05] border-white/[0.08] hover:bg-white/10 text-white/80'
+            }`}
+            aria-label="Pengingat Notifikasi"
+          >
+            <Bell size={17} />
+            {unrecordedRecurringList.length > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-[#B8F55A] text-[#1A1A1A] text-[10px] font-black shadow-md border border-[#1A1A1A]">
+                {unrecordedRecurringList.length}
+              </span>
+            )}
+          </button>
+
+          <NotificationBox
+            isOpen={isNotificationOpen}
+            onClose={() => setIsNotificationOpen(false)}
+            unrecordedList={unrecordedRecurringList}
+            categories={categories}
+            currency={dashCurrency}
+            onLogItem={handleLogRecurringItem}
+            triggerRef={bellButtonRef}
+          />
         </div>
       </div>
 

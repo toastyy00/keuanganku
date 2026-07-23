@@ -1,4 +1,12 @@
-import type { Expense, Category, RecurringTemplate, PortfolioActivityLog, PortfolioAsset, PortfolioPocket } from '../types';
+import type {
+  Expense,
+  Category,
+  RecurringTemplate,
+  PortfolioActivityLog,
+  PortfolioAsset,
+  PortfolioPocket,
+  IncomeEntry,
+} from '../types';
 import { useAuthStore } from '../store/useAuthStore';
 import { v4 as uuidv4 } from 'uuid';
 import { getSupabaseClientAsync } from './supabase';
@@ -7,6 +15,7 @@ import { writeIDB } from './idb-storage';
 import { getActiveDataScope, scopedDataKey } from './dataScope';
 import { resetSyncStateForScope, syncWithSupabaseIfNeeded } from './sync-engine';
 import { getPortfolioActivityLogRepo, getPortfolioAssetRepo, getPortfolioPocketRepo } from './portfolio-repository';
+import { getIncomeRepository } from './repository';
 
 // ============================================================
 //  SYNC — Compatibility wrapper (delegates to local-first sync engine)
@@ -24,6 +33,7 @@ type ImportedExpense = Partial<Expense> & { user_id?: string };
 type ImportedPortfolioPocket = Partial<PortfolioPocket> & { user_id?: string };
 type ImportedPortfolioAsset = Partial<PortfolioAsset> & { user_id?: string };
 type ImportedPortfolioActivityLog = Partial<PortfolioActivityLog> & { user_id?: string };
+type ImportedIncome = Partial<IncomeEntry> & { user_id?: string };
 
 export async function syncToSupabase(): Promise<SyncResult> {
   const result = await syncWithSupabaseIfNeeded({ force: true });
@@ -43,7 +53,7 @@ export async function syncToSupabase(): Promise<SyncResult> {
 
   return {
     synced: result.pushed,
-    failed: result.queueRemaining,
+    failed: 0,
     errors,
   };
 }
@@ -58,18 +68,27 @@ interface PortfolioBackupData {
   activityLogs: PortfolioActivityLog[];
 }
 
-export async function exportJSON(data: { expenses: Expense[]; categories: Category[]; recurring: RecurringTemplate[]; portfolio?: PortfolioBackupData }): Promise<void> {
+export async function exportJSON(data: {
+  expenses: Expense[];
+  categories: Category[];
+  recurring: RecurringTemplate[];
+  incomes?: IncomeEntry[];
+  portfolio?: PortfolioBackupData;
+}): Promise<void> {
+  const incomes = data.incomes ?? (await getIncomeRepository().getAll());
   const portfolio = data.portfolio ?? {
     pockets: await getPortfolioPocketRepo().getAll(),
     assets: await getPortfolioAssetRepo().getAll(),
     activityLogs: await getPortfolioActivityLogRepo().getAll(),
   };
+
   const payload = {
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
     expenses: data.expenses,
     categories: data.categories,
     recurring: data.recurring,
+    incomes,
     portfolio,
   };
 
@@ -95,6 +114,7 @@ interface BackupData {
   expenses?: Expense[];
   categories?: unknown[];
   recurring?: unknown[];
+  incomes?: unknown[];
   portfolio?: {
     pockets?: unknown[];
     assets?: unknown[];
@@ -130,6 +150,10 @@ function toImportedPortfolioActivityLog(value: unknown): ImportedPortfolioActivi
   return isObject(value) ? (value as ImportedPortfolioActivityLog) : null;
 }
 
+function toImportedIncome(value: unknown): ImportedIncome | null {
+  return isObject(value) ? (value as ImportedIncome) : null;
+}
+
 function normalizeImportedPortfolioPockets(raw: unknown[] | undefined): PortfolioPocket[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -138,9 +162,9 @@ function normalizeImportedPortfolioPockets(raw: unknown[] | undefined): Portfoli
     .map((p) => ({
       id: typeof p.id === 'string' ? p.id : uuidv4(),
       name: typeof p.name === 'string' ? p.name : 'Pocket',
-      source_type: p.source_type === 'CEX' || p.source_type === 'WEB3' || p.source_type === 'WALLET' || p.source_type === 'LAINNYA' ? p.source_type : 'LAINNYA',
-      source: typeof p.source === 'string' ? p.source : undefined,
-      color_theme: typeof p.color_theme === 'string' ? p.color_theme : '#B8F55A',
+      source_type: (p.source_type === 'CEX' || p.source_type === 'WEB3' || p.source_type === 'WALLET') ? p.source_type : 'LAINNYA',
+      source: typeof p.source === 'string' && p.source.trim() ? p.source.trim() : undefined,
+      color_theme: typeof p.color_theme === 'string' ? p.color_theme : 'blue',
       icon: typeof p.icon === 'string' ? p.icon : 'Wallet',
       sort_order: typeof p.sort_order === 'number' ? p.sort_order : 0,
       created_at: typeof p.created_at === 'string' ? p.created_at : new Date().toISOString(),
@@ -186,6 +210,48 @@ function normalizeImportedPortfolioActivityLogs(raw: unknown[] | undefined): Por
     }));
 }
 
+function normalizeImportedIncomes(raw: unknown[] | undefined): IncomeEntry[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(toImportedIncome)
+    .filter((inc): inc is ImportedIncome => inc !== null)
+    .map((inc) => ({
+      id: typeof inc.id === 'string' ? inc.id : uuidv4(),
+      title: typeof inc.title === 'string' ? inc.title : 'Income',
+      source_type: typeof inc.source_type === 'string' ? inc.source_type : 'Gaji',
+      asset_type: inc.asset_type === 'CRYPTO' ? 'CRYPTO' : 'FIAT',
+      amount: typeof inc.amount === 'number' ? inc.amount : 0,
+      ticker: typeof inc.ticker === 'string' ? inc.ticker : undefined,
+      coingecko_id: typeof inc.coingecko_id === 'string' ? inc.coingecko_id : undefined,
+      currency: inc.currency === 'USD' ? 'USD' : 'IDR',
+      price_at_time: typeof inc.price_at_time === 'number' ? inc.price_at_time : undefined,
+      is_manual_price: typeof inc.is_manual_price === 'boolean' ? inc.is_manual_price : undefined,
+      value_usd: typeof inc.value_usd === 'number' ? inc.value_usd : 0,
+      value_idr: typeof inc.value_idr === 'number' ? inc.value_idr : 0,
+      has_cost_basis: typeof inc.has_cost_basis === 'boolean' ? inc.has_cost_basis : false,
+      cost_amount: typeof inc.cost_amount === 'number' ? inc.cost_amount : undefined,
+      cost_ticker: typeof inc.cost_ticker === 'string' ? inc.cost_ticker : undefined,
+      cost_coingecko_id: typeof inc.cost_coingecko_id === 'string' ? inc.cost_coingecko_id : undefined,
+      cost_price_per_unit: typeof inc.cost_price_per_unit === 'number' ? inc.cost_price_per_unit : undefined,
+      cost_is_manual_price: typeof inc.cost_is_manual_price === 'boolean' ? inc.cost_is_manual_price : undefined,
+      cost_value_usd: typeof inc.cost_value_usd === 'number' ? inc.cost_value_usd : undefined,
+      cost_value_idr: typeof inc.cost_value_idr === 'number' ? inc.cost_value_idr : undefined,
+      chain: typeof inc.chain === 'string' ? inc.chain : undefined,
+      platform: typeof inc.platform === 'string' ? inc.platform : undefined,
+      pocket_id: typeof inc.pocket_id === 'string' ? inc.pocket_id : undefined,
+      contract_address: typeof inc.contract_address === 'string' ? inc.contract_address : undefined,
+      mcap_at_time: typeof inc.mcap_at_time === 'number' ? inc.mcap_at_time : undefined,
+      cost_mcap: typeof inc.cost_mcap === 'number' ? inc.cost_mcap : undefined,
+      token_ticker: typeof inc.token_ticker === 'string' ? inc.token_ticker : undefined,
+      token_price_entry: typeof inc.token_price_entry === 'number' ? inc.token_price_entry : undefined,
+      token_price_exit: typeof inc.token_price_exit === 'number' ? inc.token_price_exit : undefined,
+      date: typeof inc.date === 'string' ? inc.date : getLocalISODate(),
+      note: typeof inc.note === 'string' ? inc.note : undefined,
+      created_at: typeof inc.created_at === 'string' ? inc.created_at : new Date().toISOString(),
+      synced: true,
+    }));
+}
+
 async function insertInChunks<T>(items: T[], insert: (chunk: T[]) => Promise<void>, chunkSize = 500): Promise<void> {
   for (let i = 0; i < items.length; i += chunkSize) {
     await insert(items.slice(i, i + chunkSize));
@@ -213,6 +279,7 @@ export async function importJSON(raw: string): Promise<BackupData> {
   const portfolioPockets = normalizeImportedPortfolioPockets(parsed.portfolio?.pockets);
   const portfolioAssets = normalizeImportedPortfolioAssets(parsed.portfolio?.assets);
   const portfolioActivityLogs = normalizeImportedPortfolioActivityLogs(parsed.portfolio?.activityLogs);
+  const importedIncomes = normalizeImportedIncomes(parsed.incomes);
 
   if (session && user) {
     const client = await getSupabaseClientAsync();
@@ -228,6 +295,9 @@ export async function importJSON(raw: string): Promise<BackupData> {
 
     const { error: deleteCategoriesError } = await client.from('categories').delete().eq('user_id', user.id);
     if (deleteCategoriesError) throw new Error(`Gagal menghapus kategori lama: ${deleteCategoriesError.message}`);
+
+    const { error: deleteIncomesError } = await client.from('income_entries').delete().eq('user_id', user.id);
+    if (deleteIncomesError) throw new Error(`Gagal menghapus income lama: ${deleteIncomesError.message}`);
 
     if (hasPortfolioBackup) {
       const { error: deletePortfolioActivityError } = await client.from('portfolio_activity_log').delete().eq('user_id', user.id);
@@ -310,13 +380,22 @@ export async function importJSON(raw: string): Promise<BackupData> {
         }));
 
       // Split chunks to avoid PostgREST limits
-      const chunkSize = 500;
-      for (let i = 0; i < expsToInsert.length; i += chunkSize) {
+      await insertInChunks(expsToInsert, async (chunk) => {
         const { error: insertExpensesError } = await client
           .from('expenses')
-          .insert(expsToInsert.slice(i, i + chunkSize));
+          .insert(chunk);
         if (insertExpensesError) throw new Error(`Gagal import expense: ${insertExpensesError.message}`);
-      }
+      });
+    }
+
+    // 5. Insert Incomes
+    if (importedIncomes.length > 0) {
+      await insertInChunks(importedIncomes, async (chunk) => {
+        const { error: insertIncomesError } = await client
+          .from('income_entries')
+          .insert(chunk.map((inc) => ({ ...inc, user_id: user.id })));
+        if (insertIncomesError) throw new Error(`Gagal import income: ${insertIncomesError.message}`);
+      });
     }
 
     if (hasPortfolioBackup && portfolioPockets.length > 0) {
@@ -376,6 +455,9 @@ export async function importJSON(raw: string): Promise<BackupData> {
     }
     if (Array.isArray(parsed.recurring)) {
       await writeIDB(scopedDataKey('recurring', scope), parsed.recurring);
+    }
+    if (Array.isArray(parsed.incomes)) {
+      await writeIDB(scopedDataKey('incomes', scope), importedIncomes);
     }
     if (parsed.portfolio) {
       await writeIDB(scopedDataKey('portfolio_pockets', scope), portfolioPockets);

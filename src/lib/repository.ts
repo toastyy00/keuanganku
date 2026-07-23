@@ -742,7 +742,7 @@ export class SupabaseRecurringRepository implements RecurringRepository {
 
     if (error) {
       if (error.code === 'PGRST204') {
-        throw new Error(`Update Supabase: Tambahkan kolom baru. Jalankan SQL: ALTER TABLE recurring_templates ADD COLUMN schedule_detail TEXT;`);
+        throw new Error(`Update Supabase: Tambahkan kolom baru. Jalankan SQL: ALTER TABLE recurring_templates ADD COLUMN remind_monthly BOOLEAN DEFAULT TRUE;`);
       }
       throw new Error(`Supabase create recurring error: ${error.message}`);
     }
@@ -762,7 +762,7 @@ export class SupabaseRecurringRepository implements RecurringRepository {
 
     if (error) {
       if (error.code === 'PGRST204') {
-        throw new Error(`Update Supabase: Tambahkan kolom baru. Jalankan SQL: ALTER TABLE recurring_templates ADD COLUMN schedule_detail TEXT;`);
+        throw new Error(`Update Supabase: Tambahkan kolom baru. Jalankan SQL: ALTER TABLE recurring_templates ADD COLUMN remind_monthly BOOLEAN DEFAULT TRUE;`);
       }
       throw new Error(`Supabase update recurring error: ${error.message}`);
     }

@@ -2,15 +2,27 @@ import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Tag,
-  DollarSign, Cpu, Download, Upload, Plus, Trash2, Wallet,
-  CheckCircle, XCircle, RefreshCw, Loader2, ChevronDown, LogOut, User,
+  DollarSign,
+  Cpu,
+  Download,
+  Upload,
+  Plus,
+  Trash2,
+  Wallet,
+  CheckCircle,
+  XCircle,
+  RefreshCw,
+  Loader2,
+  ChevronDown,
+  LogOut,
+  User,
+  ShieldCheck,
 } from 'lucide-react';
-import { Card, CardBody } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { useExpenseStore } from '../store/useExpenseStore';
 import { usePortfolioStore } from '../store/usePortfolioStore';
+import { useIncomeStore } from '../store/useIncomeStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { testAiConnectionDetailed } from '../lib/ai';
 import { exportJSON, importJSON } from '../lib/sync';
@@ -19,65 +31,166 @@ import { getExchangeRate, forceRefreshRate } from '../lib/exchangeRate';
 import { useAuthStore } from '../store/useAuthStore';
 import type { Currency } from '../types';
 
-function haptic() { if ('vibrate' in navigator) navigator.vibrate(10); }
+function haptic() {
+  if ('vibrate' in navigator) navigator.vibrate(10);
+}
 
 function StatusBadge({ status }: { status: 'ok' | 'fail' | 'idle' }) {
   if (status === 'idle') return null;
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 border-2 border-[#555555] text-xs font-bold uppercase ${status === 'ok' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-      }`}>
-      {status === 'ok'
-        ? <><CheckCircle size={12} strokeWidth={2.5} /> OK</>
-        : <><XCircle size={12} strokeWidth={2.5} /> FAIL</>}
+    <span
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${
+        status === 'ok'
+          ? 'bg-green-500/10 border border-green-500/30 text-green-400'
+          : 'bg-red-500/10 border border-red-500/30 text-red-400'
+      }`}
+    >
+      {status === 'ok' ? (
+        <>
+          <CheckCircle size={13} /> AI Connected
+        </>
+      ) : (
+        <>
+          <XCircle size={13} /> Connection Failed
+        </>
+      )}
     </span>
   );
 }
 
-// ── Collapsible Section ────────────────────────────────────────────
+function getScrollParent(node: HTMLElement | null): HTMLElement | Window {
+  if (!node) return window;
+  let parent = node.parentElement;
+  while (parent) {
+    const overflowY = window.getComputedStyle(parent).overflowY;
+    if ((overflowY === 'auto' || overflowY === 'scroll') && parent.scrollHeight > parent.clientHeight) {
+      return parent;
+    }
+    parent = parent.parentElement;
+  }
+  return window;
+}
+
+// ── Collapsible Glass Section ──────────────────────────────────────────
 function Section({
+  sectionKey,
   title,
   icon: Icon,
   children,
-  defaultOpen = true,
+  defaultOpen = false,
 }: {
+  sectionKey: string;
   title: string;
   icon: React.ElementType;
   children: React.ReactNode;
   defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { expandedSections, toggleSectionExpanded } = useSettingsStore();
+  const isOpen = expandedSections?.[sectionKey] ?? defaultOpen;
+
+  const handleToggle = () => {
+    haptic();
+    const nextState = !isOpen;
+    toggleSectionExpanded(sectionKey);
+
+    setTimeout(() => {
+      if (!containerRef.current) return;
+      const scrollParent = getScrollParent(containerRef.current);
+      const cardRect = containerRef.current.getBoundingClientRect();
+      const HEADER_OFFSET = 68; // Space for sticky top header
+      const NAVBAR_OFFSET = 84; // Space for bottom navbar
+
+      if (scrollParent === window) {
+        const viewportHeight = window.innerHeight;
+        const visibleHeight = viewportHeight - HEADER_OFFSET - NAVBAR_OFFSET;
+
+        if (nextState) {
+          if (cardRect.bottom > viewportHeight - NAVBAR_OFFSET) {
+            const delta = cardRect.height <= visibleHeight
+              ? cardRect.bottom - (viewportHeight - NAVBAR_OFFSET)
+              : cardRect.top - HEADER_OFFSET;
+            window.scrollBy({ top: delta, behavior: 'smooth' });
+          } else if (cardRect.top < HEADER_OFFSET) {
+            window.scrollBy({ top: cardRect.top - HEADER_OFFSET, behavior: 'smooth' });
+          }
+        } else {
+          if (cardRect.top < HEADER_OFFSET) {
+            window.scrollBy({ top: cardRect.top - HEADER_OFFSET, behavior: 'smooth' });
+          }
+        }
+      } else {
+        const parent = scrollParent as HTMLElement;
+        const parentRect = parent.getBoundingClientRect();
+        const visibleHeight = parentRect.height - HEADER_OFFSET - NAVBAR_OFFSET;
+
+        if (nextState) {
+          if (cardRect.bottom > parentRect.bottom - NAVBAR_OFFSET) {
+            const delta = cardRect.height <= visibleHeight
+              ? cardRect.bottom - (parentRect.bottom - NAVBAR_OFFSET)
+              : cardRect.top - (parentRect.top + HEADER_OFFSET);
+            parent.scrollBy({ top: delta, behavior: 'smooth' });
+          } else if (cardRect.top < parentRect.top + HEADER_OFFSET) {
+            parent.scrollBy({ top: cardRect.top - (parentRect.top + HEADER_OFFSET), behavior: 'smooth' });
+          }
+        } else {
+          if (cardRect.top < parentRect.top + HEADER_OFFSET) {
+            parent.scrollBy({ top: cardRect.top - (parentRect.top + HEADER_OFFSET), behavior: 'smooth' });
+          }
+        }
+      }
+    }, 200);
+  };
 
   return (
-    <Card style={{ boxShadow: '3px 3px 0px 0px #746C62' }}>
-      {/* Clickable header — click to toggle */}
+    <div
+      ref={containerRef}
+      className="rounded-2xl bg-[#1E1E20]/90 border border-white/[0.08] hover:border-white/15 overflow-hidden shadow-md transition-all duration-200"
+    >
+      {/* Clickable Header */}
       <button
         type="button"
-        onClick={() => { setOpen((v) => !v); haptic(); }}
-        className="w-full flex items-center justify-between gap-2 px-4 py-3.5 border-b-2 border-[#3A3A3A] cursor-pointer select-none hover:bg-brutal-bone/5 transition-colors duration-150"
-        aria-expanded={open}
+        onClick={handleToggle}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none hover:bg-white/[0.03] transition-colors duration-150 text-left"
+        aria-expanded={isOpen}
       >
-        <div className="flex items-center gap-2">
-          <Icon size={18} strokeWidth={2.5} />
-          <h2 className="text-sm font-black uppercase tracking-wider">{title}</h2>
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-white/[0.06] border border-white/10 flex items-center justify-center text-white/80 shrink-0">
+            <Icon size={16} />
+          </div>
+          <h2 className="text-sm font-bold text-white tracking-wide">{title}</h2>
         </div>
         <ChevronDown
           size={16}
-          strokeWidth={2.5}
-          className="shrink-0 transition-transform duration-200"
-          style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          className="shrink-0 text-white/40 transition-transform duration-300 ease-out"
+          style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
         />
       </button>
-      {open && (
-        <CardBody className="space-y-4">{children}</CardBody>
-      )}
-    </Card>
+
+      {/* Smooth CSS Grid Height & Opacity Transition */}
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-out ${
+          isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div
+            className={`px-4 pb-4 pt-1 space-y-4 border-t border-white/[0.06] transition-opacity duration-300 ease-out ${
+              isOpen ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
 const COMMON_EMOJIS = [
   '🍔', '🍕', '🍜', '🛒', '🏠', '⚡', '🚗', '💊', '🎮', '✨',
   '📺', '₿', '🎓', '💼', '🎁', '🏋️', '✈️', '🎵', '👕', '🤲',
-  '📱', '👨‍👩‍👧', '🎁', '🐾', '🌿',
+  '📱', '👨‍👩‍👧', '🐾', '🌿', '☕',
 ];
 
 const SettingsPage: React.FC = () => {
@@ -85,15 +198,24 @@ const SettingsPage: React.FC = () => {
 
   useEffect(() => {
     document.title = 'Settings - KeuanganKu';
-    return () => { document.title = 'Keuanganku'; };
+    return () => {
+      document.title = 'Keuanganku';
+    };
   }, []);
 
   const { user, logout } = useAuthStore();
 
   const {
-    expenses, categories, recurringTemplates,
-    currency, setCurrency, addCategory, deleteCategory, loadExpenses,
+    expenses,
+    categories,
+    recurringTemplates,
+    currency,
+    setCurrency,
+    addCategory,
+    deleteCategory,
+    loadExpenses,
   } = useExpenseStore();
+
   const {
     pockets: portfolioPockets,
     assets: portfolioAssets,
@@ -101,11 +223,21 @@ const SettingsPage: React.FC = () => {
     loadPortfolio,
   } = usePortfolioStore();
 
+  const { incomes, loadIncomes } = useIncomeStore();
+
   const {
-    aiProvider, openaiKey, openrouterKey, openrouterModel,
-    personalMonthlyBudget, familySupportMonthlyBudget,
-    setAiProvider, setOpenaiKey, setOpenrouterKey, setOpenrouterModel,
-    setPersonalMonthlyBudget, setFamilySupportMonthlyBudget,
+    aiProvider,
+    openaiKey,
+    openrouterKey,
+    openrouterModel,
+    personalMonthlyBudget,
+    familySupportMonthlyBudget,
+    setAiProvider,
+    setOpenaiKey,
+    setOpenrouterKey,
+    setOpenrouterModel,
+    setPersonalMonthlyBudget,
+    setFamilySupportMonthlyBudget,
   } = useSettingsStore();
 
   const [aiStatus, setAiStatus] = useState<'ok' | 'fail' | 'idle'>('idle');
@@ -113,7 +245,7 @@ const SettingsPage: React.FC = () => {
   const [aiTesting, setAiTesting] = useState(false);
   const [importMsg, setImportMsg] = useState('');
   const [importConfirm, setImportConfirm] = useState<string | null>(null);
-  const [rateDisplay, setRateDisplay] = useState('Memuat...');
+  const [rateDisplay, setRateDisplay] = useState('Loading...');
   const [rateRefreshing, setRateRefreshing] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isLogoutLoading, setIsLogoutLoading] = useState(false);
@@ -129,7 +261,7 @@ const SettingsPage: React.FC = () => {
   useEffect(() => {
     getExchangeRate().then((r) => {
       if (r.isFallback) {
-        setRateDisplay(`1 USD ≈ Rp ${r.rate.toLocaleString('id-ID')} (perkiraan offline)`);
+        setRateDisplay(`1 USD ≈ Rp ${r.rate.toLocaleString('id-ID')} (offline rate)`);
       } else {
         setRateDisplay(`1 USD = Rp ${r.rate.toLocaleString('id-ID')}`);
       }
@@ -138,9 +270,13 @@ const SettingsPage: React.FC = () => {
 
   useEffect(() => {
     void loadPortfolio();
-  }, [loadPortfolio]);
+    void loadIncomes();
+  }, [loadPortfolio, loadIncomes]);
 
-  const handleCurrencyChange = (c: Currency) => { haptic(); setCurrency(c); };
+  const handleCurrencyChange = (c: Currency) => {
+    haptic();
+    setCurrency(c);
+  };
 
   const handleBudgetChange = (
     setter: (value: number) => void,
@@ -170,7 +306,7 @@ const SettingsPage: React.FC = () => {
 
   const handleExportJSON = async () => {
     haptic();
-    await exportJSON({ expenses, categories, recurring: recurringTemplates });
+    await exportJSON({ expenses, categories, recurring: recurringTemplates, incomes });
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -179,7 +315,7 @@ const SettingsPage: React.FC = () => {
     const reader = new FileReader();
     reader.onload = (ev) => {
       setImportConfirm(ev.target?.result as string);
-      setImportMsg('Data siap diimpor. Ini akan menimpa data lokal saat ini.');
+      setImportMsg('Data is ready to restore. This will overwrite your current local data.');
     };
     reader.readAsText(file);
     e.target.value = '';
@@ -188,16 +324,17 @@ const SettingsPage: React.FC = () => {
   const handleConfirmImport = async () => {
     if (!importConfirm) return;
     setIsImporting(true);
-    setImportMsg('Mengimpor data (tunggu sebentar)...');
+    setImportMsg('Restoring data...');
     try {
       await importJSON(importConfirm);
-      setImportMsg('✓ Import berhasil. Memuat ulang data...');
+      setImportMsg('✓ Restore successful. Reloading data...');
       setImportConfirm(null);
       await loadExpenses({ force: true });
       await loadPortfolio({ force: true });
+      await loadIncomes({ force: true });
       haptic();
     } catch (err) {
-      setImportMsg(`✗ ${err instanceof Error ? err.message : 'Import gagal'}`);
+      setImportMsg(`✗ ${err instanceof Error ? err.message : 'Restore failed'}`);
     } finally {
       setIsImporting(false);
     }
@@ -207,7 +344,7 @@ const SettingsPage: React.FC = () => {
     setRateRefreshing(true);
     const r = await forceRefreshRate();
     if (r.isFallback) {
-      setRateDisplay(`1 USD ≈ Rp ${r.rate.toLocaleString('id-ID')} (perkiraan offline)`);
+      setRateDisplay(`1 USD ≈ Rp ${r.rate.toLocaleString('id-ID')} (offline rate)`);
     } else {
       setRateDisplay(`1 USD = Rp ${r.rate.toLocaleString('id-ID')}`);
     }
@@ -216,21 +353,29 @@ const SettingsPage: React.FC = () => {
   };
 
   const handleAddCategory = async () => {
-    if (!newCatLabel.trim()) { setCatError('Nama kategori wajib diisi'); return; }
+    if (!newCatLabel.trim()) {
+      setCatError('Category name is required');
+      return;
+    }
     const slug = newCatLabel.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-    if (categories.some((c) => c.slug === slug)) { setCatError('Kategori sudah ada'); return; }
+    if (categories.some((c) => c.slug === slug)) {
+      setCatError('Category already exists');
+      return;
+    }
     try {
       await addCategory({ slug, label: newCatLabel.trim(), emoji: newCatEmoji, is_default: false });
-      setNewCatLabel(''); setNewCatEmoji('🛍️'); setCatError('');
+      setNewCatLabel('');
+      setNewCatEmoji('🛍️');
+      setCatError('');
       haptic();
     } catch (err) {
-      setCatError(err instanceof Error ? err.message : 'Gagal menambah');
+      setCatError(err instanceof Error ? err.message : 'Failed to add category');
     }
   };
 
   const handleDeleteCategory = async (slug: string) => {
     const hasExpenses = expenses.some((e) => e.category === slug);
-    if (hasExpenses && !window.confirm('Kategori ini masih digunakan. Tetap hapus?')) return;
+    if (hasExpenses && !window.confirm('This category is currently in use. Delete anyway?')) return;
     haptic();
     await deleteCategory(slug);
   };
@@ -245,122 +390,162 @@ const SettingsPage: React.FC = () => {
 
   return (
     <>
-      <div className="section-pad max-w-2xl mx-auto space-y-4">
-        <h1 className="text-2xl font-black uppercase tracking-tight">Settings</h1>
+      <div className="section-pad max-w-2xl mx-auto space-y-4 pb-24">
+        {/* Sticky Header */}
+        <div className="sticky top-0 z-20 bg-[#1A1A1A]/95 backdrop-blur-md pb-3 pt-3 -mx-4 px-4 border-b border-white/[0.08]">
+          <h1 className="text-xl font-black uppercase tracking-tight text-white">Settings</h1>
+          <p className="text-[11px] text-white/40 font-medium">Manage your account, currency preferences, and system settings</p>
+        </div>
 
-        {/* ── AKUN ──────────────────────────────────────── */}
-        <Section title="Akun" icon={User} defaultOpen={true}>
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-widest mb-0.5" style={{ color: '#A09890' }}>
-                Login sebagai
-              </p>
-              <p className="text-sm font-bold truncate" style={{ color: '#F5F0E8' }} title={user?.email ?? ''}>
-                {user?.email ?? '—'}
-              </p>
+        {/* ── ACCOUNT HERO CARD ───────────────────────────── */}
+        <div className="rounded-2xl bg-gradient-to-br from-[#242428] via-[#1E1E20] to-[#18181A] border border-white/10 p-4 shadow-xl">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-12 h-12 rounded-2xl bg-[#B8F55A]/10 border border-[#B8F55A]/30 flex items-center justify-center text-[#B8F55A] shrink-0 shadow-inner">
+                <User size={22} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+                  Signed in as
+                </p>
+                <p className="text-sm font-bold text-white truncate" title={user?.email ?? ''}>
+                  {user?.email ?? '—'}
+                </p>
+              </div>
             </div>
-            <button
-              id="settings-logout-btn"
-              onClick={() => setIsLogoutModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 border-2 border-red-500 text-red-400 text-xs font-black uppercase tracking-wider hover:bg-red-500 hover:text-white transition-all duration-150 shrink-0"
-            >
-              <LogOut size={14} strokeWidth={2.5} />
-              Keluar
-            </button>
-          </div>
-          <div className="mt-4 pt-4 border-t-2 border-[#3A3A3A] flex justify-between items-center gap-4 flex-wrap">
-            <div className="min-w-0">
-              <p className="text-sm font-bold truncate">Admin Page</p>
-              <p className="text-[10px] font-medium text-brutal-bone-dim mt-0.5">Review akses akun user</p>
-            </div>
-            <Button variant="secondary" onClick={() => { haptic(); navigate('/approval'); }}>
-              Buka
-            </Button>
-          </div>
-        </Section>
 
-        <Section title="Currency" icon={DollarSign} defaultOpen={false}>
-          <p className="text-xs font-bold text-brutal-bone-dim uppercase tracking-wider">
-            Mata uang default untuk input pengeluaran baru.
-          </p>
-          <div className="flex border-2 border-[#555555] h-12">
-            {(['IDR', 'USD'] as Currency[]).map((c) => (
-              <button key={c} onClick={() => handleCurrencyChange(c)}
-                className={`flex-1 flex items-center justify-center border-r-2 last:border-r-0 border-[#555555] font-black uppercase text-sm transition-all duration-150 ${currency === c ? 'bg-[#F5F0E8] text-[#1A1A1A]' : 'bg-[#2A2A2A] hover:bg-[#3A3A3A]'
-                  }`}
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  haptic();
+                  navigate('/approval');
+                }}
+                className="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/10 border border-white/10 text-white/80 hover:text-white text-xs font-semibold transition-all flex items-center gap-1.5 active:scale-95"
               >
-                {c === 'IDR' ? 'IDR (Rp)' : 'USD ($)'}
+                <ShieldCheck size={14} className="text-[#5B9CF6]" /> Admin
               </button>
-            ))}
+              <button
+                id="settings-logout-btn"
+                type="button"
+                onClick={() => setIsLogoutModalOpen(true)}
+                className="px-3.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95"
+              >
+                <LogOut size={14} /> Sign Out
+              </button>
+            </div>
           </div>
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-brutal-bone-dim">Kurs saat ini: {rateDisplay}</p>
+        </div>
+
+        {/* ── DEFAULT CURRENCY ────────────────────────────── */}
+        <Section sectionKey="currency" title="Default Currency" icon={DollarSign} defaultOpen={false}>
+          <p className="text-xs text-white/50 font-medium">
+            Select your primary currency for recording new transactions.
+          </p>
+
+          {/* Segmented Pill Switcher */}
+          <div className="relative grid w-full grid-cols-2 rounded-xl bg-white/[0.05] p-1 border border-white/[0.06]">
+            {(['IDR', 'USD'] as Currency[]).map((c) => {
+              const isActive = currency === c;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => handleCurrencyChange(c)}
+                  className={`rounded-lg px-3 py-2 text-xs font-bold transition-all duration-200 ${
+                    isActive
+                      ? 'bg-white text-[#1A1A1A] shadow-sm'
+                      : 'text-white/40 hover:text-white/70'
+                  }`}
+                >
+                  {c === 'IDR' ? 'IDR (Rupiah)' : 'USD (Dollar)'}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <p className="text-xs text-white/40 font-medium">{rateDisplay}</p>
             <button
+              type="button"
               onClick={handleRefreshRate}
               disabled={rateRefreshing}
-              className="neo-btn neo-btn-primary text-xs px-3 py-1.5 flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/10 border border-white/10 text-white/80 text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
             >
-              {rateRefreshing
-                ? <Loader2 size={12} strokeWidth={2.5} className="animate-spin" />
-                : <RefreshCw size={12} strokeWidth={2.5} />
-              }
-              Perbarui
+              {rateRefreshing ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <RefreshCw size={12} />
+              )}
+              Refresh Rate
             </button>
           </div>
         </Section>
 
-        <Section title="Budget Bulanan" icon={Wallet} defaultOpen={false}>
-          <p className="text-xs font-bold text-brutal-bone-dim uppercase tracking-wider">
-            Budget ini dipakai sebagai acuan insight agar pengeluaran keluarga dan pribadi dibaca lebih adil.
+        {/* ── MONTHLY BUDGET ──────────────────────────────── */}
+        <Section sectionKey="budget" title="Monthly Budget" icon={Wallet} defaultOpen={false}>
+          <p className="text-xs text-white/50 font-medium">
+            Reference budgets used for personal and family expense insights.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <Input
-              label={`Budget Pribadi (${currency})`}
+              label={`Personal Budget (${currency})`}
               type="text"
               inputMode="numeric"
               placeholder={currency === 'IDR' ? '0' : '125'}
               value={personalMonthlyBudget ? String(personalMonthlyBudget) : ''}
               onChange={(e) => handleBudgetChange(setPersonalMonthlyBudget, e.target.value)}
-              hint="Contoh: kebutuhan + wants pribadimu per bulan."
+              hint="Estimated personal expenses & wants."
               style={{ fontSize: '16px' }}
             />
             <Input
-              label={`Budget Keluarga (${currency})`}
+              label={`Family Support Budget (${currency})`}
               type="text"
               inputMode="numeric"
               placeholder={currency === 'IDR' ? '0' : '95'}
               value={familySupportMonthlyBudget ? String(familySupportMonthlyBudget) : ''}
               onChange={(e) => handleBudgetChange(setFamilySupportMonthlyBudget, e.target.value)}
-              hint="Contoh: bantuan rutin untuk orang tua atau keluarga."
+              hint="Regular support for parents or family."
               style={{ fontSize: '16px' }}
             />
           </div>
-          <p className="text-xs font-medium text-brutal-bone-dim">
-            Kosongkan atau isi 0 kalau belum mau dipakai sebagai acuan.
-          </p>
         </Section>
 
-        {/* ── AI PROVIDER ─────────────────────────────── */}
-        <Section title="AI Provider" icon={Cpu} defaultOpen={false}>
-          <div className="flex border-2 border-[#555555] h-11">
-            {(['openrouter', 'openai'] as const).map((p) => (
-              <button key={p} onClick={() => setAiProvider(p)}
-                className={`flex-1 text-xs font-black uppercase border-r-2 last:border-r-0 border-[#555555] transition-all duration-150 ${aiProvider === p ? 'bg-[#F5F0E8] text-[#1A1A1A]' : 'bg-[#2A2A2A] hover:bg-[#3A3A3A]'
+        {/* ── AI PROVIDER ─────────────────────────────────── */}
+        <Section sectionKey="ai" title="AI Provider Settings" icon={Cpu} defaultOpen={false}>
+          {/* Segmented Pill Switcher */}
+          <div className="relative grid w-full grid-cols-2 rounded-xl bg-white/[0.05] p-1 border border-white/[0.06]">
+            {(['openrouter', 'openai'] as const).map((p) => {
+              const isActive = aiProvider === p;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setAiProvider(p)}
+                  className={`rounded-lg px-3 py-2 text-xs font-bold transition-all duration-200 ${
+                    isActive
+                      ? 'bg-white text-[#1A1A1A] shadow-sm'
+                      : 'text-white/40 hover:text-white/70'
                   }`}
-              >
-                {p === 'openrouter' ? 'OpenRouter' : 'OpenAI'}
-              </button>
-            ))}
+                >
+                  {p === 'openrouter' ? 'OpenRouter' : 'OpenAI'}
+                </button>
+              );
+            })}
           </div>
+
           <Input
             label={aiProvider === 'openai' ? 'OpenAI API Key' : 'OpenRouter API Key'}
             type="password"
             placeholder="sk-..."
             value={aiProvider === 'openai' ? openaiKey : openrouterKey}
-            onChange={(e) => aiProvider === 'openai' ? setOpenaiKey(e.target.value) : setOpenrouterKey(e.target.value)}
-            hint="Setiap provider punya API key sendiri dan disimpan terpisah di browser kamu."
+            onChange={(e) =>
+              aiProvider === 'openai' ? setOpenaiKey(e.target.value) : setOpenrouterKey(e.target.value)
+            }
+            hint="API keys are stored securely in your browser."
             style={{ fontSize: '16px' }}
           />
+
           {aiProvider === 'openrouter' && (
             <Input
               label="Model"
@@ -370,88 +555,160 @@ const SettingsPage: React.FC = () => {
               style={{ fontSize: '16px' }}
             />
           )}
-          <div className="flex items-center gap-3">
-            <Button variant="primary" onClick={handleTestAI} loading={aiTesting}
-              leftIcon={<Cpu size={14} strokeWidth={2.5} />}>
-              Test Koneksi
-            </Button>
+
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              type="button"
+              onClick={handleTestAI}
+              disabled={aiTesting}
+              className="h-9 px-4 rounded-xl bg-[#B8F55A] hover:bg-[#B8F55A]/90 text-[#1A1A1A] font-bold text-xs transition-all active:scale-95 flex items-center gap-1.5 shadow-md disabled:opacity-50"
+            >
+              {aiTesting ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Cpu size={13} />
+              )}
+              Test Connection
+            </button>
             <StatusBadge status={aiStatus} />
           </div>
+
           {aiStatusMessage && (
-            <p className={`text-xs font-bold ${aiStatus === 'ok' ? 'text-green-400' : 'text-red-300'}`}>
+            <p className={`text-xs font-bold ${aiStatus === 'ok' ? 'text-green-400' : 'text-red-400'}`}>
               {aiStatusMessage}
             </p>
           )}
         </Section>
 
-        {/* ── BACKUP ─────────────────────────────────── */}
-        <Section title="Backup & Restore" icon={Download} defaultOpen={false}>
-          <div className="flex gap-3 flex-wrap">
-            <Button variant="primary" leftIcon={<Download size={14} strokeWidth={2.5} />}
-              onClick={() => { void handleExportJSON(); }}>
-              Export JSON
-            </Button>
-            <Button variant="primary" leftIcon={<Download size={14} strokeWidth={2.5} />}
-              onClick={handleExportCSV}>
-              Export CSV
-            </Button>
-            <Button variant="secondary" leftIcon={<Upload size={14} strokeWidth={2.5} />}
-              onClick={() => fileInputRef.current?.click()}>
-              Import JSON
-            </Button>
+        {/* ── BACKUP & RESTORE ────────────────────────────── */}
+        <Section sectionKey="backup" title="Data Backup & Restore" icon={Download} defaultOpen={false}>
+          <div className="grid grid-cols-3 gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                void handleExportJSON();
+              }}
+              className="py-2 px-1.5 rounded-xl bg-white/[0.05] hover:bg-white/10 border border-white/10 text-white font-semibold text-[11px] transition-all flex items-center justify-center gap-1 active:scale-95"
+            >
+              <Download size={12} className="text-white/60 shrink-0" />
+              <span className="truncate">Backup JSON</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              className="py-2 px-1.5 rounded-xl bg-white/[0.05] hover:bg-white/10 border border-white/10 text-white font-semibold text-[11px] transition-all flex items-center justify-center gap-1 active:scale-95"
+            >
+              <Download size={12} className="text-white/60 shrink-0" />
+              <span className="truncate">Backup CSV</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="py-2 px-1.5 rounded-xl bg-[#B8F55A]/10 hover:bg-[#B8F55A]/20 border border-[#B8F55A]/30 text-[#B8F55A] font-semibold text-[11px] transition-all flex items-center justify-center gap-1 active:scale-95"
+            >
+              <Upload size={12} className="shrink-0" />
+              <span className="truncate">Restore JSON</span>
+            </button>
             <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleFileSelect} />
           </div>
+
           {importMsg && (
-            <p className={`text-xs font-bold ${importMsg.startsWith('✓') ? 'text-green-600' : 'text-brutal-black/60'}`}>
+            <p className={`text-[11px] font-bold ${importMsg.startsWith('✓') ? 'text-green-400' : 'text-white/60'}`}>
               {importMsg}
             </p>
           )}
+
           {importConfirm && (
-            <div className="border-2 border-[#555555] bg-[#2A2A2A] p-4 space-y-3">
-              <p className="text-sm font-black uppercase">Konfirmasi Import</p>
-              <p className="text-xs font-medium text-brutal-bone-dim">
-                Data lokal yang ada akan ditimpa. Pastikan sudah backup terlebih dahulu.
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 space-y-2">
+              <p className="text-[11px] font-bold text-red-400 uppercase tracking-wide">Confirm Restore</p>
+              <p className="text-[11px] text-white/70">
+                Your current local data will be overwritten. Make sure you have created a backup before proceeding.
               </p>
-              <div className="flex gap-3">
-                <Button variant="destructive" onClick={handleConfirmImport} loading={isImporting} fullWidth>Ya, Timpa</Button>
-                <Button variant="secondary" onClick={() => { setImportConfirm(null); setImportMsg(''); }} disabled={isImporting} fullWidth>Batal</Button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleConfirmImport}
+                  disabled={isImporting}
+                  className="flex-1 py-1 rounded-lg bg-red-500 text-white font-bold text-[11px] hover:bg-red-600 transition-colors disabled:opacity-50"
+                >
+                  {isImporting ? 'Restoring...' : 'Overwrite & Restore'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImportConfirm(null);
+                    setImportMsg('');
+                  }}
+                  disabled={isImporting}
+                  className="flex-1 py-1 rounded-lg bg-white/10 text-white font-semibold text-[11px] hover:bg-white/20 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           )}
-          <div className="space-y-2 pt-1">
-            <p className="text-xs font-bold text-brutal-black/60 uppercase">Ringkasan Data</p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div className="border-2 border-[#555555] bg-[#2A2A2A] p-3">
-                <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-brutal-bone-dim">Expense</p>
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div>
-                    <p className="text-lg font-black leading-none">{expenses.length}</p>
-                    <p className="mt-1 font-bold text-brutal-bone-dim">transaksi</p>
-                  </div>
-                  <div>
-                    <p className="text-lg font-black leading-none">{recurringTemplates.length}</p>
-                    <p className="mt-1 font-bold text-brutal-bone-dim">rutin</p>
-                  </div>
-                  <div>
-                    <p className="text-lg font-black leading-none">{categories.length}</p>
-                    <p className="mt-1 font-bold text-brutal-bone-dim">kategori</p>
+
+          {/* Stored Data Summary — Single Master Glass Table */}
+          <div className="space-y-1.5 pt-1">
+            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3 space-y-2.5">
+              <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
+                <p className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Stored Data Summary</p>
+                <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-white/[0.05] border border-white/[0.08] text-white/50">
+                  8 Data Domains
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 divide-x divide-white/[0.06]">
+                {/* Column 1: Expenses */}
+                <div className="space-y-1.5 pr-1">
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-white/40">Expenses</p>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-white/50">Expenses</span>
+                      <span className="font-bold text-white">{expenses.length}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-white/50">Recurring</span>
+                      <span className="font-bold text-white">{recurringTemplates.length}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-white/50">Categories</span>
+                      <span className="font-bold text-white">{categories.length}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="border-2 border-[#555555] bg-[#2A2A2A] p-3">
-                <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-brutal-bone-dim">Pockets</p>
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div>
-                    <p className="text-lg font-black leading-none">{portfolioPockets.length}</p>
-                    <p className="mt-1 font-bold text-brutal-bone-dim">pocket</p>
+
+                {/* Column 2: Income */}
+                <div className="space-y-1.5 px-2">
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-white/40">Income</p>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-white/50">Records</span>
+                      <span className="font-bold text-white">{incomes.length}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-white/50">Sources</span>
+                      <span className="font-bold text-white">{new Set(incomes.map((i) => i.source_type)).size}</span>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-lg font-black leading-none">{portfolioAssets.length}</p>
-                    <p className="mt-1 font-bold text-brutal-bone-dim">asset</p>
-                  </div>
-                  <div>
-                    <p className="text-lg font-black leading-none">{portfolioActivityLogs.length}</p>
-                    <p className="mt-1 font-bold text-brutal-bone-dim">log</p>
+                </div>
+
+                {/* Column 3: Portfolio */}
+                <div className="space-y-1.5 pl-2">
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-white/40">Portfolio</p>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-white/50">Pockets</span>
+                      <span className="font-bold text-white">{portfolioPockets.length}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-white/50">Assets</span>
+                      <span className="font-bold text-white">{portfolioAssets.length}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-white/50">Logs</span>
+                      <span className="font-bold text-white">{portfolioActivityLogs.length}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -459,50 +716,71 @@ const SettingsPage: React.FC = () => {
           </div>
         </Section>
 
-        {/* ── CATEGORIES ─────────────────────────────── */}
-        <Section title="Kategori" icon={Tag} defaultOpen={false}>
-          <div className="space-y-3 p-3 border-2 border-[#555555] bg-[#2A2A2A]">
-            <p className="text-xs font-black uppercase tracking-wider">Tambah Kategori Baru</p>
+        {/* ── CATEGORIES ─────────────────────────────────── */}
+        <Section sectionKey="categories" title="Categories" icon={Tag} defaultOpen={false}>
+          {/* Add Category Form Card */}
+          <div className="space-y-3 p-3.5 rounded-xl border border-white/[0.08] bg-white/[0.03]">
+            <p className="text-xs font-bold text-white uppercase tracking-wider">Add New Category</p>
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider">Emoji</label>
-              <div className="flex flex-wrap gap-1">
+              <label className="text-[11px] font-medium text-white/40">Select Emoji</label>
+              <div className="flex flex-wrap gap-1.5">
                 {COMMON_EMOJIS.map((em) => (
-                  <button key={em} type="button" onClick={() => setNewCatEmoji(em)}
-                    className={`w-10 h-10 text-xl flex items-center justify-center border-2 border-[#555555] transition-all duration-150 ${newCatEmoji === em ? 'bg-[#F5F0E8] text-[#1A1A1A]' : 'bg-[#1A1A1A] hover:bg-[#3A3A3A]'
-                      }`}
+                  <button
+                    key={em}
+                    type="button"
+                    onClick={() => setNewCatEmoji(em)}
+                    className={`w-9 h-9 text-lg flex items-center justify-center rounded-xl border transition-all duration-150 active:scale-95 ${
+                      newCatEmoji === em
+                        ? 'bg-white text-[#1A1A1A] border-white shadow-sm'
+                        : 'bg-white/[0.05] border-white/10 hover:bg-white/10 text-white'
+                    }`}
                   >
                     {em}
                   </button>
                 ))}
               </div>
             </div>
+
             <Input
-              label="Nama Kategori"
-              placeholder="Hobi, Olahraga..."
+              label="Category Name"
+              placeholder="e.g. Hobbies, Fitness..."
               value={newCatLabel}
-              onChange={(e) => { setNewCatLabel(e.target.value); setCatError(''); }}
+              onChange={(e) => {
+                setNewCatLabel(e.target.value);
+                setCatError('');
+              }}
               error={catError}
               style={{ fontSize: '16px' }}
             />
-            <Button variant="primary" leftIcon={<Plus size={14} strokeWidth={2.5} />} onClick={handleAddCategory}>
-              Tambah Kategori
-            </Button>
+
+            <button
+              type="button"
+              onClick={handleAddCategory}
+              className="h-9 px-4 rounded-xl bg-[#B8F55A] hover:bg-[#B8F55A]/90 text-[#1A1A1A] font-bold text-xs transition-all active:scale-95 inline-flex items-center gap-1.5 shadow-md"
+            >
+              <Plus size={14} strokeWidth={2.5} /> Add Category
+            </button>
           </div>
 
-          <div className="space-y-2">
+          {/* Category Items List */}
+          <div className="space-y-2 pt-1">
             {categories.map((cat) => (
-              <div key={cat.slug} className="flex items-center gap-3 p-3 border-2 border-[#555555] bg-[#2A2A2A]">
-                <span className="text-xl w-8 text-center">{cat.emoji}</span>
+              <div
+                key={cat.slug}
+                className="flex items-center gap-3 p-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
+              >
+                <span className="text-xl w-8 text-center shrink-0">{cat.emoji}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold">{cat.label}</p>
-                  <p className="text-[10px] text-brutal-bone-dim font-medium">{cat.slug}</p>
+                  <p className="text-xs font-bold text-white truncate">{cat.label}</p>
+                  <p className="text-[10px] text-white/40 font-medium truncate">{cat.slug}</p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => handleDeleteCategory(cat.slug)}
-                  className="p-2 hover:text-red-500 hover:bg-red-50 transition-colors duration-150 min-w-[36px] min-h-[36px] flex items-center justify-center"
-                  aria-label={`Hapus ${cat.label}`}
+                  className="w-8 h-8 rounded-lg hover:bg-red-500/20 text-white/40 hover:text-red-400 transition-colors flex items-center justify-center shrink-0"
+                  aria-label={`Delete ${cat.label}`}
                 >
-                  <Trash2 size={16} strokeWidth={2.5} />
+                  <Trash2 size={13} />
                 </button>
               </div>
             ))}
@@ -513,10 +791,10 @@ const SettingsPage: React.FC = () => {
       {/* Logout confirmation modal */}
       <ConfirmModal
         isOpen={isLogoutModalOpen}
-        title="Keluar dari Akun"
-        description="Kamu akan keluar dari sesi ini. Pastikan data sudah tersimpan sebelum melanjutkan."
-        confirmLabel="Ya, Keluar"
-        cancelLabel="Batal"
+        title="Sign Out"
+        description="Are you sure you want to sign out? Make sure your data is saved before proceeding."
+        confirmLabel="Sign Out"
+        cancelLabel="Cancel"
         onConfirm={handleLogout}
         onCancel={() => setIsLogoutModalOpen(false)}
         loading={isLogoutLoading}

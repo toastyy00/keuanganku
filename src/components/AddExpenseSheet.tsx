@@ -267,16 +267,26 @@ const AddExpenseSheet: React.FC = () => {
     const baseNote = editingExpense?.note ?? prefillData?.note ?? '';
     const baseCurrency = editingExpense?.currency ?? defaultCurrency;
 
-    return (
+    // Content fields that indicate the user has actually started filling the form
+    const hasContentChanges =
       name !== baseName ||
       rawValue !== baseAmount ||
       date !== baseDate ||
-      category !== baseCategory ||
-      type !== baseType ||
-      destination !== baseDestination ||
       note !== baseNote ||
-      entryCurrency !== baseCurrency
-    );
+      entryCurrency !== baseCurrency;
+
+    // Pill/selector changes (type, category, destination) only count as
+    // dirty when the user has also entered actual content. This prevents
+    // the discard popup from appearing when only switching pills on an
+    // otherwise-empty form.
+    const hasSelectorChanges =
+      type !== baseType ||
+      category !== baseCategory ||
+      destination !== baseDestination;
+
+    if (hasContentChanges) return true;
+    if (hasSelectorChanges && (name.trim() !== '' || rawValue > 0 || note.trim() !== '')) return true;
+    return false;
   }, [editingExpense, prefillData, categories, defaultCurrency, name, rawValue, date, category, type, destination, note, entryCurrency]);
 
   const handleClose = useCallback(() => {
