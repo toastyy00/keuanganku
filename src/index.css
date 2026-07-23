@@ -530,19 +530,25 @@
   }
 
   /* Bottom sheet panel — sleek dark glass */
+  /* NOTE: CSS custom properties used intentionally to prevent lightningcss
+     from stripping unprefixed backdrop-filter, mangling rgba colors to
+     incorrect hex8 values, and dropping backface-visibility during
+     production builds (Vite 8 / rolldown). */
   .bottom-sheet-panel {
     @apply fixed bottom-0 left-0 right-0 z-50;
+    --_panel-bg: rgba(26, 26, 26, 0.85);
+    --_panel-blur: blur(20px);
     display: flex;
     flex-direction: column;
-    background-color: rgba(26, 26, 26, 0.85);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background-color: var(--_panel-bg);
+    -webkit-backdrop-filter: var(--_panel-blur);
+    backdrop-filter: var(--_panel-blur);
     border-top: 1px solid rgba(255,255,255,0.08);
     border-radius: 20px 20px 0 0;
     max-height: 90dvh;
     will-change: transform;
-    backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
     /* Closing: fast snap out */
     transition: transform 180ms cubic-bezier(0.4, 0, 1, 1);
     transform: translateY(100%);
