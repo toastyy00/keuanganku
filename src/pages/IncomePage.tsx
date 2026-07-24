@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, CalendarDays, ArrowLeft } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarDays, ArrowLeft, X } from 'lucide-react';
 import { useUIStore } from '../store/useAppStore';
 import { useIncomeStore } from '../store/useIncomeStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -45,6 +45,7 @@ const IncomePage: React.FC = () => {
   }, [_hasHydrated, cacheScope, activeScope, loadIncomes]);
 
   const [activeFilter, setActiveFilter] = React.useState<{ type: 'FIAT' | 'CRYPTO_SOURCE'; value: string } | null>(null);
+  const [selectedDate, setSelectedDate] = React.useState<string | null>(null);
 
   const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
   
@@ -53,19 +54,24 @@ const IncomePage: React.FC = () => {
   }, [incomes, monthPrefix]);
 
   const filteredIncomes = useMemo(() => {
-    if (!activeFilter) return monthIncomes;
+    let list = monthIncomes;
+    if (selectedDate) {
+      list = list.filter((i) => i.date === selectedDate);
+    }
+    if (!activeFilter) return list;
     if (activeFilter.type === 'FIAT') {
-      return monthIncomes.filter((i) => i.asset_type === 'FIAT');
+      return list.filter((i) => i.asset_type === 'FIAT');
     }
     if (activeFilter.type === 'CRYPTO_SOURCE') {
-      return monthIncomes.filter((i) => i.asset_type === 'CRYPTO' && i.source_type === activeFilter.value);
+      return list.filter((i) => i.asset_type === 'CRYPTO' && i.source_type === activeFilter.value);
     }
-    return monthIncomes;
-  }, [monthIncomes, activeFilter]);
+    return list;
+  }, [monthIncomes, activeFilter, selectedDate]);
 
-  // Reset filter if activeMonth changes
+  // Reset filters if activeMonth changes
   useEffect(() => {
     setActiveFilter(null);
+    setSelectedDate(null);
   }, [month, year]);
 
   const nowDate = new Date();
@@ -98,6 +104,8 @@ const IncomePage: React.FC = () => {
           month={month}
           activeFilter={activeFilter}
           onToggleFilter={setActiveFilter}
+          selectedDate={selectedDate}
+          onSelectDate={setSelectedDate}
         />
 
         {/* Sticky Title Bar & Add Entry Row (With divider line) */}
@@ -146,7 +154,7 @@ const IncomePage: React.FC = () => {
 
             {/* Records count stacked cleanly below */}
             <span className="text-[9px] text-white/40 font-bold uppercase tracking-wider">
-              {activeFilter ? `${filteredIncomes.length} of ` : ''}{monthIncomes.length} Inflow{monthIncomes.length !== 1 ? 's' : ''}
+              {(activeFilter || selectedDate) ? `${filteredIncomes.length} of ` : ''}{monthIncomes.length} Inflow{monthIncomes.length !== 1 ? 's' : ''}
             </span>
           </div>
 
@@ -161,6 +169,32 @@ const IncomePage: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Active Filter Badges (Date or Category) */}
+        {(selectedDate || activeFilter) && (
+          <div className="flex items-center gap-2 pt-2 flex-wrap">
+            {selectedDate && (
+              <button
+                type="button"
+                onClick={() => setSelectedDate(null)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#B8F55A]/10 border border-[#B8F55A]/30 text-[#B8F55A] text-[10px] font-bold transition-all hover:bg-[#B8F55A]/20 active:scale-95"
+              >
+                <span>Date: {selectedDate.substring(8, 10)}/{String(month).padStart(2, '0')}/{year}</span>
+                <X size={12} />
+              </button>
+            )}
+            {activeFilter && (
+              <button
+                type="button"
+                onClick={() => setActiveFilter(null)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 border border-white/20 text-white text-[10px] font-bold transition-all hover:bg-white/20 active:scale-95"
+              >
+                <span>Filter: {activeFilter.type === 'FIAT' ? 'Fiat' : activeFilter.value}</span>
+                <X size={12} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Scrollable History List Section */}

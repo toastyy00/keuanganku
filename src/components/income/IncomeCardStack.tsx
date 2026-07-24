@@ -10,6 +10,8 @@ interface IncomeCardStackProps {
   month: number;
   activeFilter: { type: 'FIAT' | 'CRYPTO_SOURCE'; value: string } | null;
   onToggleFilter: (filter: { type: 'FIAT' | 'CRYPTO_SOURCE'; value: string } | null) => void;
+  selectedDate: string | null;
+  onSelectDate: (date: string | null) => void;
 }
 
 export const IncomeCardStack: React.FC<IncomeCardStackProps> = ({
@@ -18,6 +20,8 @@ export const IncomeCardStack: React.FC<IncomeCardStackProps> = ({
   month,
   activeFilter,
   onToggleFilter,
+  selectedDate,
+  onSelectDate,
 }) => {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -316,7 +320,13 @@ export const IncomeCardStack: React.FC<IncomeCardStackProps> = ({
           style={getCard1Style()}
           className="absolute w-full h-full"
         >
-          <IncomeChartCard monthIncomes={monthIncomes} year={year} month={month} />
+          <IncomeChartCard
+            monthIncomes={monthIncomes}
+            year={year}
+            month={month}
+            selectedDate={selectedDate}
+            onSelectDate={onSelectDate}
+          />
         </div>
       </div>
     </div>
