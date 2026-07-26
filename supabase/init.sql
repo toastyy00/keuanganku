@@ -45,6 +45,7 @@ CREATE TABLE public.profiles (
   id            UUID        PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   display_name  TEXT        NOT NULL DEFAULT '',
   is_admin      BOOLEAN     NOT NULL DEFAULT FALSE,
+  ai_settings   JSONB       NOT NULL DEFAULT '{}',
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

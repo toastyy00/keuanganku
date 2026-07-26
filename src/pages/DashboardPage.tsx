@@ -6,17 +6,20 @@ import { Card, CardBody } from '../components/ui/Card';
 import NumberFlow, { continuous } from '@number-flow/react';
 import { SkeletonDashboard } from '../components/SkeletonCard';
 import { NotificationBox } from '../components/NotificationBox';
+import ReceiptReviewSheet from '../components/receipt/ReceiptReviewSheet';
+import ReceiptAiScanningOverlay from '../components/receipt/ReceiptAiScanningOverlay';
 import { useExpenseStore } from '../store/useExpenseStore';
 import { useIncomeStore } from '../store/useIncomeStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useUIStore } from '../store/useAppStore';
+import { useReceiptStore } from '../store/useReceiptStore';
 import {
   formatCurrency,
   calcNeedsWantsSplit,
   monthLabel,
 } from '../lib/utils';
 import { getExchangeRate, convertAmount, type RateResult } from '../lib/exchangeRate';
-import type { Currency, Expense } from '../types';
+import type { Currency, Expense, ReceiptInboxItem } from '../types';
 
 // ============================================================
 //  HELPERS
@@ -119,16 +122,19 @@ function SwipeCarousel({
 
   // Touch handlers
   const onTouchStart = (e: React.TouchEvent) => {
+    if (document.body.dataset.notificationOpen === 'true' || document.body.dataset.bottomSheetOpen === 'true') return;
     markHintSeen();
     startX.current = e.touches[0].clientX;
     isDragging.current = false;
   };
   const onTouchMove = (e: React.TouchEvent) => {
+    if (document.body.dataset.notificationOpen === 'true' || document.body.dataset.bottomSheetOpen === 'true') return;
     if (startX.current !== null && Math.abs(e.touches[0].clientX - startX.current) > 8) {
       isDragging.current = true;
     }
   };
   const onTouchEnd = (e: React.TouchEvent) => {
+    if (document.body.dataset.notificationOpen === 'true' || document.body.dataset.bottomSheetOpen === 'true') return;
     if (startX.current === null) return;
     const dx = e.changedTouches[0].clientX - startX.current;
     if (isDragging.current && Math.abs(dx) > 40) goTo(active + (dx < 0 ? 1 : -1));
@@ -351,6 +357,39 @@ const DashboardPage: React.FC = () => {
     });
   }, [openAddSheet]);
 
+  // ── Receipt Inbox ───────────────────────────────────────────
+  const {
+    inboxItems: receiptInboxItems,
+    isUploading: isReceiptUploading,
+    scanProgress: receiptScanProgress,
+    loadInbox: loadReceiptInbox,
+    dismissItem: dismissReceiptItem,
+    latestScannedItem,
+    latestImagePreviewUrl,
+    clearLatestScanCache,
+  } = useReceiptStore();
+  const [reviewReceiptId, setReviewReceiptId] = useState<string | null>(null);
+  const [isReceiptReviewOpen, setIsReceiptReviewOpen] = useState(false);
+
+  useEffect(() => {
+    loadReceiptInbox();
+  }, [loadReceiptInbox]);
+
+  const handleReviewReceipt = useCallback((item: ReceiptInboxItem) => {
+    setIsNotificationOpen(false);
+    setReviewReceiptId(item.id);
+    setIsReceiptReviewOpen(true);
+  }, []);
+
+  const handleDismissReceipt = useCallback((id: string) => {
+    dismissReceiptItem(id);
+  }, [dismissReceiptItem]);
+
+  const handleCloseReceiptReview = useCallback(() => {
+    setIsReceiptReviewOpen(false);
+    setReviewReceiptId(null);
+  }, []);
+
   // Swipe Handlers for Month Header
   const headerStartX = useRef<number | null>(null);
   const suppressHeaderClickRef = useRef(false);
@@ -377,6 +416,11 @@ const DashboardPage: React.FC = () => {
   }, []);
 
   const onHeaderTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
+    if (document.body.dataset.notificationOpen === 'true' || document.body.dataset.bottomSheetOpen === 'true') {
+      headerStartX.current = null;
+      setDateDragging(false);
+      return;
+    }
     if (clearHeaderClickSuppressTimerRef.current !== null) {
       window.clearTimeout(clearHeaderClickSuppressTimerRef.current);
       clearHeaderClickSuppressTimerRef.current = null;
@@ -387,6 +431,7 @@ const DashboardPage: React.FC = () => {
   };
 
   const onHeaderTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
+    if (document.body.dataset.notificationOpen === 'true' || document.body.dataset.bottomSheetOpen === 'true') return;
     if (headerStartX.current !== null) {
       const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
       if (Math.abs(clientX - headerStartX.current) > 5) {
@@ -396,6 +441,7 @@ const DashboardPage: React.FC = () => {
   };
 
   const onHeaderTouchEnd = (e: React.TouchEvent | React.MouseEvent) => {
+    if (document.body.dataset.notificationOpen === 'true' || document.body.dataset.bottomSheetOpen === 'true') return;
     if (headerStartX.current === null) return;
     const endX = 'changedTouches' in e ? e.changedTouches[0].clientX : e.clientX;
     const dx = endX - headerStartX.current;
@@ -797,9 +843,9 @@ const DashboardPage: React.FC = () => {
             aria-label="Pengingat Notifikasi"
           >
             <Bell size={17} />
-            {unrecordedRecurringList.length > 0 && (
+            {(unrecordedRecurringList.length + (receiptInboxItems?.length ?? 0)) > 0 && (
               <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-[#B8F55A] text-[#1A1A1A] text-[10px] font-black shadow-md border border-[#1A1A1A]">
-                {unrecordedRecurringList.length}
+                {unrecordedRecurringList.length + (receiptInboxItems?.length ?? 0)}
               </span>
             )}
           </button>
@@ -812,6 +858,9 @@ const DashboardPage: React.FC = () => {
             currency={dashCurrency}
             onLogItem={handleLogRecurringItem}
             triggerRef={bellButtonRef}
+            inboxItems={receiptInboxItems}
+            onReviewReceipt={handleReviewReceipt}
+            onDismissReceipt={handleDismissReceipt}
           />
         </div>
       </div>
@@ -1309,6 +1358,30 @@ const DashboardPage: React.FC = () => {
           ) : null}
         </div>
       </div>
+      {/* Receipt Review Sheet */}
+      <ReceiptReviewSheet
+        isOpen={isReceiptReviewOpen}
+        onClose={handleCloseReceiptReview}
+        receiptId={reviewReceiptId}
+      />
+
+      {/* Receipt AI Scanning Overlay */}
+      <ReceiptAiScanningOverlay
+        isScanning={isReceiptUploading}
+        scanProgress={receiptScanProgress}
+        imagePreviewUrl={latestImagePreviewUrl}
+        latestInboxItem={latestScannedItem}
+        onCloseCache={() => clearLatestScanCache()}
+        onReviewNow={(item) => {
+          setReviewReceiptId(item.id);
+          setIsReceiptReviewOpen(true);
+          clearLatestScanCache();
+        }}
+        onOpenInbox={() => {
+          setIsNotificationOpen(true);
+          clearLatestScanCache();
+        }}
+      />
     </div>
   );
 };

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { User, Session } from '@supabase/supabase-js';
 import { getSupabaseClientAsync } from '../lib/supabase';
 import { isDemoMode } from '../lib/appConfig';
+import { pullAdminSettings } from '../lib/adminSettingsSync';
 
 // ============================================================
 //  AUTH STORE — Supabase session management
@@ -70,6 +71,10 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: session?.user ?? null,
         isInitializing: false,
       });
+
+      if (session?.user) {
+        void pullAdminSettings();
+      }
     } catch {
       set({ isInitializing: false });
     }
@@ -124,6 +129,8 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({ error: 'Akun Anda sedang menunggu persetujuan admin.' });
         return;
       }
+
+      void pullAdminSettings();
 
     } catch {
       set({ error: 'Terjadi kesalahan. Coba lagi.' });

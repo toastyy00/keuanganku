@@ -906,3 +906,98 @@ body.flow-mode-active main *::-webkit-scrollbar {
 html.flow-mode-active::-webkit-scrollbar { display: none; }
 html.flow-mode-active { scrollbar-width: none; -ms-overflow-style: none; }
 
+@keyframes scan {
+  0% { top: 0%; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+@keyframes textShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-text-shimmer {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 1) 50%, rgba(255, 255, 255, 0.4) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: textShimmer 2.5s infinite linear;
+}
+
+@keyframes cardPop {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-card-pop {
+  animation: cardPop 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ── Unicode Braille Loader Animations ───────────────────── */
+:root {
+  --loader-shimmer-base: rgba(255, 255, 255, 0.3);
+  --loader-shimmer-peak: #ffffff;
+  --loader-glow-color: #ffffff;
+  --loader-glow-sm: 0.125rem;
+  --loader-glow-lg: 0.375rem;
+}
+
+.braille-loader {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+  line-height: normal;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.braille-loader::after {
+  display: inline-block;
+  white-space: pre;
+  background: linear-gradient(90deg, var(--loader-shimmer-base) 0%, rgba(255, 255, 255, 0.8) 30%, var(--loader-shimmer-peak) 50%, rgba(255, 255, 255, 0.8) 70%, var(--loader-shimmer-base) 100%);
+  background-size: 200% auto;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  will-change: background-position, filter, opacity;
+  pointer-events: none;
+}
+
+@keyframes l-pls-sync {
+  0%, 50%, 100% { opacity: 0.3; filter: brightness(0.5); background-position: 200% center; }
+  18% { opacity: 1; filter: brightness(1.8) drop-shadow(0 0 var(--loader-glow-sm) var(--loader-glow-color)) drop-shadow(0 0 calc(var(--loader-glow-lg) * 2) rgba(255, 255, 255, 0.6)); background-position: -100% center; }
+  34% { background-position: -100% center; }
+}
+
+.spinner-pulse {
+  width: 3ch;
+  font-size: 2.25rem;
+}
+
+.spinner-pulse::after {
+  content: "⠀⠶⠀";
+  animation: sp-pls 1.4s step-end infinite, l-pls-sync 1.4s cubic-bezier(0.1, 0.9, 0.2, 1) infinite;
+}
+
+@keyframes sp-pls {
+  0%, 100% { content: "⠀⠶⠀"; }
+  10% { content: "⠰⣿⠆"; }
+  18% { content: "⢾⣿⡷"; }
+  26% { content: "⢾⣉⡷"; }
+  34% { content: "⣏⣉⣹"; }
+  42% { content: "⡁⠀⢈"; }
+  50% { content: "⠀⠶⠀"; }
+}
+

@@ -183,3 +183,74 @@ export interface IncomeRepository {
   update(id: string, data: Partial<IncomeEntry>): Promise<IncomeEntry>;
   delete(id: string): Promise<void>;
 }
+
+// ── Receipt / Invoice Scanning ────────────────────────────────
+
+export type ReceiptInboxStatus = 'processing' | 'ready' | 'confirmed' | 'dismissed' | 'error';
+
+/** A single line item extracted from a receipt by AI */
+export interface ReceiptLineItem {
+  name: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+  /** AI's category suggestion (slug from user's category list) */
+  suggested_category: string;
+  /** AI's Need/Want suggestion */
+  suggested_expense_type: 'NEED' | 'WANT';
+  suggested_unit?: string;           // e.g. "galon", "botol", "bungkus", "kotak", "pack", "pcs"
+  // ── User overrides during review (undefined = use AI suggestion) ──
+  confirmed_category?: string;
+  confirmed_expense_type?: 'NEED' | 'WANT';
+  confirmed_unit?: string;
+  /** Whether this item is included in the final expense creation */
+  included: boolean;
+}
+
+/** A receipt in the inbox, pending user review */
+export interface ReceiptInboxItem {
+  id: string;
+  store_name: string | null;
+  receipt_date: string | null;       // 'YYYY-MM-DD'
+  total: number | null;
+  currency: Currency;
+  suggested_type: 'expense' | 'income';
+  items: ReceiptLineItem[];
+  status: ReceiptInboxStatus;
+  error_message?: string;
+  created_at: string;
+}
+
+/** Structured response expected from AI receipt extraction */
+export interface ReceiptAIResponse {
+  store_name: string;
+  date: string;                      // 'YYYY-MM-DD'
+  currency: 'IDR' | 'USD';
+  suggested_type: 'expense' | 'income';
+  total: number;
+  items: Array<{
+    name: string;
+    quantity: number;
+    unit_price: number;
+    total_price: number;
+    suggested_category: string;
+    suggested_expense_type: 'NEED' | 'WANT';
+    suggested_unit?: string;
+  }>;
+}
+
+/** A group of receipt items to be merged into a single expense */
+export interface ReceiptMergeGroup {
+  type: 'NEED' | 'WANT';
+  category: string;
+  /** Items in this merge group */
+  itemIndices: number[];
+  /** Optional custom name for the merged expense */
+  mergedName?: string;
+}
+
+export interface ReceiptScanProgress {
+  current: number;
+  total: number;
+  lastCount: number;
+}

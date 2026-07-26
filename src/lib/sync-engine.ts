@@ -13,6 +13,7 @@ import { getSupabaseClientAsync } from './supabase';
 import { GUEST_DATA_SCOPE, getActiveDataScope, scopedDataKey } from './dataScope';
 import { readIDB, readIDBValue, writeIDB, writeIDBValue } from './idb-storage';
 import { useAuthStore } from '../store/useAuthStore';
+import { pullAdminSettings } from './adminSettingsSync';
 import {
   applyPortfolioActivityLogOp,
   applyPortfolioAssetOp,
@@ -1280,6 +1281,7 @@ export async function syncWithSupabaseIfNeeded(options: { force?: boolean; domai
   const runPromise = runSync(scope, client, domain)
     .then((result) => {
       syncLastRunAtByScope.set(runKey, Date.now());
+      void pullAdminSettings();
       return result;
     })
     .catch(async (error) => {

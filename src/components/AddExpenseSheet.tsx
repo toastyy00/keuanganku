@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { AlertCircle, CalendarDays } from 'lucide-react';
+import { AlertCircle, CalendarDays, ScanLine, Loader2, Camera, Image as ImageIcon } from 'lucide-react';
 import { BottomSheet } from './ui/BottomSheet';
 import { CategoryPicker } from './ui/CategoryPicker';
 import { ConfirmModal } from './ui/ConfirmModal';
 import { useUIStore } from '../store/useAppStore';
 import { useExpenseStore } from '../store/useExpenseStore';
+import { useReceiptStore } from '../store/useReceiptStore';
+import { useSettingsStore } from '../store/useSettingsStore';
 import { useCurrencyInput } from '../hooks/useCurrencyInput';
 import { getExchangeRate } from '../lib/exchangeRate';
 import { todayISO } from '../lib/utils';
@@ -107,21 +109,22 @@ const AddExpenseSheet: React.FC = () => {
     }
   }, [entryCurrency, setFromNumber]);
 
-  // ── Reset on open ──────────────────────────────────────────
-  const initializedOpenRef = useRef(false);
-
+  // ── Reset on open / close / prefill change ────────────────────
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!isAddSheetOpen) {
-      initializedOpenRef.current = false;
+      setName('');
+      reset();
+      setDate(todayISO());
+      setCategory(categories[0]?.slug ?? '');
+      setType('NEED');
+      setDestination('');
+      setNote('');
+      setErrors({});
       return;
     }
 
-    // Prevents wiping user input if the app re-renders or resumes while idle
-    if (initializedOpenRef.current) return;
-    initializedOpenRef.current = true;
-
-    const initialCurrency = editingExpense?.currency ?? defaultCurrency;
+    const initialCurrency = editingExpense?.currency ?? prefillData?.currency ?? defaultCurrency;
     setEntryCurrency(initialCurrency);
     prevCurrencyRef.current = initialCurrency;
     pendingConversionRef.current = null;
@@ -138,11 +141,12 @@ const AddExpenseSheet: React.FC = () => {
     } else if (prefillData) {
       setName(prefillData.name ?? '');
       setFromNumber(prefillData.amount ?? 0);
-      setDate(todayISO());
+      setDate(prefillData.date ?? todayISO());
       setCategory(prefillData.category ?? categories[0]?.slug ?? '');
       setType(prefillData.type ?? 'NEED');
       setDestination('');
       setNote(prefillData.note ?? '');
+      if (prefillData.currency) setEntryCurrency(prefillData.currency);
     } else {
       setName('');
       reset();
@@ -237,7 +241,17 @@ const AddExpenseSheet: React.FC = () => {
       }
       haptic();
       setErrors({});
-      closeAddSheet();
+
+      // Advance receipt review sequence if active
+      const isReviewSeq = Boolean(useReceiptStore.getState().reviewSequence);
+      if (isReviewSeq) {
+        const hasMore = await useReceiptStore.getState().advanceReviewSequence();
+        if (!hasMore) {
+          closeAddSheet();
+        }
+      } else {
+        closeAddSheet();
+      }
     } catch (err) {
       setErrors({ root: err instanceof Error ? err.message : 'Gagal menyimpan' });
     }
@@ -294,6 +308,7 @@ const AddExpenseSheet: React.FC = () => {
       setShowConfirmClose(true);
     } else {
       setErrors({});
+      useReceiptStore.getState().cancelReviewSequence();
       closeAddSheet();
     }
   }, [isDirty, closeAddSheet]);
@@ -325,6 +340,7 @@ const AddExpenseSheet: React.FC = () => {
             )}
             {isDisplayEditMode ? 'Simpan' : 'Tambah'}
           </button>
+          {!isEditMode && <ReceiptScanSquare categories={categories} />}
         </div>
       }
     >
@@ -336,6 +352,8 @@ const AddExpenseSheet: React.FC = () => {
             {errors.root}
           </div>
         )}
+
+
 
         {/* Tipe Transaksi Chips */}
         <div className="flex flex-col gap-1.5 pt-1">
@@ -495,3 +513,145 @@ const AddExpenseSheet: React.FC = () => {
 
 export { AddExpenseSheet };
 
+// ── Receipt Scan square button for footer ──
+
+import type { Category } from '../types';
+
+const ReceiptScanSquare: React.FC<{ categories: Category[] }> = ({ categories }) => {
+  const { isUploading, uploadAndScan, uploadAndScanMultiple } = useReceiptStore();
+  const settings = useSettingsStore();
+  const [showOptions, setShowOptions] = useState(false);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showOptions) return;
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowOptions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [showOptions]);
+
+  const handleFilesSelected = async (files: File[]) => {
+    setShowOptions(false);
+    if (!files || files.length === 0) return;
+
+    const config = {
+      provider: settings.aiProvider,
+      apiKey: settings.aiProvider === 'openai' ? settings.openaiKey : settings.openrouterKey,
+      openrouterModel: settings.openrouterModel,
+    };
+
+    try {
+      if (files.length === 1) {
+        await uploadAndScan(files[0], categories, config);
+      } else {
+        await uploadAndScanMultiple(files, categories, config);
+      }
+    } finally {
+      useUIStore.getState().closeAddSheet();
+    }
+  };
+
+  // Hide scan button if AI is not configured OR if currently reviewing/recording a receipt item
+  const prefill = useUIStore.getState().prefillData;
+  const isReviewingReceiptItem = Boolean(prefill || useReceiptStore.getState().reviewSequence);
+  const hasApiKey = settings.aiProvider === 'openai'
+    ? Boolean(settings.openaiKey)
+    : Boolean(settings.openrouterKey);
+
+  if (!hasApiKey || isReviewingReceiptItem) return null;
+
+  return (
+    <div ref={containerRef} className="relative inline-block">
+      {/* Hidden inputs */}
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []).filter((f) => f.type.startsWith('image/'));
+          if (files.length > 0) handleFilesSelected(files);
+          if (cameraInputRef.current) cameraInputRef.current.value = '';
+        }}
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []).filter((f) => f.type.startsWith('image/'));
+          if (files.length > 0) handleFilesSelected(files);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }}
+      />
+
+      {/* Options Popup */}
+      {showOptions && !isUploading && (
+        <div className="absolute bottom-full right-0 mb-2.5 w-52 rounded-2xl bg-[#222222] border border-white/15 p-1.5 shadow-2xl z-50 flex flex-col gap-1 page-fade-in animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <button
+            type="button"
+            onClick={() => {
+              setShowOptions(false);
+              cameraInputRef.current?.click();
+            }}
+            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-white/10 active:scale-[0.98] text-white text-xs font-semibold transition-all text-left"
+          >
+            <div className="p-1.5 rounded-lg bg-white/10 text-white shrink-0">
+              <Camera size={16} />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-white text-xs font-bold">Ambil Foto</span>
+              <span className="text-[10px] text-white/40 font-normal">Gunakan Kamera</span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowOptions(false);
+              fileInputRef.current?.click();
+            }}
+            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-white/10 active:scale-[0.98] text-white text-xs font-semibold transition-all text-left"
+          >
+            <div className="p-1.5 rounded-lg bg-white/10 text-white shrink-0">
+              <ImageIcon size={16} />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-white text-xs font-bold">Pilih Gambar</span>
+              <span className="text-[10px] text-white/40 font-normal">Galeri / Screenshot</span>
+            </div>
+          </button>
+        </div>
+      )}
+
+      {/* Main Square Scan Button */}
+      <button
+        type="button"
+        disabled={isUploading}
+        onClick={() => setShowOptions((v) => !v)}
+        className="h-11 w-11 shrink-0 rounded-xl bg-[#a8a8ad] hover:bg-[#a8a8ad]/90 disabled:opacity-50 text-black flex items-center justify-center transition-all active:scale-[0.93]"
+        title="Scan Struk (Kamera / Galeri)"
+        aria-label="Scan Struk"
+      >
+        {isUploading ? (
+          <Loader2 size={18} className="animate-spin" />
+        ) : (
+          <ScanLine size={18} strokeWidth={2.5} />
+        )}
+      </button>
+    </div>
+  );
+};

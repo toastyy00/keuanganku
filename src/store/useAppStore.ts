@@ -8,8 +8,10 @@ import { create } from 'zustand';
 export interface ExpensePrefill {
   name?: string;
   amount?: number;
+  currency?: import('../types').Currency;
   category?: string;
   type?: import('../types').ExpenseType;
+  date?: string;
   note?: string;
   is_recurring?: boolean;
   recurring_id?: string;

@@ -159,7 +159,7 @@ const Layout: React.FC = () => {
 
     const onTouchMove = (event: TouchEvent) => {
       if (!shouldGuardScrollBoundary) return;
-      if (document.body.dataset.bottomSheetOpen === 'true') return;
+      if (document.body.dataset.bottomSheetOpen === 'true' || document.body.dataset.notificationOpen === 'true') return;
       if (event.touches.length !== 1 || !scrollBoundaryTouchStartRef.current) return;
 
       const touch = event.touches[0];

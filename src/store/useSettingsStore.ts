@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { GUEST_DATA_SCOPE, getActiveDataScope } from '../lib/dataScope';
+import { pushAdminSettings } from '../lib/adminSettingsSync';
 
 // ============================================================
 //  SETTINGS STORE - scoped by active account (guest/user)
@@ -111,10 +112,22 @@ export const useSettingsStore = create<SettingsState>()(
         [initialScope]: initialSnapshot,
       },
 
-      setAiProvider: (aiProvider) => set((state) => withScopedPatch(state, { aiProvider })),
-      setOpenaiKey: (openaiKey) => set((state) => withScopedPatch(state, { openaiKey })),
-      setOpenrouterKey: (openrouterKey) => set((state) => withScopedPatch(state, { openrouterKey })),
-      setOpenrouterModel: (openrouterModel) => set((state) => withScopedPatch(state, { openrouterModel })),
+      setAiProvider: (aiProvider) => {
+        set((state) => withScopedPatch(state, { aiProvider }));
+        void pushAdminSettings();
+      },
+      setOpenaiKey: (openaiKey) => {
+        set((state) => withScopedPatch(state, { openaiKey }));
+        void pushAdminSettings();
+      },
+      setOpenrouterKey: (openrouterKey) => {
+        set((state) => withScopedPatch(state, { openrouterKey }));
+        void pushAdminSettings();
+      },
+      setOpenrouterModel: (openrouterModel) => {
+        set((state) => withScopedPatch(state, { openrouterModel }));
+        void pushAdminSettings();
+      },
       setPersonalMonthlyBudget: (personalMonthlyBudget) =>
         set((state) => withScopedPatch(state, { personalMonthlyBudget })),
       setFamilySupportMonthlyBudget: (familySupportMonthlyBudget) =>

@@ -8,6 +8,7 @@ interface CategoryPickerProps {
   value: string;
   categories: Category[];
   onChange: (slug: string) => void;
+  onOpenChange?: (isOpen: boolean) => void;
   error?: string;
   hint?: string;
   placeholder?: string;
@@ -20,6 +21,7 @@ const CategoryPicker: React.FC<CategoryPickerProps> = ({
   value,
   categories,
   onChange,
+  onOpenChange,
   error,
   hint,
   placeholder = 'Pilih kategori',
@@ -43,11 +45,13 @@ const CategoryPicker: React.FC<CategoryPickerProps> = ({
       if (!root) return;
       if (root.contains(event.target as Node)) return;
       setIsOpen(false);
+      onOpenChange?.(false);
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsOpen(false);
+        onOpenChange?.(false);
       }
     };
 
@@ -58,7 +62,7 @@ const CategoryPicker: React.FC<CategoryPickerProps> = ({
       document.removeEventListener('pointerdown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen]);
+  }, [isOpen, onOpenChange]);
 
   React.useLayoutEffect(() => {
     if (!isOpen) return;
@@ -92,15 +96,23 @@ const CategoryPicker: React.FC<CategoryPickerProps> = ({
     };
   }, [isOpen]);
 
+  const toggleOpen = () => {
+    setIsOpen((prev) => {
+      const next = !prev;
+      onOpenChange?.(next);
+      return next;
+    });
+  };
+
   return (
-    <div ref={rootRef} className="flex-1 flex flex-col gap-1.5">
+    <div ref={rootRef} className={cn("flex-1 flex flex-col gap-1.5 relative", isOpen && "z-50")}>
       {label && (
         <p className={`text-[11px] font-medium ${error ? 'text-red-400' : 'text-white/40'}`}>
           {label}
         </p>
       )}
 
-      <div className="relative">
+      <div className={cn("relative", isOpen && "z-50")}>
         <button
           id={triggerId}
           ref={triggerRef}
@@ -108,7 +120,7 @@ const CategoryPicker: React.FC<CategoryPickerProps> = ({
           aria-haspopup="listbox"
           aria-expanded={isOpen}
           aria-controls={isOpen ? listboxId : undefined}
-          onClick={() => setIsOpen((prev) => !prev)}
+          onClick={toggleOpen}
           className={cn(
             'slim-input w-full px-3 py-2 flex items-center justify-between gap-3 text-left font-normal text-white/90',
             'transition-all duration-150',
@@ -151,7 +163,7 @@ const CategoryPicker: React.FC<CategoryPickerProps> = ({
             role="listbox"
             aria-labelledby={triggerId}
             className={cn(
-              'absolute left-0 right-0 z-30 overflow-hidden border border-white/[0.08] bg-[#1c1c1c] rounded-xl shadow-2xl shadow-black/60',
+              'absolute left-0 z-50 min-w-[190px] w-full overflow-hidden border border-white/[0.12] bg-[#222224] rounded-xl shadow-2xl shadow-black/90 backdrop-blur-xl',
               openDirection === 'up' ? 'bottom-[calc(100%+6px)]' : 'top-[calc(100%+6px)]',
               panelClassName
             )}
@@ -169,6 +181,7 @@ const CategoryPicker: React.FC<CategoryPickerProps> = ({
                     onClick={() => {
                       onChange(cat.slug);
                       setIsOpen(false);
+                      onOpenChange?.(false);
                     }}
                     className={cn(
                       'w-full flex items-center justify-between gap-2.5 px-3 py-2.5 text-left text-sm transition-colors border-b border-white/[0.04] last:border-b-0',
